@@ -1,40 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Cheki design tokens — extracted from the web app's globals.css so the
-/// mobile app feels like the same product.
+/// Cheki design tokens — "Payment Verifier" fintech look:
+/// navy ink, blue gradient hero, green actions, soft icon circles.
 abstract final class ChekiPalette {
-  // Shared accents.
-  static const Color green = Color(0xFF2DDB6A);
-  static const Color greenDark = Color(0xFF20B854);
-  static const Color greenInk = Color(0xFF16A34A);
-  static const Color greenDeep = Color(0xFF0A7B43);
-  static const Color red = Color(0xFFF0556A);
-  static const Color redInk = Color(0xFFDC2626);
-  static const Color amber = Color(0xFFF5B049);
-
-  // Dark scheme (default).
-  static const Color dBg = Color(0xFF0C0D10);
-  static const Color dSurface = Color(0xFF16181D);
-  static const Color dSurfaceAlt = Color(0xFF1C1F26);
-  static const Color dReceipt = Color(0xFF131519);
-  static const Color dBorder = Color(0xFF262932);
-  static const Color dInk = Color(0xFFE8E6E3);
-  static const Color dInkDim = Color(0xFF9BA0A8);
-  static const Color dInkFaint = Color(0xFF5C6068);
-  static const Color dDotted = Color(0xFF2A2E38);
-  static const Color dField = Color(0xFF101216);
+  // Brand accents.
+  static const Color green = Color(0xFF22A45D);
+  static const Color greenDeep = Color(0xFF168A4C);
+  static const Color greenSoft = Color(0xFFE1F5EA);
+  static const Color navy = Color(0xFF1C2B5E);
+  static const Color blue = Color(0xFF2E6BE6);
+  static const Color blueLight = Color(0xFF5B8DEF);
+  static const Color blueSoft = Color(0xFFE4EEFC);
+  static const Color blueSoftDark = Color(0xFF1D2B4E);
+  static const Color red = Color(0xFFEF4444);
+  static const Color redSoft = Color(0xFFFDEAEA);
+  static const Color amber = Color(0xFFF59E0B);
+  static const Color amberSoft = Color(0xFFFEF3E2);
 
   // Light scheme.
-  static const Color lBg = Color(0xFFFAF9F6);
-  static const Color lSurface = Color(0xFFFFFFFF);
-  static const Color lSurfaceAlt = Color(0xFFF5F2EC);
-  static const Color lReceipt = Color(0xFFF8F6F0);
-  static const Color lBorder = Color(0xFFE5E2DC);
-  static const Color lInk = Color(0xFF1A1A1A);
-  static const Color lInkDim = Color(0xFF5D6167);
-  static const Color lInkFaint = Color(0xFF9B9FA6);
-  static const Color lDotted = Color(0xFFD4D0C8);
+  static const Color lBg = Color(0xFFF3F6FC);
+  static const Color lCard = Color(0xFFFFFFFF);
+  static const Color lBorder = Color(0xFFE4EAF3);
+  static const Color lInk = Color(0xFF16224D);
+  static const Color lInkDim = Color(0xFF64748B);
+  static const Color lInkFaint = Color(0xFF94A3B8);
+
+  // Dark scheme.
+  static const Color dBg = Color(0xFF0B1220);
+  static const Color dCard = Color(0xFF141C30);
+  static const Color dCardAlt = Color(0xFF1A2440);
+  static const Color dBorder = Color(0xFF243049);
+  static const Color dInk = Color(0xFFE6EBF5);
+  static const Color dInkDim = Color(0xFF94A3B8);
+  static const Color dInkFaint = Color(0xFF64748B);
+
+  /// Splash / hero gradient (deep navy like the design's splash screen).
+  static const List<Color> splashGradient = [
+    Color(0xFF1B2C63),
+    Color(0xFF24418F),
+  ];
+
+  /// Blue gradient used by the home hero card.
+  static const List<Color> heroGradient = [Color(0xFF2E6BE6), Color(0xFF5590F2)];
+
+  /// Green gradient for primary buttons.
+  static const List<Color> buttonGradient = [Color(0xFF2CB168), Color(0xFF1E9455)];
 }
 
 /// Builds the light and dark [ThemeData] for the app.
@@ -46,52 +57,53 @@ abstract final class ChekiTheme {
     final isDark = brightness == Brightness.dark;
     final colorScheme = isDark
         ? ColorScheme.dark(
-            surface: ChekiPalette.dSurface,
+            surface: ChekiPalette.dBg,
             primary: ChekiPalette.green,
-            onPrimary: const Color(0xFF07130B),
-            secondary: ChekiPalette.greenDark,
+            onPrimary: Colors.white,
+            secondary: ChekiPalette.blueLight,
             error: ChekiPalette.red,
             outline: ChekiPalette.dBorder,
-            surfaceContainerHighest: ChekiPalette.dSurfaceAlt,
+            surfaceContainerHighest: ChekiPalette.dCardAlt,
           )
         : ColorScheme.light(
-            surface: ChekiPalette.lSurface,
-            primary: ChekiPalette.greenInk,
+            surface: ChekiPalette.lBg,
+            primary: ChekiPalette.green,
             onPrimary: Colors.white,
-            secondary: ChekiPalette.greenDeep,
-            error: ChekiPalette.redInk,
+            secondary: ChekiPalette.blue,
+            error: ChekiPalette.red,
             outline: ChekiPalette.lBorder,
-            surfaceContainerHighest: ChekiPalette.lSurfaceAlt,
+            surfaceContainerHighest: ChekiPalette.blueSoft,
           );
 
     final bg = isDark ? ChekiPalette.dBg : ChekiPalette.lBg;
     final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
     final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
     final border = isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder;
+    final card = isDark ? ChekiPalette.dCard : ChekiPalette.lCard;
 
     final baseText = GoogleFonts.interTextTheme(
       ThemeData(brightness: brightness).textTheme,
     ).apply(bodyColor: ink, displayColor: ink);
 
     // Compact type scale — deliberately one notch smaller than Material
-    // defaults so the UI feels dense, calm and receipt-like.
+    // defaults so the UI feels dense, calm and pro.
     final textTheme = baseText.copyWith(
       headlineLarge: baseText.headlineLarge
-          ?.copyWith(fontSize: 24, fontWeight: FontWeight.w800, height: 1.15),
+          ?.copyWith(fontSize: 23, fontWeight: FontWeight.w800, height: 1.15),
       headlineMedium: baseText.headlineMedium
-          ?.copyWith(fontSize: 21, fontWeight: FontWeight.w800, height: 1.15),
-      titleLarge: baseText.titleLarge
-          ?.copyWith(fontSize: 16.5, fontWeight: FontWeight.w700),
-      titleMedium: baseText.titleMedium
-          ?.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+          ?.copyWith(fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
+      titleLarge:
+          baseText.titleLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+      titleMedium:
+          baseText.titleMedium?.copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
       titleSmall:
-          baseText.titleSmall?.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-      bodyLarge: baseText.bodyLarge?.copyWith(fontSize: 13.5, height: 1.5),
-      bodyMedium: baseText.bodyMedium?.copyWith(fontSize: 12.5, height: 1.5),
-      bodySmall: baseText.bodySmall?.copyWith(fontSize: 11, height: 1.45),
-      labelLarge: baseText.labelLarge
-          ?.copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
-      labelMedium: baseText.labelMedium?.copyWith(fontSize: 11),
+          baseText.titleSmall?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+      bodyLarge: baseText.bodyLarge?.copyWith(fontSize: 13, height: 1.5),
+      bodyMedium: baseText.bodyMedium?.copyWith(fontSize: 12, height: 1.5),
+      bodySmall: baseText.bodySmall?.copyWith(fontSize: 10.5, height: 1.45),
+      labelLarge:
+          baseText.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+      labelMedium: baseText.labelMedium?.copyWith(fontSize: 10.5),
       labelSmall: baseText.labelSmall?.copyWith(fontSize: 9.5),
     );
 
@@ -102,10 +114,19 @@ abstract final class ChekiTheme {
       scaffoldBackgroundColor: bg,
       splashFactory: InkSparkle.splashFactory,
       textTheme: textTheme,
+      cardTheme: CardThemeData(
+        color: card,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: border),
+        ),
+      ),
       dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? ChekiPalette.dField : ChekiPalette.lSurface,
+        fillColor: card,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         border: OutlineInputBorder(
@@ -127,23 +148,22 @@ abstract final class ChekiTheme {
         hintStyle: TextStyle(
           color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
           fontWeight: FontWeight.w400,
-          fontSize: 13.5,
+          fontSize: 13,
         ),
         helperStyle: TextStyle(color: dim, fontSize: 10.5),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: isDark ? ChekiPalette.dSurface : ChekiPalette.lSurface,
-        modalBackgroundColor:
-            isDark ? ChekiPalette.dSurface : ChekiPalette.lSurface,
+        backgroundColor: card,
+        modalBackgroundColor: card,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
         showDragHandle: true,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isDark ? ChekiPalette.dSurfaceAlt : ChekiPalette.lInk,
+        backgroundColor: isDark ? ChekiPalette.dCardAlt : ChekiPalette.navy,
         contentTextStyle: GoogleFonts.inter(
-          color: isDark ? ChekiPalette.dInk : ChekiPalette.lBg,
+          color: Colors.white,
           fontWeight: FontWeight.w500,
           fontSize: 12.5,
         ),
@@ -154,11 +174,11 @@ abstract final class ChekiTheme {
         backgroundColor: bg,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        centerTitle: false,
+        centerTitle: true,
         iconTheme: IconThemeData(color: ink, size: 21),
         titleTextStyle: GoogleFonts.inter(
           color: ink,
-          fontSize: 15.5,
+          fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -166,10 +186,51 @@ abstract final class ChekiTheme {
         iconColor: dim,
         titleTextStyle: TextStyle(
           color: ink,
-          fontSize: 13.5,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
-        subtitleTextStyle: TextStyle(color: dim, fontSize: 11),
+        subtitleTextStyle: TextStyle(color: dim, fontSize: 10.5),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: card,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: ChekiPalette.greenSoft,
+        height: 66,
+        elevation: 0,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return GoogleFonts.inter(
+            fontSize: 10.5,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? ChekiPalette.green : ChekiPalette.lInkFaint,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            size: 22,
+            color: selected ? ChekiPalette.green : ChekiPalette.lInkFaint,
+          );
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? Colors.white : null,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? ChekiPalette.green : null,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: card,
+        side: BorderSide(color: border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        labelStyle: TextStyle(
+          color: ink,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       ),
     );
   }
@@ -189,3 +250,12 @@ TextStyle monoStyle({
     letterSpacing: letterSpacing,
   );
 }
+
+/// Soft card shadow used across the light theme.
+List<BoxShadow> cardShadow({Color color = const Color(0xFF1C2B5E)}) => [
+      BoxShadow(
+        color: color.withValues(alpha: 0.06),
+        blurRadius: 18,
+        offset: const Offset(0, 6),
+      ),
+    ];

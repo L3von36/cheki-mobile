@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/banks_registry.dart';
+import '../../state/system_status.dart';
 import '../../theme/cheki_theme.dart';
-import '../widgets/bank_avatar.dart';
+import 'bank_avatar.dart';
 
-/// Bottom-sheet bank picker with a "Auto-detect" option first.
+/// Bottom-sheet bank picker with an "Auto-detect" option first and a
+/// live availability dot per bank.
 class BankPickerSheet extends StatelessWidget {
   final String? selectedId;
 
@@ -13,7 +16,7 @@ class BankPickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
+    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.navy;
     final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
 
     return SafeArea(
@@ -25,18 +28,18 @@ class BankPickerSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 6),
               child: Text(
                 'Which bank issued the receipt?',
                 style: TextStyle(
                   color: ink,
                   fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
               child: Text(
                 'Cheki usually detects this from the reference format — '
                 'pick manually only if auto-detect is wrong.',
@@ -50,9 +53,13 @@ class BankPickerSheet extends StatelessWidget {
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _Tile(
-                      leading: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: ChekiPalette.green.withValues(alpha: 0.15),
+                      leading: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: ChekiPalette.greenSoft,
+                          shape: BoxShape.circle,
+                        ),
                         child: const Icon(
                           Icons.auto_awesome_rounded,
                           color: ChekiPalette.green,
@@ -62,6 +69,7 @@ class BankPickerSheet extends StatelessWidget {
                       title: 'Auto-detect from reference',
                       subtitle: 'Recommended',
                       selected: selectedId == null,
+                      status: null,
                       onTap: () => Navigator.of(context).pop(null),
                     );
                   }
@@ -71,6 +79,7 @@ class BankPickerSheet extends StatelessWidget {
                     title: bank.name,
                     subtitle: bank.referenceExample,
                     selected: selectedId == bank.id,
+                    status: context.read<SystemStatus>().statusFor(bank.id),
                     onTap: () => Navigator.of(context).pop(bank),
                   );
                 },
@@ -88,6 +97,7 @@ class _Tile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool selected;
+  final String? status;
   final VoidCallback onTap;
 
   const _Tile({
@@ -95,32 +105,61 @@ class _Tile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.selected,
+    required this.status,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.navy;
+    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+
+    final dotColor = switch (status) {
+      'reachable' || 'live' => ChekiPalette.green,
+      'geo-blocked' => ChekiPalette.amber,
+      'unreachable' => ChekiPalette.red,
+      _ => isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+    };
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 1),
-      leading: leading,
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          leading,
+          if (status != null)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: 11,
+                height: 11,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isDark ? ChekiPalette.dCard : Colors.white,
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       title: Text(
         title,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? ChekiPalette.dInk
-              : ChekiPalette.lInk,
+          color: selected ? ChekiPalette.greenDeep : ink,
         ),
       ),
       subtitle: Text(
         subtitle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: monoStyle(
-          size: 10.5,
-          color: selected ? ChekiPalette.green : null,
-        ),
+        style: monoStyle(size: 10, color: selected ? ChekiPalette.green : dim),
       ),
       trailing: selected
           ? const Icon(Icons.check_circle_rounded,

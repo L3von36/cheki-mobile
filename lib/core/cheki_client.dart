@@ -176,13 +176,15 @@ class ChekiClient {
     }
     if (response.statusCode == 502 && fallbackUrl != null) {
       throw ChekiException(
-        'Geo-blocked endpoint. Try verifying from the web: $fallbackUrl',
+        apiError ?? 'Geo-blocked endpoint. Try verifying from the web.',
         statusCode: code,
+        fallbackUrl: fallbackUrl,
       );
     }
     throw ChekiException(
       apiError ?? 'Request failed (HTTP $code)',
       statusCode: code,
+      fallbackUrl: fallbackUrl,
     );
   }
 

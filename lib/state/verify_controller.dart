@@ -68,8 +68,10 @@ class VerifyController extends ChangeNotifier {
     detectedBank = _detectBank(value);
     usingCbeNew = detectedBank != null && reference.trim().length == 12 &&
         RegExp(r'^[0-9a-f]{12}$', caseSensitive: false).hasMatch(reference.trim());
-    if (status == VerifyStatus.error) {
+    // Editing inputs clears a finished (failed) attempt.
+    if (status == VerifyStatus.done && result != null && !result!.isVerified) {
       status = VerifyStatus.idle;
+      result = null;
       errorMessage = null;
     }
     notifyListeners();
@@ -135,6 +137,10 @@ class VerifyController extends ChangeNotifier {
 
   // -------------------------------------------------------------- verification
   /// Runs the verification against the hosted cheki API.
+  ///
+  /// ALWAYS resolves to a [VerifyResult]: genuine failures (receipt not
+  /// found, bank down, geo-blocked) become a failed result so the result
+  /// screen can show them — no more silent failures.
   Future<VerifyResult?> verify() async {
     final bank = effectiveBank;
     if (bank == null || !canVerify) return null;
@@ -145,32 +151,38 @@ class VerifyController extends ChangeNotifier {
     notifyListeners();
 
     final stopwatch = Stopwatch()..start();
+    VerifyResult res;
     try {
-      final res = await _client.verify(
+      res = await _client.verify(
         bank: apiBank,
         reference: reference.trim(),
         accountNumber: usingCbeNew ? null : accountNumber.trim(),
         phoneNumber: phoneNumber.trim(),
       );
-      stopwatch.stop();
-      lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
-      result = res;
-      status = VerifyStatus.done;
-      notifyListeners();
-      return res;
     } on ChekiException catch (e) {
       stopwatch.stop();
+      lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
+      res = VerifyResult(
+        success: false,
+        bank: apiBank,
+        reference: reference.trim(),
+        error: e.friendly,
+        fallbackUrl: e.fallbackUrl,
+      );
       errorMessage = e.friendly;
-      status = VerifyStatus.error;
-      notifyListeners();
-      return null;
     } catch (e) {
       stopwatch.stop();
-      errorMessage = 'Something went wrong. Check your connection and retry.';
-      status = VerifyStatus.error;
-      notifyListeners();
-      return null;
+      lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
+      res = const VerifyResult(
+        success: false,
+        error: 'Something went wrong. Check your connection and retry.',
+      );
+      errorMessage = res.error;
     }
+    result = res;
+    status = VerifyStatus.done;
+    notifyListeners();
+    return res;
   }
 
   ChekiBank? _detectBank(String value) {

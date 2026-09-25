@@ -129,7 +129,10 @@ class ChekiException implements Exception {
   final String message;
   final int? statusCode;
 
-  const ChekiException(this.message, {this.statusCode});
+  /// Direct receipt URL (geo-blocked banks) the user can open in a browser.
+  final String? fallbackUrl;
+
+  const ChekiException(this.message, {this.statusCode, this.fallbackUrl});
 
   /// User-friendly version of the message for snackbars / error cards.
   String get friendly {

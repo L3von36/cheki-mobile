@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/verify_history.dart';
+import 'state/app_tab.dart';
+import 'state/system_status.dart';
 import 'state/theme_controller.dart';
 import 'state/verify_controller.dart';
 import 'theme/cheki_theme.dart';
-import 'ui/shell.dart';
+import 'ui/screens/splash_screen.dart';
 
 /// Root widget: providers + theme wiring.
 class ChekiApp extends StatelessWidget {
@@ -16,6 +19,9 @@ class ChekiApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeController()),
         ChangeNotifierProvider(create: (_) => VerifyController()),
+        ChangeNotifierProvider(create: (_) => VerifyHistory()),
+        ChangeNotifierProvider(create: (_) => SystemStatus()..refresh()),
+        ChangeNotifierProvider(create: (_) => AppTab()),
       ],
       child: Consumer<ThemeController>(
         builder: (context, theme, _) {
@@ -25,7 +31,7 @@ class ChekiApp extends StatelessWidget {
             theme: ChekiTheme.light(),
             darkTheme: ChekiTheme.dark(),
             themeMode: theme.mode,
-            home: const ShellScreen(),
+            home: const SplashScreen(),
           );
         },
       ),

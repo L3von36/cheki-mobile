@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Persists the user's theme choice across the app session.
 class ThemeController extends ChangeNotifier {
-  ThemeMode _mode = ThemeMode.dark;
+  ThemeMode _mode = ThemeMode.light;
 
   ThemeMode get mode => _mode;
 

@@ -62,7 +62,7 @@ void main() {
       controller.dispose();
     });
 
-    test('verify() surfaces friendly errors and sets error status', () async {
+    test('verify() surfaces friendly errors as a failed result', () async {
       final controller = makeController(
         MockClient((request) async =>
             http.Response(jsonEncode({'success': false, 'error': 'nope'}), 404)),
@@ -71,8 +71,11 @@ void main() {
         const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
       );
       final result = await controller.verify();
-      expect(result, isNull);
-      expect(controller.status, VerifyStatus.error);
+      // Failures are first-class results now — no silent errors.
+      expect(result, isNotNull);
+      expect(result!.isVerified, isFalse);
+      expect(result.error, isNotNull);
+      expect(controller.status, VerifyStatus.done);
       expect(controller.errorMessage, isNotNull);
       controller.dispose();
     });

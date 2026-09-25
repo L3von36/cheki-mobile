@@ -18,16 +18,18 @@ No signup. No API key. No fees. Ever.
 
 - **Verify any receipt** — paste a reference or a share link from SMS
 - **QR scan** — scan receipt QR codes (including the new CBE
-  `mbreciept.cbe.com.et` receipts) and verify instantly
+  `mbreciept.cbe.com.et` receipts) or pick a screenshot from the gallery
 - **Auto-detect bank** — the app recognizes the bank from the reference
   format (CBE `FT…`, Telebirr `DET…`, Awash share segments, …)
-- **Official receipt card** — amount, sender, receiver, date and fees
-  rendered on a thermal-paper receipt with a VERIFIED stamp
-- **Geo-blocked banks handled** — Telebirr and M-Pesa verify through the
-  cheki servers, so the app works worldwide
-- **Receipt aesthetic** — punched paper, dashed perforations, monospace
-  references, dark & light themes
-- **Private** — receipts are never stored; nothing to sign up for
+- **Clean "Payment Verifier" UI** — blue gradient hero, green actions,
+  icon detail rows, dark & light themes
+- **Payment History** — every check is saved on-device with search and
+  status filters, plus a shareable transaction details view
+- **Live system status** — the home banner and bank list show real
+  endpoint availability from the health API
+- **Honest failures** — bank down or geo-blocked? The result screen says
+  exactly why and offers a one-tap "Open receipt in browser" fallback
+- **Private** — history never leaves the device; nothing to sign up for
 
 ## Install
 
