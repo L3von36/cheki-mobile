@@ -19,10 +19,10 @@ class VerifyController extends ChangeNotifier {
   VerifyStatus status = VerifyStatus.idle;
 
   /// Bank chosen manually via the picker (null = auto from reference).
-  ChekiBank? manualBank;
+  MahtemBank? manualBank;
 
   /// Bank auto-detected from the typed reference / scanned QR.
-  ChekiBank? detectedBank;
+  MahtemBank? detectedBank;
 
   /// True when the user is on the "cbe-new" QR receipt flow.
   bool usingCbeNew = false;
@@ -38,7 +38,7 @@ class VerifyController extends ChangeNotifier {
 
   // -------------------------------------------------------------- accessors
   /// The bank whose fields/styling currently apply.
-  ChekiBank? get effectiveBank => manualBank ?? detectedBank;
+  MahtemBank? get effectiveBank => manualBank ?? detectedBank;
 
   bool get isVerifying => status == VerifyStatus.verifying;
 
@@ -89,7 +89,7 @@ class VerifyController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectBank(ChekiBank? bank) {
+  void selectBank(MahtemBank? bank) {
     manualBank = bank;
     usingCbeNew = false;
     if (bank == null) {
@@ -182,7 +182,7 @@ class VerifyController extends ChangeNotifier {
     return res;
   }
 
-  ChekiBank? _detectBank(String value) {
+  MahtemBank? _detectBank(String value) {
     final detection = detectBankFromUrl(value) ?? _detectPlain(value);
     if (detection == null || detection.bank == null) return null;
     return bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);

@@ -80,7 +80,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
-          DEST="cheki-mobile-${TAG}.apk"
+          DEST="mahtem-${TAG}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk "$DEST"
           echo "apk=$DEST" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -89,17 +89,18 @@ jobs:
       - name: Create GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          name: Cheki Mobile ${{ github.ref_name }}
+          name: Mahtem ${{ github.ref_name }}
           body: |
-            ## Cheki Mobile ${{ github.ref_name }}
+            ## Mahtem ${{ github.ref_name }}
 
-            Free Ethiopian bank receipt verification — CBE, Telebirr, BOA, M-Pesa,
-            Dashen, Awash, Zemen, CBE Birr, Siinqee and eBirr.
+            **Mahtem** (ማህተም — Amharic for *"stamp / seal"*) — free Ethiopian
+            bank receipt verification. CBE, Telebirr, BOA, M-Pesa, Dashen,
+            Awash, Zemen, CBE Birr, Siinqee and eBirr.
 
             ### Install
-            1. Download `cheki-mobile-${{ github.ref_name }}.apk` below
+            1. Download `mahtem-${{ github.ref_name }}.apk` below
             2. Allow "Install from unknown sources" if prompted
-            3. Install and verify your first receipt
+            3. Install and stamp your first receipt as verified
 
             Free forever · No signup · Data comes from official bank endpoints.
           files: |

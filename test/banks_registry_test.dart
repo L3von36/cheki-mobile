@@ -1,12 +1,12 @@
-import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/models.dart';
+import 'package:mahtem/core/banks_registry.dart';
+import 'package:mahtem/core/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('bank registry', () {
     test('has 10 live banks with unique ids', () {
-      expect(kChekiBanks.length, 10);
-      final ids = kChekiBanks.map((b) => b.id).toSet();
+      expect(kMahtemBanks.length, 10);
+      final ids = kMahtemBanks.map((b) => b.id).toSet();
       expect(ids.length, 10);
     });
 
@@ -180,12 +180,12 @@ void main() {
     });
   });
 
-  group('ChekiException.friendly', () {
+  group('MahtemException.friendly', () {
     test('maps status codes to friendly copy', () {
-      const notFound = ChekiException('x', statusCode: 404);
+      const notFound = MahtemException('x', statusCode: 404);
       expect(notFound.friendly, contains('not found'));
 
-      const server = ChekiException('x', statusCode: 502);
+      const server = MahtemException('x', statusCode: 502);
       expect(server.friendly, contains('unavailable'));
     });
   });

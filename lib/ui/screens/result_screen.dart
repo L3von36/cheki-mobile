@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/banks_registry.dart';
 import '../../core/models.dart';
 import '../../state/verify_controller.dart';
-import '../../theme/cheki_theme.dart';
+import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/confetti.dart';
 
@@ -57,7 +57,7 @@ class ResultScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w800,
-                      color: verified ? ChekiPalette.green : ChekiPalette.red,
+                      color: verified ? MahtemPalette.green : MahtemPalette.red,
                       letterSpacing: -0.2,
                     ),
                     textAlign: TextAlign.center,
@@ -76,7 +76,7 @@ class ResultScreen extends StatelessWidget {
                       fontSize: 12,
                       height: 1.5,
                       color:
-                          isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim,
+                          isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
                     ),
                   ),
                 ),
@@ -91,7 +91,7 @@ class ResultScreen extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                         color:
-                            isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                            isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                       ),
                     ),
                   ),
@@ -103,8 +103,8 @@ class ResultScreen extends StatelessWidget {
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         color: isDark
-                            ? ChekiPalette.dInkDim
-                            : ChekiPalette.lInkDim,
+                            ? MahtemPalette.dInkDim
+                            : MahtemPalette.lInkDim,
                       ),
                     ),
                   ),
@@ -153,7 +153,7 @@ class ResultScreen extends StatelessWidget {
 
   void _shareResult(VerifyResult result, String bankName) {
     final buffer = StringBuffer()
-      ..writeln('Payment verified via Cheki')
+      ..writeln('Payment verified via Mahtem')
       ..writeln('Bank: $bankName')
       ..writeln('Reference: ${result.reference ?? '-'}')
       ..writeln('Amount: ${formatAmount(result.amount, result.currency)}')
@@ -178,12 +178,12 @@ class _StatusCircle extends StatelessWidget {
         width: 92,
         height: 92,
         decoration: BoxDecoration(
-          color: verified ? ChekiPalette.greenSoft : ChekiPalette.redSoft,
+          color: verified ? MahtemPalette.greenSoft : MahtemPalette.redSoft,
           shape: BoxShape.circle,
         ),
         child: Icon(
           verified ? Icons.check_rounded : Icons.close_rounded,
-          color: verified ? ChekiPalette.green : ChekiPalette.red,
+          color: verified ? MahtemPalette.green : MahtemPalette.red,
           size: 46,
         ),
       ),
@@ -201,10 +201,10 @@ class _DetailCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? ChekiPalette.dCard : Colors.white,
+        color: isDark ? MahtemPalette.dCard : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+          color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -275,12 +275,12 @@ class DetailRow extends StatelessWidget {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: isDark ? ChekiPalette.dCardAlt : ChekiPalette.blueSoft,
+              color: isDark ? MahtemPalette.dCardAlt : MahtemPalette.blueSoft,
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon,
                 size: 14,
-                color: isDark ? ChekiPalette.blueLight : ChekiPalette.blue),
+                color: isDark ? MahtemPalette.blueLight : MahtemPalette.blue),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -294,8 +294,8 @@ class DetailRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
                     color: isDark
-                        ? ChekiPalette.dInkFaint
-                        : ChekiPalette.lInkFaint,
+                        ? MahtemPalette.dInkFaint
+                        : MahtemPalette.lInkFaint,
                   ),
                 ),
                 const SizedBox(height: 1),
@@ -304,7 +304,7 @@ class DetailRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                    color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                   ),
                 ),
               ],
@@ -347,7 +347,7 @@ class _GhostButton extends StatelessWidget {
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           side: BorderSide(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -359,7 +359,7 @@ class _GhostButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
-            color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+            color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
           ),
         ),
       ),
@@ -379,7 +379,7 @@ class _GradientButton extends StatelessWidget {
       height: 46,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: ChekiPalette.buttonGradient),
+          gradient: const LinearGradient(colors: MahtemPalette.buttonGradient),
           borderRadius: BorderRadius.circular(14),
         ),
         child: TextButton(

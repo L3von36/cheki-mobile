@@ -277,7 +277,7 @@ class _ScanScreenState extends State<ScanScreen>
         );
       case _CameraState.permanentlyDenied:
         return _ScanErrorView(
-          message: 'Camera access is turned off for Cheki. Enable it in '
+          message: 'Camera access is turned off for Mahtem. Enable it in '
               'system settings, or paste the receipt link instead.',
           actionLabel: 'Open settings',
           onAction: openAppSettings,

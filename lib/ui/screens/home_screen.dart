@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../state/verify_controller.dart';
-import '../../theme/cheki_theme.dart';
+import '../../theme/mahtem_theme.dart';
 import '../flow.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
@@ -139,13 +139,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 50,
                 decoration: BoxDecoration(
                   gradient: controller.canVerify
-                      ? const LinearGradient(colors: ChekiPalette.buttonGradient)
+                      ? const LinearGradient(colors: MahtemPalette.buttonGradient)
                       : null,
                   color: controller.canVerify
                       ? null
                       : (isDark
-                          ? ChekiPalette.dCardAlt
-                          : ChekiPalette.lBorder),
+                          ? MahtemPalette.dCardAlt
+                          : MahtemPalette.lBorder),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
@@ -164,8 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: controller.canVerify
                               ? Colors.white
                               : (isDark
-                                  ? ChekiPalette.dInkFaint
-                                  : ChekiPalette.lInkFaint),
+                                  ? MahtemPalette.dInkFaint
+                                  : MahtemPalette.lInkFaint),
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.8,
@@ -193,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 26,
             height: 26,
             decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: ChekiPalette.buttonGradient),
+              gradient: LinearGradient(colors: MahtemPalette.buttonGradient),
               borderRadius: BorderRadius.all(Radius.circular(8)),
             ),
             child: const Icon(Icons.receipt_long_rounded,
@@ -201,9 +201,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 8),
           Text(
-            'Cheki',
+            'Mahtem',
             style: TextStyle(
-              color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+              color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
               fontSize: 16,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(
               'Ethiopia · free',
               style: TextStyle(
-                color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+                color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
               ),
@@ -247,10 +247,10 @@ class _BankSelector extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark ? ChekiPalette.dCard : Colors.white,
+          color: isDark ? MahtemPalette.dCard : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
           ),
         ),
         child: Row(
@@ -267,7 +267,7 @@ class _BankSelector extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                        color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -280,7 +280,7 @@ class _BankSelector extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color:
-                            isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim,
+                            isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
                         fontSize: 10.5,
                       ),
                     ),
@@ -292,18 +292,18 @@ class _BankSelector extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: const BoxDecoration(
-                  color: ChekiPalette.blueSoft,
+                  color: MahtemPalette.blueSoft,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.auto_awesome_rounded,
-                    color: ChekiPalette.blue, size: 16),
+                    color: MahtemPalette.blue, size: 16),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Auto-detect bank',
                   style: TextStyle(
-                    color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                    color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -311,7 +311,7 @@ class _BankSelector extends StatelessWidget {
               ),
             ],
             Icon(Icons.expand_more_rounded,
-                color: isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim,
+                color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
                 size: 20),
           ],
         ),
@@ -342,8 +342,8 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fill = isDark ? ChekiPalette.dCard : Colors.white;
-    final border = isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder;
+    final fill = isDark ? MahtemPalette.dCard : Colors.white;
+    final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,7 +353,7 @@ class _Field extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim,
+              color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
@@ -365,20 +365,20 @@ class _Field extends StatelessWidget {
           onChanged: onChanged,
           keyboardType: keyboardType,
           style: TextStyle(
-            color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+            color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(
-              color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+              color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
               fontSize: 12,
             ),
             prefixIcon: Icon(icon,
                 size: 18,
                 color:
-                    isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim),
+                    isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim),
             prefixIconConstraints:
                 const BoxConstraints(minWidth: 40, minHeight: 40),
             suffixIcon: trailing,
@@ -393,7 +393,7 @@ class _Field extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: ChekiPalette.green, width: 1.6),
+              borderSide: const BorderSide(color: MahtemPalette.green, width: 1.6),
             ),
           ),
         ),
@@ -413,13 +413,13 @@ class _PasteButton extends StatelessWidget {
       tooltip: 'Paste',
       onPressed: onPaste,
       icon: const Icon(Icons.content_paste_rounded,
-          size: 17, color: ChekiPalette.green),
+          size: 17, color: MahtemPalette.green),
     );
   }
 }
 
 class _DetectedChip extends StatelessWidget {
-  final ChekiBank bank;
+  final MahtemBank bank;
 
   const _DetectedChip({required this.bank});
 
@@ -428,14 +428,14 @@ class _DetectedChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: ChekiPalette.greenSoft,
+        color: MahtemPalette.greenSoft,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.check_circle_rounded,
-              color: ChekiPalette.greenDeep, size: 13),
+              color: MahtemPalette.greenDeep, size: 13),
           const SizedBox(width: 5),
           Flexible(
             child: Text(
@@ -443,7 +443,7 @@ class _DetectedChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: ChekiPalette.greenDeep,
+                color: MahtemPalette.greenDeep,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
               ),
@@ -467,15 +467,15 @@ class _Hint extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.info_outline_rounded,
-              color: ChekiPalette.blue, size: 13),
+              color: MahtemPalette.blue, size: 13),
           const SizedBox(width: 5),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
                 color: Theme.of(context).brightness == Brightness.dark
-                    ? ChekiPalette.dInkDim
-                    : ChekiPalette.lInkDim,
+                    ? MahtemPalette.dInkDim
+                    : MahtemPalette.lInkDim,
                 fontSize: 10.5,
               ),
             ),
@@ -499,10 +499,10 @@ class _ScanAltButton extends StatelessWidget {
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          color: isDark ? ChekiPalette.dCard : Colors.white,
+          color: isDark ? MahtemPalette.dCard : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
           ),
         ),
         alignment: Alignment.center,
@@ -510,12 +510,12 @@ class _ScanAltButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.qr_code_scanner_rounded,
-                color: ChekiPalette.green, size: 18),
+                color: MahtemPalette.green, size: 18),
             const SizedBox(width: 8),
             Text(
               'Scan the QR code instead',
               style: TextStyle(
-                color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Cheki design tokens — "Payment Verifier" fintech look:
+/// Mahtem design tokens — "Payment Verifier" fintech look:
 /// navy ink, blue gradient hero, green actions, soft icon circles.
-abstract final class ChekiPalette {
+abstract final class MahtemPalette {
   // Brand accents.
   static const Color green = Color(0xFF22A45D);
   static const Color greenDeep = Color(0xFF168A4C);
@@ -49,7 +49,7 @@ abstract final class ChekiPalette {
 }
 
 /// Builds the light and dark [ThemeData] for the app.
-abstract final class ChekiTheme {
+abstract final class MahtemTheme {
   static ThemeData dark() => _build(Brightness.dark);
   static ThemeData light() => _build(Brightness.light);
 
@@ -57,29 +57,29 @@ abstract final class ChekiTheme {
     final isDark = brightness == Brightness.dark;
     final colorScheme = isDark
         ? ColorScheme.dark(
-            surface: ChekiPalette.dBg,
-            primary: ChekiPalette.green,
+            surface: MahtemPalette.dBg,
+            primary: MahtemPalette.green,
             onPrimary: Colors.white,
-            secondary: ChekiPalette.blueLight,
-            error: ChekiPalette.red,
-            outline: ChekiPalette.dBorder,
-            surfaceContainerHighest: ChekiPalette.dCardAlt,
+            secondary: MahtemPalette.blueLight,
+            error: MahtemPalette.red,
+            outline: MahtemPalette.dBorder,
+            surfaceContainerHighest: MahtemPalette.dCardAlt,
           )
         : ColorScheme.light(
-            surface: ChekiPalette.lBg,
-            primary: ChekiPalette.green,
+            surface: MahtemPalette.lBg,
+            primary: MahtemPalette.green,
             onPrimary: Colors.white,
-            secondary: ChekiPalette.blue,
-            error: ChekiPalette.red,
-            outline: ChekiPalette.lBorder,
-            surfaceContainerHighest: ChekiPalette.blueSoft,
+            secondary: MahtemPalette.blue,
+            error: MahtemPalette.red,
+            outline: MahtemPalette.lBorder,
+            surfaceContainerHighest: MahtemPalette.blueSoft,
           );
 
-    final bg = isDark ? ChekiPalette.dBg : ChekiPalette.lBg;
-    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
-    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
-    final border = isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder;
-    final card = isDark ? ChekiPalette.dCard : ChekiPalette.lCard;
+    final bg = isDark ? MahtemPalette.dBg : MahtemPalette.lBg;
+    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
+    final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
+    final card = isDark ? MahtemPalette.dCard : MahtemPalette.lCard;
 
     final baseText = GoogleFonts.interTextTheme(
       ThemeData(brightness: brightness).textTheme,
@@ -139,14 +139,14 @@ abstract final class ChekiTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(13),
-          borderSide: const BorderSide(color: ChekiPalette.green, width: 1.5),
+          borderSide: const BorderSide(color: MahtemPalette.green, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(13),
           borderSide: BorderSide(color: colorScheme.error, width: 1.3),
         ),
         hintStyle: TextStyle(
-          color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+          color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
           fontWeight: FontWeight.w400,
           fontSize: 13,
         ),
@@ -161,7 +161,7 @@ abstract final class ChekiTheme {
         showDragHandle: true,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isDark ? ChekiPalette.dCardAlt : ChekiPalette.navy,
+        backgroundColor: isDark ? MahtemPalette.dCardAlt : MahtemPalette.navy,
         contentTextStyle: GoogleFonts.inter(
           color: Colors.white,
           fontWeight: FontWeight.w500,
@@ -194,7 +194,7 @@ abstract final class ChekiTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: card,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: ChekiPalette.greenSoft,
+        indicatorColor: MahtemPalette.greenSoft,
         height: 66,
         elevation: 0,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -202,14 +202,14 @@ abstract final class ChekiTheme {
           return GoogleFonts.inter(
             fontSize: 10.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? ChekiPalette.green : ChekiPalette.lInkFaint,
+            color: selected ? MahtemPalette.green : MahtemPalette.lInkFaint,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: 22,
-            color: selected ? ChekiPalette.green : ChekiPalette.lInkFaint,
+            color: selected ? MahtemPalette.green : MahtemPalette.lInkFaint,
           );
         }),
       ),
@@ -218,7 +218,7 @@ abstract final class ChekiTheme {
           (s) => s.contains(WidgetState.selected) ? Colors.white : null,
         ),
         trackColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? ChekiPalette.green : null,
+          (s) => s.contains(WidgetState.selected) ? MahtemPalette.green : null,
         ),
       ),
       chipTheme: ChipThemeData(

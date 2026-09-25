@@ -122,7 +122,7 @@ class HistoryEntry {
 
 /// ChangeNotifier that persists the last 100 verifications locally.
 class VerifyHistory extends ChangeNotifier {
-  static const String _key = 'cheki.history.v1';
+  static const String _key = 'mahtem.history.v1';
   static const int _maxEntries = 100;
 
   final List<HistoryEntry> _entries = [];

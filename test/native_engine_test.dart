@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/native/parsers.dart';
-import 'package:cheki_mobile/core/native/pdf_text.dart';
-import 'package:cheki_mobile/core/native/verifier.dart';
+import 'package:mahtem/core/banks_registry.dart';
+import 'package:mahtem/core/native/parsers.dart';
+import 'package:mahtem/core/native/pdf_text.dart';
+import 'package:mahtem/core/native/verifier.dart';
 import 'package:pointycastle/api.dart' as pc;
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/cbc.dart';

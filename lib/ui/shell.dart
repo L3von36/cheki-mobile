@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/verify_history.dart';
-import '../theme/cheki_theme.dart';
+import '../theme/mahtem_theme.dart';
 import 'flow.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
@@ -34,10 +34,10 @@ class _ShellScreenState extends State<ShellScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: isDark ? ChekiPalette.dCard : Colors.white,
+          color: isDark ? MahtemPalette.dCard : Colors.white,
           border: Border(
             top: BorderSide(
-              color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+              color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
             ),
           ),
         ),
@@ -93,10 +93,10 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active
-        ? ChekiPalette.green
+        ? MahtemPalette.green
         : isDark
-            ? ChekiPalette.dInkDim
-            : ChekiPalette.lInkDim;
+            ? MahtemPalette.dInkDim
+            : MahtemPalette.lInkDim;
     return Expanded(
       child: InkResponse(
         onTap: onTap,
@@ -136,7 +136,7 @@ class _ScanButton extends StatelessWidget {
           width: 52,
           height: 52,
           decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: ChekiPalette.buttonGradient),
+            gradient: LinearGradient(colors: MahtemPalette.buttonGradient),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(

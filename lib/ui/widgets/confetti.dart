@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/cheki_theme.dart';
+import '../../theme/mahtem_theme.dart';
 
 /// A one-shot confetti burst fired when a receipt verifies as genuine.
 /// Lightweight: a single [CustomPainter] over an [AnimatedBuilder], no
@@ -47,10 +47,10 @@ class _ConfettiBurstState extends State<ConfettiBurst>
   }
 
   static const List<Color> _colors = [
-    ChekiPalette.green,
+    MahtemPalette.green,
     Color(0xFF7BF0A8),
-    ChekiPalette.amber,
-    ChekiPalette.red,
+    MahtemPalette.amber,
+    MahtemPalette.red,
     Color(0xFF5EC9F8),
     Color(0xFFF8D35E),
   ];

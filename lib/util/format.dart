@@ -66,7 +66,7 @@ String receiptSummary({
   required String url,
 }) {
   final buf = StringBuffer()
-    ..writeln(verified ? '✅ VERIFIED — verified on cheki' : '❌ NOT VERIFIED');
+    ..writeln(verified ? '✅ VERIFIED — verified on Mahtem' : '❌ NOT VERIFIED');
   buf.writeln('Bank: $bankName');
   buf.writeln('Reference: $reference');
   if (amount != null) buf.writeln('Amount: ${formatAmount(amount, currency)}');
@@ -75,7 +75,7 @@ String receiptSummary({
   if (date != null && date.isNotEmpty) buf.writeln('Date: $date');
   buf.writeln('Official source: $url');
   buf.writeln();
-  buf.write('Verified free with cheki — chekiapp.vercel.app');
+  buf.write('Verified free with Mahtem');
   return buf.toString();
 }
 

@@ -1,13 +1,13 @@
 import 'models.dart';
 import 'native/verifier.dart';
 
-/// Static registry of the 10 live banks supported by cheki.
+/// Static registry of the 10 live banks supported by Mahtem.
 ///
-/// Mirrors `src/lib/manifest/banks.json` from the cheki web project
+/// Original detection rules, tuned for offline-first UX
 /// (kept offline-first so the UI renders instantly and works in low
 /// connectivity without a /api/banks round-trip).
-const List<ChekiBank> kChekiBanks = [
-  ChekiBank(
+const List<MahtemBank> kMahtemBanks = [
+  MahtemBank(
     id: 'cbe',
     name: 'Commercial Bank of Ethiopia',
     shortName: 'CBE',
@@ -25,7 +25,7 @@ const List<ChekiBank> kChekiBanks = [
         'Legacy PDF system needs the last 8 digits of the receiving account. '
         'Newer receipts (mbreciept.cbe.com.et links) verify with the receipt ID alone.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'telebirr',
     name: 'Telebirr (Ethio Telecom)',
     shortName: 'Telebirr',
@@ -41,7 +41,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'DET8FJGUJ4',
     notes: 'Verified directly on the device — works on Ethiopian networks.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'boa',
     name: 'Bank of Abyssinia',
     shortName: 'BOA',
@@ -57,7 +57,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'AB12345678',
     notes: 'Needs the last 5 digits of the receiving account number.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'mpesa',
     name: 'M-Pesa Ethiopia',
     shortName: 'M-Pesa',
@@ -73,7 +73,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'SE12345678',
     notes: 'Verified directly on the device — works on Ethiopian networks.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'dashen',
     name: 'Dashen Bank',
     shortName: 'Dashen',
@@ -89,7 +89,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'D31OBTI251720001',
     notes: 'Works for both within-Dashen and other-bank transfer receipts.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'awash',
     name: 'Awash Bank',
     shortName: 'Awash',
@@ -105,7 +105,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: '2KDL95Z0NR-4U61O6',
     notes: 'Paste the link the Awash app sends by SMS, or the segment after "/-".',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'zemen',
     name: 'Zemen Bank',
     shortName: 'Zemen',
@@ -121,7 +121,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'ZM12345678',
     notes: 'Paste the share.zemenbank.com link or the reference alone.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'cbebirr',
     name: 'CBE Birr',
     shortName: 'CBE Birr',
@@ -137,7 +137,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'CB12345678',
     notes: 'Requires the phone number tied to the wallet.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'siinqee',
     name: 'Siinqee Bank',
     shortName: 'Siinqee',
@@ -153,7 +153,7 @@ const List<ChekiBank> kChekiBanks = [
     referenceExample: 'SQ12345678',
     notes: 'Routed through the eBirr receipt platform.',
   ),
-  ChekiBank(
+  MahtemBank(
     id: 'ebirr',
     name: 'eBirr',
     shortName: 'eBirr',
@@ -176,8 +176,8 @@ const List<ChekiBank> kChekiBanks = [
 const String kCbeNewId = 'cbe-new';
 
 /// Looks up a bank by its registry id.
-ChekiBank? bankById(String id) {
-  for (final b in kChekiBanks) {
+MahtemBank? bankById(String id) {
+  for (final b in kMahtemBanks) {
     if (b.id == id) return b;
   }
   return null;
@@ -185,7 +185,7 @@ ChekiBank? bankById(String id) {
 
 /// Result of auto-detecting a bank from a raw reference string.
 class ReferenceDetection {
-  final ChekiBank bank;
+  final MahtemBank bank;
   final String reference;
   const ReferenceDetection(this.bank, this.reference);
 }

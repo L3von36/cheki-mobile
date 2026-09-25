@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/banks_registry.dart';
-import '../../theme/cheki_theme.dart';
+import '../../theme/mahtem_theme.dart';
 import 'bank_avatar.dart';
 
 /// Bottom-sheet bank picker with an "Auto-detect" option first.
@@ -13,8 +13,8 @@ class BankPickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.navy;
-    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.navy;
+    final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
 
     return SafeArea(
       child: ConstrainedBox(
@@ -38,7 +38,7 @@ class BankPickerSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
               child: Text(
-                'Cheki usually detects this from the reference format — '
+                'Mahtem usually detects this from the reference format — '
                 'pick manually only if auto-detect is wrong.',
                 style: TextStyle(color: dim, fontSize: 11.5, height: 1.45),
               ),
@@ -46,7 +46,7 @@ class BankPickerSheet extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 16),
-                itemCount: kChekiBanks.length + 1,
+                itemCount: kMahtemBanks.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _Tile(
@@ -54,12 +54,12 @@ class BankPickerSheet extends StatelessWidget {
                         width: 36,
                         height: 36,
                         decoration: const BoxDecoration(
-                          color: ChekiPalette.greenSoft,
+                          color: MahtemPalette.greenSoft,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.auto_awesome_rounded,
-                          color: ChekiPalette.green,
+                          color: MahtemPalette.green,
                           size: 17,
                         ),
                       ),
@@ -69,7 +69,7 @@ class BankPickerSheet extends StatelessWidget {
                       onTap: () => Navigator.of(context).pop(null),
                     );
                   }
-                  final bank = kChekiBanks[index - 1];
+                  final bank = kMahtemBanks[index - 1];
                   return _Tile(
                     leading: BankAvatar(bank: bank, size: 36, radius: 18),
                     title: bank.name,
@@ -105,8 +105,8 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.navy;
-    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.navy;
+    final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 1),
@@ -116,18 +116,18 @@ class _Tile extends StatelessWidget {
         style: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: selected ? ChekiPalette.greenDeep : ink,
+          color: selected ? MahtemPalette.greenDeep : ink,
         ),
       ),
       subtitle: Text(
         subtitle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: monoStyle(size: 10, color: selected ? ChekiPalette.green : dim),
+        style: monoStyle(size: 10, color: selected ? MahtemPalette.green : dim),
       ),
       trailing: selected
           ? const Icon(Icons.check_circle_rounded,
-              color: ChekiPalette.green, size: 18)
+              color: MahtemPalette.green, size: 18)
           : null,
       onTap: onTap,
     );

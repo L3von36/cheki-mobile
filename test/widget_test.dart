@@ -1,13 +1,13 @@
-import 'package:cheki_mobile/app.dart';
-import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/verify_history.dart';
+import 'package:mahtem/app.dart';
+import 'package:mahtem/core/banks_registry.dart';
+import 'package:mahtem/core/verify_history.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> bootToHome(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues({});
-  await tester.pumpWidget(const ChekiApp());
+  await tester.pumpWidget(const MahtemApp());
   // The app boots straight into the shell — no splash. There is an ambient
   // pulsing/glow animation in places, so pump fixed durations instead of
   // pumpAndSettle.
@@ -20,7 +20,7 @@ void main() {
     await bootToHome(tester);
 
     // Slim brand header + the three core controls.
-    expect(find.text('Cheki'), findsOneWidget);
+    expect(find.text('Mahtem'), findsOneWidget);
     expect(find.text('Auto-detect bank'), findsOneWidget);
     expect(find.text('VERIFY RECEIPT'), findsOneWidget);
     expect(find.text('Scan the QR code instead'), findsOneWidget);
@@ -57,7 +57,7 @@ void main() {
   });
 
   test('all 10 banks expose a reference example', () {
-    for (final bank in kChekiBanks) {
+    for (final bank in kMahtemBanks) {
       expect(bank.referenceExample, isNotEmpty, reason: bank.id);
       expect(bank.initials, isNotEmpty, reason: bank.id);
     }

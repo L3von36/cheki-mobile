@@ -1,12 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Internet: verification runs through the cheki API. -->
+    <!-- Internet: receipt verification talks directly to bank endpoints. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Camera: QR receipt scanning (mobile_scanner). -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
-        android:label="Cheki"
+        android:label="Mahtem"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

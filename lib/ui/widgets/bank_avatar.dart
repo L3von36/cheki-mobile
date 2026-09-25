@@ -4,7 +4,7 @@ import '../../core/models.dart';
 
 /// Square brand-colored tile with the bank's initials.
 class BankAvatar extends StatelessWidget {
-  final ChekiBank? bank;
+  final MahtemBank? bank;
   final double size;
   final double radius;
 

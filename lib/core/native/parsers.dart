@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'pdf_text.dart';
 
-// Per-bank receipt parsers — Cheki Mobile's own implementation.
+// Per-bank receipt parsers — Mahtem's own implementation.
 ///
 /// Each bank exposes a public receipt endpoint with its own response shape:
 ///   * CBE (new mbreciept system) ........ JSON

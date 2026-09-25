@@ -1,6 +1,13 @@
-# cheki mobile
+# Mahtem ማህተም
 
 **Free Ethiopian bank receipt verification — in your pocket. 100% native, no middleman server.**
+
+*Mahtem* (ማህተም) is Amharic for **"stamp / seal"** — the moment a receipt is checked
+and stamped as genuine. That's exactly what the app does.
+
+<p align="center">
+  <img src="assets/icon/mahtem_icon.png" width="128" alt="Mahtem launcher icon"/>
+</p>
 
 [![Release](https://img.shields.io/github/v/release/L3von36/cheki-mobile?style=flat&logo=github&color=2ddb6a)](https://github.com/L3von36/cheki-mobile/releases)
 [![Build APK](https://img.shields.io/github/actions/workflow/status/L3von36/cheki-mobile/release.yml?label=Release%20APK&style=flat&logo=github)](https://github.com/L3von36/cheki-mobile/actions/workflows/release.yml)
@@ -8,7 +15,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ddb6a.svg)](LICENSE)
 
 Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen, CBE Birr, Siinqee and
-eBirr payment receipts in seconds. Point your phone at a receipt — cheki
+eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
 fetches the official record **directly from the bank's public endpoint on your
 device** and tells you if the payment is genuine.
 
@@ -68,9 +75,15 @@ Notes:
 ## Install
 
 Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/releases):
-1. Download `cheki-mobile-vX.Y.Z.apk`
+1. Download `mahtem-vX.Y.Z.apk`
 2. Allow "Install unknown apps" if prompted
-3. Install & verify your first receipt
+3. Install & stamp your first receipt as verified
+
+> **Upgrading from v1.3.0 or earlier (installed as "Cheki")?** The app was
+> fully rebranded in v1.4.0 — new name, new icon, new app id
+> (`app.mahtem.mobile`) and a new signing key. Android treats it as a
+> separate app: **uninstall the old Cheki app first**, then install Mahtem.
+> Your old verification history does not carry over (it was on-device only).
 
 ## Building from source
 
@@ -79,6 +92,12 @@ flutter pub get
 flutter analyze   # must be clean
 flutter test      # 64 tests
 flutter build apk --release
+```
+
+Launcher icons are regenerated from `assets/icon/` with:
+
+```bash
+dart run flutter_launcher_icons
 ```
 
 ## Releases

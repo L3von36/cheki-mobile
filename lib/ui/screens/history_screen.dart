@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/banks_registry.dart';
 import '../../core/verify_history.dart';
-import '../../theme/cheki_theme.dart';
+import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
 
@@ -59,7 +59,7 @@ class HistoryScreen extends StatelessWidget {
                     Icons.receipt_long_outlined,
                     size: 44,
                     color:
-                        isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+                        isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -68,7 +68,7 @@ class HistoryScreen extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color:
-                          isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                          isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -77,8 +77,8 @@ class HistoryScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       color: isDark
-                          ? ChekiPalette.dInkDim
-                          : ChekiPalette.lInkDim,
+                          ? MahtemPalette.dInkDim
+                          : MahtemPalette.lInkDim,
                     ),
                   ),
                 ],
@@ -120,8 +120,8 @@ class HistoryScreen extends StatelessWidget {
                           ? Icons.check_circle_rounded
                           : Icons.cancel_rounded,
                       color: entry.isVerified
-                          ? ChekiPalette.green
-                          : ChekiPalette.red,
+                          ? MahtemPalette.green
+                          : MahtemPalette.red,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -132,8 +132,8 @@ class HistoryScreen extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
                           color: isDark
-                              ? ChekiPalette.dInk
-                              : ChekiPalette.navy,
+                              ? MahtemPalette.dInk
+                              : MahtemPalette.navy,
                         ),
                       ),
                     ),
@@ -143,8 +143,8 @@ class HistoryScreen extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         color: entry.isVerified
-                            ? ChekiPalette.green
-                            : ChekiPalette.red,
+                            ? MahtemPalette.green
+                            : MahtemPalette.red,
                       ),
                     ),
                   ],
@@ -198,7 +198,7 @@ class _Detail extends StatelessWidget {
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 color:
-                    isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
+                    isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
               ),
             ),
           ),
@@ -208,7 +208,7 @@ class _Detail extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
               ),
             ),
           ),
@@ -239,10 +239,10 @@ class _EntryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark ? ChekiPalette.dCard : Colors.white,
+          color: isDark ? MahtemPalette.dCard : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
           ),
         ),
         child: Row(
@@ -264,7 +264,7 @@ class _EntryCard extends StatelessWidget {
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color:
-                          isDark ? ChekiPalette.dInk : ChekiPalette.navy,
+                          isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                     ),
                   ),
                   Text(
@@ -274,8 +274,8 @@ class _EntryCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10.5,
                       color: isDark
-                          ? ChekiPalette.dInkDim
-                          : ChekiPalette.lInkDim,
+                          ? MahtemPalette.dInkDim
+                          : MahtemPalette.lInkDim,
                     ),
                   ),
                 ],
@@ -291,8 +291,8 @@ class _EntryCard extends StatelessWidget {
                     fontSize: 11.5,
                     fontWeight: FontWeight.w800,
                     color: entry.isVerified
-                        ? ChekiPalette.green
-                        : ChekiPalette.red,
+                        ? MahtemPalette.green
+                        : MahtemPalette.red,
                   ),
                 ),
                 Icon(
@@ -300,8 +300,8 @@ class _EntryCard extends StatelessWidget {
                       ? Icons.check_circle_rounded
                       : Icons.cancel_rounded,
                   color: entry.isVerified
-                      ? ChekiPalette.green
-                      : ChekiPalette.red,
+                      ? MahtemPalette.green
+                      : MahtemPalette.red,
                   size: 14,
                 ),
               ],

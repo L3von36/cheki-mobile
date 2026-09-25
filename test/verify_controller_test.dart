@@ -1,8 +1,8 @@
-import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/models.dart';
-import 'package:cheki_mobile/core/native/verifier.dart';
-import 'package:cheki_mobile/state/verify_controller.dart';
-import 'package:cheki_mobile/util/format.dart';
+import 'package:mahtem/core/banks_registry.dart';
+import 'package:mahtem/core/models.dart';
+import 'package:mahtem/core/native/verifier.dart';
+import 'package:mahtem/state/verify_controller.dart';
+import 'package:mahtem/util/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Scriptable engine stub for controller tests.

@@ -1,5 +1,5 @@
-/// Cheki core models — mirrors the JSON contract of the cheki REST API
-/// (https://chekiapp.vercel.app) plus the bank registry entry shape.
+/// Mahtem core models — receipt, verification result and bank entries.
+/// Shared by the native verification engine and the UI layer.
 library;
 
 /// Result of a single receipt verification (`POST /api/verify`).
@@ -124,15 +124,15 @@ class VerifyResult {
   bool get isVerified => verified == true;
 }
 
-/// Error thrown by [ChekiClient] for network/API failures.
-class ChekiException implements Exception {
+/// Error thrown by the native verification engine for network/parsing failures.
+class MahtemException implements Exception {
   final String message;
   final int? statusCode;
 
   /// Direct receipt URL (geo-blocked banks) the user can open in a browser.
   final String? fallbackUrl;
 
-  const ChekiException(this.message, {this.statusCode, this.fallbackUrl});
+  const MahtemException(this.message, {this.statusCode, this.fallbackUrl});
 
   /// User-friendly version of the message for snackbars / error cards.
   String get friendly {
@@ -147,14 +147,14 @@ class ChekiException implements Exception {
 
   @override
   String toString() =>
-      'ChekiException($message${statusCode != null ? ', status: $statusCode' : ''})';
+      'MahtemException($message${statusCode != null ? ', status: $statusCode' : ''})';
 }
 
 /// The kind of financial institution.
 enum BankType { bank, wallet, mobile }
 
 /// A static registry entry describing one supported bank/wallet.
-class ChekiBank {
+class MahtemBank {
   final String id;
   final String name;
   final String shortName;
@@ -175,7 +175,7 @@ class ChekiBank {
   /// Whether the bank endpoint is geo-restricted (handled server-side).
   final bool geoBlocked;
 
-  /// Brand color (from the cheki manifest) used for the bank avatar.
+  /// Brand color (from the bank registry) used for the bank avatar.
   final int colorValue;
 
   /// Short initials rendered inside the colored avatar.
@@ -190,7 +190,7 @@ class ChekiBank {
   /// Integration notes (geo-blocking, quirks, etc.).
   final String notes;
 
-  const ChekiBank({
+  const MahtemBank({
     required this.id,
     required this.name,
     required this.shortName,

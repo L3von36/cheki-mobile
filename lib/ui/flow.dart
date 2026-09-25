@@ -86,9 +86,9 @@ Future<void> runVerificationFlow(BuildContext context) async {
 
 /// Opens the manual bank picker; popping with a bank selects it on the
 /// controller. Returns the selected bank (or null if dismissed).
-Future<ChekiBank?> pickBankManually(BuildContext context) {
+Future<MahtemBank?> pickBankManually(BuildContext context) {
   final controller = context.read<VerifyController>();
-  return showModalBottomSheet<ChekiBank>(
+  return showModalBottomSheet<MahtemBank>(
     context: context,
     isScrollControlled: true,
     builder: (_) => BankPickerSheet(selectedId: controller.effectiveBank?.id),

@@ -16,7 +16,7 @@ import 'package:pointycastle/digests/sha1.dart';
 import '../models.dart';
 import 'parsers.dart';
 
-// Native verification engine — Cheki Mobile's own implementation.
+// Native verification engine — Mahtem's own implementation.
 ///
 /// Talks to each bank's public receipt endpoint directly from the device:
 ///   * no middleman server, no API key, no rate limits beyond the bank's own
