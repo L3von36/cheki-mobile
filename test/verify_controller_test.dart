@@ -1,19 +1,36 @@
-import 'dart:convert';
-
 import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/cheki_client.dart';
 import 'package:cheki_mobile/core/models.dart';
+import 'package:cheki_mobile/core/native/verifier.dart';
 import 'package:cheki_mobile/state/verify_controller.dart';
 import 'package:cheki_mobile/util/format.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+
+/// Scriptable engine stub for controller tests.
+class FakeEngine implements VerifyEngine {
+  VerifyResult? nextResult;
+  Object? nextError;
+  String? lastBank;
+  String? lastReference;
+  String? lastAccount;
+
+  @override
+  Future<VerifyResult> verify({
+    required String bank,
+    required String reference,
+    String? accountNumber,
+    String? phoneNumber,
+  }) async {
+    lastBank = bank;
+    lastReference = reference;
+    lastAccount = accountNumber;
+    if (nextError != null) throw nextError!;
+    return nextResult ??
+        VerifyResult(success: true, verified: true, bank: bank, reference: reference);
+  }
+}
 
 void main() {
   group('VerifyController', () {
-    VerifyController makeController(http.Client mock) =>
-        VerifyController(client: ChekiClient(client: mock));
-
     test('auto-detects bank while typing a reference', () {
       final controller = VerifyController();
       controller.setReference('FT26140P01YB');
@@ -51,6 +68,21 @@ void main() {
       controller.dispose();
     });
 
+    test('applyDetection keeps bank open for generic QR payloads', () {
+      final controller = VerifyController();
+      controller.applyDetection(
+        const BankDetection(bank: null, reference: 'PAYOUT99231X'),
+      );
+      expect(controller.reference, 'PAYOUT99231X');
+      expect(controller.effectiveBank, isNull);
+      expect(controller.canVerify, isFalse);
+
+      // Picking a bank manually completes the form.
+      controller.selectBank(bankById('mpesa'));
+      expect(controller.canVerify, isTrue);
+      controller.dispose();
+    });
+
     test('manual bank selection overrides auto-detect', () {
       final controller = VerifyController();
       controller.setReference('DET8FJGUJ4');
@@ -62,45 +94,51 @@ void main() {
       controller.dispose();
     });
 
-    test('verify() surfaces friendly errors as a failed result', () async {
-      final controller = makeController(
-        MockClient((request) async =>
-            http.Response(jsonEncode({'success': false, 'error': 'nope'}), 404)),
+    test('verify() passes the cbe-new id to the engine', () async {
+      final engine = FakeEngine();
+      final controller = VerifyController(engine: engine);
+      controller.applyDetection(
+        const BankDetection(bank: 'cbe-new', reference: 'a1b2c3d4e5f6'),
       );
+      await controller.verify();
+      expect(engine.lastBank, 'cbe-new');
+      expect(engine.lastReference, 'a1b2c3d4e5f6');
+      expect(engine.lastAccount, isNull);
+      controller.dispose();
+    });
+
+    test('verify() surfaces engine failures as a failed result', () async {
+      final engine = FakeEngine()
+        ..nextResult = const VerifyResult(
+          success: false,
+          verified: false,
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+          error: 'No connection. Check your internet and try again.',
+        );
+      final controller = VerifyController(engine: engine);
       controller.applyDetection(
         const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
       );
       final result = await controller.verify();
-      // Failures are first-class results now — no silent errors.
+      // Failures are first-class results — no silent errors.
       expect(result, isNotNull);
       expect(result!.isVerified, isFalse);
       expect(result.error, isNotNull);
       expect(controller.status, VerifyStatus.done);
-      expect(controller.errorMessage, isNotNull);
       controller.dispose();
     });
 
-    test('verify() returns a successful result end-to-end', () async {
-      final controller = makeController(
-        MockClient((request) async => http.Response(
-              jsonEncode({
-                'success': true,
-                'verified': true,
-                'bank': 'telebirr',
-                'reference': 'DET8FJGUJ4',
-                'amount': 1500,
-                'currency': 'ETB',
-                'senderName': 'Test Sender',
-              }),
-              200,
-            )),
-      );
+    test('verify() survives engine exceptions', () async {
+      final engine = FakeEngine()..nextError = Exception('boom');
+      final controller = VerifyController(engine: engine);
       controller.applyDetection(
         const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
       );
       final result = await controller.verify();
       expect(result, isNotNull);
-      expect(result!.isVerified, isTrue);
+      expect(result!.isVerified, isFalse);
+      expect(result.error, contains('Something went wrong'));
       expect(controller.status, VerifyStatus.done);
       controller.dispose();
     });

@@ -219,8 +219,11 @@ class ChekiBank {
 }
 
 /// A receipt detected from a URL, QR payload, or raw reference text.
+///
+/// [bank] is null for generic QR payloads we cannot attribute to a bank —
+/// the flow then asks the user to pick one before verifying.
 class BankDetection {
-  final String bank;
+  final String? bank;
   final String reference;
 
   /// Account suffix parsed from CBE/BOA receipt URLs.

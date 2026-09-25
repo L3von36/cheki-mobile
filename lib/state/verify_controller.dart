@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/banks_registry.dart';
-import '../core/cheki_client.dart';
 import '../core/models.dart';
+import '../core/native/verifier.dart';
 
 /// Lifecycle of a verification attempt.
 enum VerifyStatus { idle, verifying, done, error }
@@ -10,9 +10,10 @@ enum VerifyStatus { idle, verifying, done, error }
 /// Central app state: selected bank, inputs, auto-detection, verification
 /// calls and the latest result. Exposed app-wide via `provider`.
 class VerifyController extends ChangeNotifier {
-  VerifyController({ChekiClient? client}) : _client = client ?? ChekiClient();
+  VerifyController({VerifyEngine? engine})
+      : _engine = engine ?? NativeVerifier();
 
-  final ChekiClient _client;
+  final VerifyEngine _engine;
 
   // ------------------------------------------------------------------ state
   VerifyStatus status = VerifyStatus.idle;
@@ -66,8 +67,9 @@ class VerifyController extends ChangeNotifier {
       manualBank = null;
     }
     detectedBank = _detectBank(value);
-    usingCbeNew = detectedBank != null && reference.trim().length == 12 &&
-        RegExp(r'^[0-9a-f]{12}$', caseSensitive: false).hasMatch(reference.trim());
+    usingCbeNew = detectedBank != null &&
+        RegExp(r'^[0-9a-f]{12}$', caseSensitive: false)
+            .hasMatch(reference.trim());
     // Editing inputs clears a finished (failed) attempt.
     if (status == VerifyStatus.done && result != null && !result!.isVerified) {
       status = VerifyStatus.idle;
@@ -100,15 +102,17 @@ class VerifyController extends ChangeNotifier {
   }
 
   /// Applies a scanned/typed detection (from QR scan or paste).
+  ///
+  /// [detection.bank] is null for generic payloads — we keep the reference
+  /// and let the caller open the bank picker.
   void applyDetection(BankDetection detection) {
-    final bank = detection.bank == kCbeNewId
-        ? bankById('cbe')
-        : bankById(detection.bank);
     reference = detection.reference;
     accountNumber = detection.accountNumber ?? '';
-    detectedBank = bank;
     manualBank = null;
     usingCbeNew = detection.bank == kCbeNewId;
+    detectedBank = detection.bank == null
+        ? null
+        : bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);
     status = VerifyStatus.idle;
     errorMessage = null;
     notifyListeners();
@@ -136,16 +140,16 @@ class VerifyController extends ChangeNotifier {
   }
 
   // -------------------------------------------------------------- verification
-  /// Runs the verification against the hosted cheki API.
+  /// Runs the verification natively on the device.
   ///
   /// ALWAYS resolves to a [VerifyResult]: genuine failures (receipt not
-  /// found, bank down, geo-blocked) become a failed result so the result
-  /// screen can show them — no more silent failures.
+  /// found, bank unreachable) become a failed result so the result screen
+  /// can show them — no silent failures.
   Future<VerifyResult?> verify() async {
     final bank = effectiveBank;
     if (bank == null || !canVerify) return null;
 
-    final apiBank = usingCbeNew ? kCbeNewId : bank.id;
+    final engineBank = usingCbeNew ? kCbeNewId : bank.id;
     status = VerifyStatus.verifying;
     errorMessage = null;
     notifyListeners();
@@ -153,42 +157,35 @@ class VerifyController extends ChangeNotifier {
     final stopwatch = Stopwatch()..start();
     VerifyResult res;
     try {
-      res = await _client.verify(
-        bank: apiBank,
+      res = await _engine.verify(
+        bank: engineBank,
         reference: reference.trim(),
         accountNumber: usingCbeNew ? null : accountNumber.trim(),
         phoneNumber: phoneNumber.trim(),
       );
-    } on ChekiException catch (e) {
+    } catch (e) {
       stopwatch.stop();
       lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
       res = VerifyResult(
         success: false,
-        bank: apiBank,
+        verified: false,
+        bank: engineBank,
         reference: reference.trim(),
-        error: e.friendly,
-        fallbackUrl: e.fallbackUrl,
-      );
-      errorMessage = e.friendly;
-    } catch (e) {
-      stopwatch.stop();
-      lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
-      res = const VerifyResult(
-        success: false,
         error: 'Something went wrong. Check your connection and retry.',
       );
       errorMessage = res.error;
     }
     result = res;
     status = VerifyStatus.done;
+    lastDurationMs = res.durationMs?.toDouble();
     notifyListeners();
     return res;
   }
 
   ChekiBank? _detectBank(String value) {
     final detection = detectBankFromUrl(value) ?? _detectPlain(value);
-    if (detection == null) return null;
-    return bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank);
+    if (detection == null || detection.bank == null) return null;
+    return bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);
   }
 
   BankDetection? _detectPlain(String value) {
@@ -207,7 +204,8 @@ class VerifyController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _client.close();
+    final engine = _engine;
+    if (engine is NativeVerifier) engine.dispose();
     super.dispose();
   }
 }

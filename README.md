@@ -1,6 +1,6 @@
 # cheki mobile
 
-**Free Ethiopian bank receipt verification — in your pocket. Flutter client for [cheki](https://github.com/1RB/cheki).**
+**Free Ethiopian bank receipt verification — in your pocket. 100% native, no middleman server.**
 
 [![Release](https://img.shields.io/github/v/release/L3von36/cheki-mobile?style=flat&logo=github&color=2ddb6a)](https://github.com/L3von36/cheki-mobile/releases)
 [![Build APK](https://img.shields.io/github/actions/workflow/status/L3von36/cheki-mobile/release.yml?label=Release%20APK&style=flat&logo=github)](https://github.com/L3von36/cheki-mobile/actions/workflows/release.yml)
@@ -9,27 +9,61 @@
 
 Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen, CBE Birr, Siinqee and
 eBirr payment receipts in seconds. Point your phone at a receipt — cheki
-fetches the official record from the bank's public endpoint and tells you if
-the payment is genuine.
+fetches the official record **directly from the bank's public endpoint on your
+device** and tells you if the payment is genuine.
 
-No signup. No API key. No fees. Ever.
+No signup. No API key. No fees. No middleman server.
 
 ## Features
 
+- **Native verification engine** — the app talks to each bank's public
+  receipt endpoint straight from your phone. No hosted API in between, which
+  means Telebirr and M-Pesa work on Ethiopian networks (a hosted
+  non-Ethiopian server could never reach them).
 - **Verify any receipt** — paste a reference or a share link from SMS
-- **QR scan** — scan receipt QR codes (including the new CBE
-  `mbreciept.cbe.com.et` receipts) or pick a screenshot from the gallery
+- **QR scan that works** — recognizes every receipt QR format we know:
+  bank links, CBE `mbreciept` ids, **encrypted BOA receipt QR payloads
+  (decrypted on-device)**, plain references — and generic reference codes
+  with a bank picker fallback. Camera permission is requested up front with
+  a clear recovery path if it was denied.
 - **Auto-detect bank** — the app recognizes the bank from the reference
   format (CBE `FT…`, Telebirr `DET…`, Awash share segments, …)
-- **Clean "Payment Verifier" UI** — blue gradient hero, green actions,
-  icon detail rows, dark & light themes
-- **Payment History** — every check is saved on-device with search and
-  status filters, plus a shareable transaction details view
-- **Live system status** — the home banner and bank list show real
-  endpoint availability from the health API
-- **Honest failures** — bank down or geo-blocked? The result screen says
-  exactly why and offers a one-tap "Open receipt in browser" fallback
+- **Simple, focused UI** — one card: pick a bank, paste the reference,
+  verify. No banners, no clutter. Light & dark themes.
+- **Payment History** — every check is saved on-device; tap an entry for
+  details, long-press to remove
+- **Honest failures** — receipt not found or bank down? The result screen
+  says exactly why and offers a one-tap "Open original receipt" fallback
 - **Private** — history never leaves the device; nothing to sign up for
+
+## How verification works
+
+Each bank publishes receipts on a public endpoint; the app's native engine
+(`lib/core/native/`) builds the URL, fetches it with retries, and parses the
+response with its own parsers:
+
+| Bank | Endpoint | Response |
+|------|----------|----------|
+| CBE (new) | `Mb.cbe.com.et/api/v1/transactions/public/transaction-detail/{id}` | JSON |
+| Telebirr | `transactioninfo.ethiotelecom.et/receipt/{ref}` | HTML |
+| Bank of Abyssinia | `cs.bankofabyssinia.com/api/onlineSlip/getDetails/?id={ref}{last5}` | JSON |
+| M-Pesa | `m-pesabusiness.safaricom.et/api/receipt/getReceipt?trxNo={ref}` | JSON |
+| Dashen | `receipt.dashensuperapp.com/receipt/{ref}` | PDF (text-extracted on device) |
+| Awash | `awashpay.awashbank.com:8225/-{shareToken}` | HTML (self-signed TLS handled) |
+| Zemen | `share.zemenbank.com/rt/{ref}/pdf` | PDF (text-extracted on device) |
+| CBE Birr | `cbepay1.cbe.com.et/aureceipt?TID={ref}&PH={phone}` | HTML |
+| Siinqee / eBirr | `receipt.ebirr.com/{tenant}/{token}` | HTML |
+
+Notes:
+- CBE's **legacy `FT` + last-8-digits** PDF system was decommissioned by CBE —
+  the app detects FT references and explains the new flow (scan the receipt QR
+  or ask the sender for the `mbreciept.cbe.com.et` link).
+- BOA still needs the last **5** digits of the receiving account when
+  verifying by reference; scanning the BOA receipt QR skips that entirely —
+  the QR carries the whole receipt, encrypted, and is decrypted locally.
+- The PDF extractor (Dashen/Zemen) supports FlateDecode and
+  ASCII85+Flate streams; if text cannot be recovered the app falls back to
+  opening the original receipt in the browser.
 
 ## Install
 
@@ -38,80 +72,26 @@ Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/rele
 2. Allow "Install unknown apps" if prompted
 3. Install & verify your first receipt
 
-Minimum Android 7.0 (API 24). Camera permission is used only for QR scanning.
-
-## How it works
-
-```
-App ──POST /api/verify──► cheki API (chekiapp.vercel.app)
-                              │
-                              ├─► CBE          apps.cbe.com.et (PDF)
-                              ├─► Telebirr     transactioninfo.ethiotelecom.et
-                              ├─► BOA          cs.bankofabyssinia.com (JSON)
-                              ├─► M-Pesa       m-pesabusiness.safaricom.et (JSON)
-                              ├─► Dashen / Awash / Zemen / CBE Birr / Siinqee / eBirr
-                              ▼
-                       Structured receipt JSON
-```
-
-The app talks to the free hosted cheki API — the same one powering
-[chekiapp.vercel.app](https://chekiapp.vercel.app). It is open source
-([1RB/cheki](https://github.com/1RB/cheki)) and can be self-hosted.
-
-## Building
+## Building from source
 
 ```bash
 flutter pub get
-flutter test
+flutter analyze   # must be clean
+flutter test      # 64 tests
 flutter build apk --release
 ```
 
-### Release signing (maintainers)
+## Releases
 
-The `Release APK` workflow builds a signed APK on every `v*` tag push and
-attaches it to a GitHub Release. It reads four repository secrets:
+Tag-push driven: bump `version` in `pubspec.yaml`, commit, tag `vX.Y.Z`,
+push — GitHub Actions builds a signed APK and attaches it to the release.
 
-| Secret | Value |
-|---|---|
-| `KEYSTORE_BASE64` | `base64 -w0 keystore.jks` of the release keystore |
-| `KEYSTORE_PASSWORD` | keystore password |
-| `KEY_ALIAS` | signing key alias |
-| `KEY_PASSWORD` | key password |
+## Credits
 
-If the secrets are absent the workflow still ships a debug-signed APK, so
-CI never blocks on signing setup.
-
-## Project structure
-
-```
-lib/
-  core/
-    cheki_client.dart     # API client: verify, batch, banks, health + retry
-    banks_registry.dart   # 10 banks, reference & URL/QR detection
-    models.dart           # VerifyResult, ChekiBank, ChekiException
-  state/
-    verify_controller.dart  # form + verification state machine
-    theme_controller.dart
-  theme/cheki_theme.dart  # receipt design tokens (from the web app)
-  ui/
-    screens/              # home, result, scan, banks
-    widgets/              # receipt paper, stamp, ticker, verify button…
-  util/format.dart
-```
-
-## Contributing
-
-Found a bank that doesn't verify? An endpoint change? Open an issue on the
-[main repo](https://github.com/1RB/cheki/issues) with the bank name and a
-reference number — parser fixes land on the API side and every client
-benefits immediately.
+Architecture inspiration from the open-source
+[cheki](https://github.com/1RB/cheki) project (studied, then re-implemented
+from scratch in Dart for this app).
 
 ## License
 
-MIT — same as the cheki API.
-
-## Disclaimer
-
-cheki mobile is not affiliated with any Ethiopian bank or Ethio Telecom. It
-reads publicly accessible receipt endpoints and displays the data the banks
-themselves publish.
+MIT

@@ -8,43 +8,52 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> bootToHome(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues({});
   await tester.pumpWidget(const ChekiApp());
-  await tester.pump(); // splash first frame
-  // Splash auto-advances after ~1.9s. Pump past it (fixed durations —
-  // the app has ambient repeating animations, so no pumpAndSettle).
-  await tester.pump(const Duration(milliseconds: 2100));
-  await tester.pump(const Duration(milliseconds: 400));
+  // The app boots straight into the shell — no splash. There is an ambient
+  // pulsing/glow animation in places, so pump fixed durations instead of
+  // pumpAndSettle.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
-  testWidgets('boots through splash into the home screen', (tester) async {
+  testWidgets('boots straight into the minimal verify form', (tester) async {
     await bootToHome(tester);
 
-    // Splash is gone; home is visible.
-    expect(find.text('Scan QR Code'), findsOneWidget);
-    expect(find.text('Enter Payment Details'), findsOneWidget);
-    expect(find.textContaining('Verify Payments'), findsOneWidget);
-    // Bottom nav tabs.
-    expect(find.text('Home'), findsWidgets);
-    expect(find.text('History'), findsWidgets);
-    expect(find.text('Settings'), findsWidgets);
+    // Slim brand header + the three core controls.
+    expect(find.text('Cheki'), findsOneWidget);
+    expect(find.text('Auto-detect bank'), findsOneWidget);
+    expect(find.text('VERIFY RECEIPT'), findsOneWidget);
+    expect(find.text('Scan the QR code instead'), findsOneWidget);
+
+    // Bottom nav: Verify / scan / History — no Settings tab.
+    expect(find.text('Verify'), findsOneWidget);
+    expect(find.text('History'), findsOneWidget);
+    expect(find.text('Settings'), findsNothing);
   });
 
-  testWidgets('Enter Payment Details opens the verify form', (tester) async {
+  testWidgets('typing a CBE reference auto-detects and arms the button',
+      (tester) async {
     await bootToHome(tester);
 
-    await tester.tap(find.text('Enter Payment Details'));
-    await tester.pump(const Duration(milliseconds: 500));
+    // The verify button is inert before a reference is entered.
+    final buttonFinder = find.text('VERIFY RECEIPT');
 
-    // Before typing, the button asks for a reference.
-    expect(find.text('Enter a reference to verify'), findsOneWidget);
-
-    // Typing a CBE reference auto-detects the bank in the selector
-    // and arms the verify button.
     await tester.enterText(find.byType(TextField).first, 'FT26140P01YB');
     await tester.pump(const Duration(milliseconds: 300));
 
+    // Bank selector now shows the detected bank; account field appears.
     expect(find.text('Commercial Bank of Ethiopia'), findsOneWidget);
-    expect(find.text('Verify Now'), findsOneWidget);
+    expect(find.text('Last 8 digits only'), findsOneWidget);
+    expect(buttonFinder, findsOneWidget);
+  });
+
+  testWidgets('history tab shows the empty state', (tester) async {
+    await bootToHome(tester);
+
+    await tester.tap(find.text('History'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('No checks yet'), findsOneWidget);
   });
 
   test('all 10 banks expose a reference example', () {

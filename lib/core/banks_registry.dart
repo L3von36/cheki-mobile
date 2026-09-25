@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'native/verifier.dart';
 
 /// Static registry of the 10 live banks supported by cheki.
 ///
@@ -38,7 +39,7 @@ const List<ChekiBank> kChekiBanks = [
     initials: 'TB',
     referenceFormat: '2-3 letter prefix + 6-8 alphanumeric characters',
     referenceExample: 'DET8FJGUJ4',
-    notes: 'Verification runs through cheki servers, so it works worldwide.',
+    notes: 'Verified directly on the device — works on Ethiopian networks.',
   ),
   ChekiBank(
     id: 'boa',
@@ -70,7 +71,7 @@ const List<ChekiBank> kChekiBanks = [
     initials: 'MP',
     referenceFormat: 'Typically 2 letters followed by 6+ digits',
     referenceExample: 'SE12345678',
-    notes: 'Verification runs through cheki servers, so it works worldwide.',
+    notes: 'Verified directly on the device — works on Ethiopian networks.',
   ),
   ChekiBank(
     id: 'dashen',
@@ -382,9 +383,31 @@ BankDetection? _detectFromPlainPayload(String input) {
     return BankDetection(bank: kCbeNewId, reference: trimmed);
   }
 
+  // Bank of Abyssinia receipt QR codes are AES-encrypted CSV payloads —
+  // the full receipt (names, amount, reference) is embedded in the code
+  // itself, so we decrypt it on the spot.
+  final base64ish = RegExp(r'^[A-Za-z0-9+/=]{44,}$');
+  if (base64ish.hasMatch(trimmed)) {
+    final decrypted = BoaQrDecryptor.decrypt(trimmed);
+    if (decrypted.verified && decrypted.reference != null) {
+      return BankDetection(
+        bank: 'boa',
+        reference: decrypted.reference!,
+        accountNumber: decrypted.receiverAccount,
+      );
+    }
+  }
+
   final byRef = detectBankFromReference(trimmed);
   if (byRef != null) {
     return BankDetection(bank: byRef.bank.id, reference: byRef.reference);
+  }
+
+  // Generic reference-shaped QR payload: accept it and let the user pick
+  // the bank manually, so scanning NEVER feels like a dead end.
+  final generic = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._/\-]{5,119}$');
+  if (generic.hasMatch(trimmed) && RegExp(r'[A-Za-z]').hasMatch(trimmed)) {
+    return BankDetection(bank: null, reference: trimmed);
   }
   return null;
 }

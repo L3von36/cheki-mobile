@@ -4,16 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/banks_registry.dart';
 import '../../core/models.dart';
 
-/// Full-screen QR scanner styled per the design: dark camera view,
-/// "Position the QR code within the frame" hint, green corner brackets,
-/// and Flash / Gallery round buttons.
+/// Full-screen QR scanner: dark camera view, "Position the QR code within
+/// the frame" hint, green corner brackets, and Flash / Gallery buttons.
 ///
-/// Recognizes bank receipt QR codes / links and pops with a parsed
-/// [BankDetection] (bank + reference + optional account suffix).
+/// Robust by design:
+///   * explicit camera-permission flow (request, recover, open settings)
+///   * recognizes every bank receipt QR we know (URLs, CBE ids, encrypted
+///     BOA payloads, plain references) and pops with a [BankDetection]
+///   * generic reference-shaped payloads pop with `bank: null` so the app
+///     asks which bank to verify against — scanning never dead-ends
+///   * unrecognized codes get a visible, throttled snackbar instead of
+///     being silently dropped
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -21,16 +27,16 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
+enum _CameraState { checking, granted, denied, permanentlyDenied }
+
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin {
-  final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    facing: CameraFacing.back,
-    torchEnabled: false,
-  );
+  MobileScannerController? _controller;
   final ImagePicker _picker = ImagePicker();
+  _CameraState _cameraState = _CameraState.checking;
   bool _handled = false;
   bool _torchOn = false;
+  DateTime _lastHintAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Subtle breathing animation on the brackets.
   late final AnimationController _pulse = AnimationController(
@@ -39,9 +45,42 @@ class _ScanScreenState extends State<ScanScreen>
   )..repeat(reverse: true);
 
   @override
+  void initState() {
+    super.initState();
+    _ensurePermission();
+  }
+
+  Future<void> _ensurePermission() async {
+    setState(() => _cameraState = _CameraState.checking);
+    var status = await Permission.camera.status;
+    if (status.isDenied) {
+      status = await Permission.camera.request();
+    }
+    if (!mounted) return;
+    if (status.isGranted || status.isLimited) {
+      _startCamera();
+    } else if (status.isPermanentlyDenied ||
+        status.isRestricted) {
+      setState(() => _cameraState = _CameraState.permanentlyDenied);
+    } else {
+      setState(() => _cameraState = _CameraState.denied);
+    }
+  }
+
+  void _startCamera() {
+    _controller?.dispose();
+    _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+      torchEnabled: false,
+    );
+    setState(() => _cameraState = _CameraState.granted);
+  }
+
+  @override
   void dispose() {
     _pulse.dispose();
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -51,12 +90,33 @@ class _ScanScreenState extends State<ScanScreen>
       final raw = barcode.rawValue;
       if (raw == null || raw.trim().isEmpty) continue;
       final detection = detectReceipt(raw);
-      if (detection == null) continue;
+      if (detection == null) {
+        _showUnrecognizedHint();
+        continue;
+      }
       _handled = true;
       HapticFeedback.heavyImpact();
       if (mounted) Navigator.of(context).pop(detection);
       return;
     }
+  }
+
+  void _showUnrecognizedHint() {
+    final now = DateTime.now();
+    if (now.difference(_lastHintAt) < const Duration(seconds: 3)) return;
+    _lastHintAt = now;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'This QR code is not a supported payment receipt. '
+            'Try the receipt link or reference number instead.',
+          ),
+        ),
+      );
   }
 
   Future<void> _pickFromGallery() async {
@@ -65,26 +125,38 @@ class _ScanScreenState extends State<ScanScreen>
       final XFile? image =
           await _picker.pickImage(source: ImageSource.gallery);
       if (image == null || !mounted) return;
-      _handled = true;
-      final capture = await _controller.analyzeImage(image.path);
+      final controller = _controller;
+      if (controller == null) return;
+      final capture = await controller.analyzeImage(image.path);
       if (!mounted) return;
       if (capture != null) {
         _onDetect(capture);
         if (_handled) return;
       }
-      _handled = false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text('No receipt QR code found in that image.'),
         ),
       );
     } catch (_) {
-      _handled = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read that image.')),
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text('Could not read that image.'),
+          ),
         );
       }
+    }
+  }
+
+  Future<void> _toggleTorch() async {
+    try {
+      await _controller?.toggleTorch();
+      if (mounted) setState(() => _torchOn = !_torchOn);
+    } catch (_) {
+      // Torch not available yet (camera still starting) — ignore.
     }
   }
 
@@ -94,13 +166,7 @@ class _ScanScreenState extends State<ScanScreen>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Positioned.fill(child: MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) {
-              return _ScanErrorView(message: error.errorCode.name);
-            },
-          )),
+          Positioned.fill(child: _buildCamera()),
 
           // Top bar + hint.
           Positioned(
@@ -151,38 +217,72 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           ),
 
-          // Viewfinder.
-          const _ViewfinderOverlay(pulse: true),
+          if (_cameraState == _CameraState.granted)
+            // Viewfinder.
+            const _ViewfinderOverlay(pulse: true),
 
           // Bottom action buttons: Flash + Gallery.
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: MediaQuery.of(context).padding.bottom + 26,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _RoundAction(
-                  icon: _torchOn
-                      ? Icons.flashlight_on_rounded
-                      : Icons.flashlight_off_rounded,
-                  label: 'Flash',
-                  onTap: () async {
-                    await _controller.toggleTorch();
-                    if (mounted) setState(() => _torchOn = !_torchOn);
-                  },
-                ),
-                _RoundAction(
-                  icon: Icons.photo_outlined,
-                  label: 'Gallery',
-                  onTap: _pickFromGallery,
-                ),
-              ],
+          if (_cameraState == _CameraState.granted)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.of(context).padding.bottom + 26,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _RoundAction(
+                    icon: _torchOn
+                        ? Icons.flashlight_on_rounded
+                        : Icons.flashlight_off_rounded,
+                    label: 'Flash',
+                    onTap: _toggleTorch,
+                  ),
+                  _RoundAction(
+                    icon: Icons.photo_outlined,
+                    label: 'Gallery',
+                    onTap: _pickFromGallery,
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
+  }
+
+  Widget _buildCamera() {
+    switch (_cameraState) {
+      case _CameraState.checking:
+        return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF34D27B)),
+        );
+      case _CameraState.granted:
+        return MobileScanner(
+          controller: _controller!,
+          onDetect: _onDetect,
+          errorBuilder: (context, error) {
+            return _ScanErrorView(
+              message: 'The camera could not start (${error.errorCode.name}). '
+                  'Close this screen and try again.',
+              actionLabel: 'Retry',
+              onAction: _startCamera,
+            );
+          },
+        );
+      case _CameraState.denied:
+        return _ScanErrorView(
+          message: 'Camera permission is needed to scan receipt QR codes.',
+          actionLabel: 'Grant permission',
+          onAction: _ensurePermission,
+        );
+      case _CameraState.permanentlyDenied:
+        return _ScanErrorView(
+          message: 'Camera access is turned off for Cheki. Enable it in '
+              'system settings, or paste the receipt link instead.',
+          actionLabel: 'Open settings',
+          onAction: openAppSettings,
+        );
+    }
   }
 }
 
@@ -401,7 +501,14 @@ class _BracketPainter extends CustomPainter {
 
 class _ScanErrorView extends StatelessWidget {
   final String message;
-  const _ScanErrorView({required this.message});
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _ScanErrorView({
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -424,8 +531,7 @@ class _ScanErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Grant camera permission in system settings, or paste the '
-              'receipt link into the verify form instead.',
+              message,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
@@ -433,6 +539,21 @@ class _ScanErrorView extends StatelessWidget {
                 height: 1.5,
               ),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 20),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF34D27B),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: onAction,
+                child: Text(actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

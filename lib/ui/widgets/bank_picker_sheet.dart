@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/banks_registry.dart';
-import '../../state/system_status.dart';
 import '../../theme/cheki_theme.dart';
 import 'bank_avatar.dart';
 
-/// Bottom-sheet bank picker with an "Auto-detect" option first and a
-/// live availability dot per bank.
+/// Bottom-sheet bank picker with an "Auto-detect" option first.
 class BankPickerSheet extends StatelessWidget {
   final String? selectedId;
 
@@ -69,7 +66,6 @@ class BankPickerSheet extends StatelessWidget {
                       title: 'Auto-detect from reference',
                       subtitle: 'Recommended',
                       selected: selectedId == null,
-                      status: null,
                       onTap: () => Navigator.of(context).pop(null),
                     );
                   }
@@ -79,7 +75,6 @@ class BankPickerSheet extends StatelessWidget {
                     title: bank.name,
                     subtitle: bank.referenceExample,
                     selected: selectedId == bank.id,
-                    status: context.read<SystemStatus>().statusFor(bank.id),
                     onTap: () => Navigator.of(context).pop(bank),
                   );
                 },
@@ -97,7 +92,6 @@ class _Tile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool selected;
-  final String? status;
   final VoidCallback onTap;
 
   const _Tile({
@@ -105,7 +99,6 @@ class _Tile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.selected,
-    required this.status,
     required this.onTap,
   });
 
@@ -115,38 +108,9 @@ class _Tile extends StatelessWidget {
     final ink = isDark ? ChekiPalette.dInk : ChekiPalette.navy;
     final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
 
-    final dotColor = switch (status) {
-      'reachable' || 'live' => ChekiPalette.green,
-      'geo-blocked' => ChekiPalette.amber,
-      'unreachable' => ChekiPalette.red,
-      _ => isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
-    };
-
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 1),
-      leading: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          leading,
-          if (status != null)
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: Container(
-                width: 11,
-                height: 11,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isDark ? ChekiPalette.dCard : Colors.white,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      leading: leading,
       title: Text(
         title,
         style: TextStyle(

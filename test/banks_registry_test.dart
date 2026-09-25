@@ -1,5 +1,5 @@
 import 'package:cheki_mobile/core/banks_registry.dart';
-import 'package:cheki_mobile/core/cheki_client.dart';
+import 'package:cheki_mobile/core/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
