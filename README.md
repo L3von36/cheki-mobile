@@ -2,9 +2,9 @@
 
 **Free Ethiopian bank receipt verification — in your pocket. Flutter client for [cheki](https://github.com/1RB/cheki).**
 
-[![Release](https://img.shields.io/github/v/release/1RB/cheki-mobile?style=flat&logo=github&color=2ddb6a)](https://github.com/1RB/cheki-mobile/releases)
-[![Build APK](https://img.shields.io/github/actions/workflow/status/1RB/cheki-mobile/release.yml?label=Release%20APK&style=flat&logo=github)](https://github.com/1RB/cheki-mobile/actions/workflows/release.yml)
-[![CI](https://img.shields.io/github/actions/workflow/status/1RB/cheki-mobile/ci.yml?branch=main&label=CI&style=flat&logo=github)](https://github.com/1RB/cheki-mobile/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/L3von36/cheki-mobile?style=flat&logo=github&color=2ddb6a)](https://github.com/L3von36/cheki-mobile/releases)
+[![Build APK](https://img.shields.io/github/actions/workflow/status/L3von36/cheki-mobile/release.yml?label=Release%20APK&style=flat&logo=github)](https://github.com/L3von36/cheki-mobile/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/L3von36/cheki-mobile/ci.yml?branch=main&label=CI&style=flat&logo=github)](https://github.com/L3von36/cheki-mobile/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ddb6a.svg)](LICENSE)
 
 Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen, CBE Birr, Siinqee and
@@ -31,7 +31,7 @@ No signup. No API key. No fees. Ever.
 
 ## Install
 
-Grab the latest APK from [Releases](https://github.com/1RB/cheki-mobile/releases):
+Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/releases):
 1. Download `cheki-mobile-vX.Y.Z.apk`
 2. Allow "Install unknown apps" if prompted
 3. Install & verify your first receipt
