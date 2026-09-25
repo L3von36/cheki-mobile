@@ -436,7 +436,10 @@ BankDetection? _detectFromPlainPayload(String input) {
     }
     final invoice = extractTelebirrInvoiceFromQr(trimmed);
     if (invoice != null) {
-      return BankDetection(bank: 'telebirr', reference: invoice);
+      return BankDetection(
+        bank: 'telebirr',
+        reference: _stripTrailingCeJunk(invoice),
+      );
     }
     unreadableBlob = true;
   }
@@ -493,6 +496,29 @@ BankDetection? _detectFromPlainPayload(String input) {
     return BankDetection(bank: null, reference: compact);
   }
   return null;
+}
+
+/// Strips decoder junk letters from an extracted Telebirr invoice number.
+///
+/// The camera sometimes appends a stray 'c' (or 'e') while the QR leaves
+/// the frame. On link payloads that junk sits at the very end and the
+/// scanner's sanitizer removes it — but Telebirr SuperApp receipt QRs
+/// are base64 blobs, and the junk lands INSIDE the decoded text right
+/// after the invoice number. The 8-12 character A-Z0-9 run then swallows
+/// the uppercased junk letter and the extracted reference ends with a
+/// bogus 'C' that no bank knows.
+///
+/// Trailing c/e runs are removed while at least 8 characters remain (the
+/// invoice format's minimum length). When a removed letter was genuine —
+/// invoices may legitimately end in C/E — the raw-scan retry net in
+/// VerifyController.verify re-verifies with the untouched blob, which
+/// decodes back to the unstripped invoice.
+String _stripTrailingCeJunk(String invoice) {
+  var ref = invoice.trim();
+  while (ref.length > 8 && RegExp(r'[cCeE]$').hasMatch(ref)) {
+    ref = ref.substring(0, ref.length - 1);
+  }
+  return ref;
 }
 
 /// Finds a Telebirr reference embedded inside a larger payload.

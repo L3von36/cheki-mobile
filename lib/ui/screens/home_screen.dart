@@ -132,51 +132,64 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _DetectedChip(bank: controller.detectedBank!),
               ),
             const SizedBox(height: 20),
-            Pressable(
-              onTap:
-                  controller.canVerify ? () => runVerificationFlow(context) : null,
-              child: Container(
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: controller.canVerify
-                      ? const LinearGradient(colors: MahtemPalette.buttonGradient)
-                      : null,
-                  color: controller.canVerify
-                      ? null
-                      : (isDark
-                          ? MahtemPalette.dCardAlt
-                          : MahtemPalette.lBorder),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: controller.isVerifying
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        'VERIFY RECEIPT',
-                        style: TextStyle(
-                          color: controller.canVerify
-                              ? Colors.white
-                              : (isDark
-                                  ? MahtemPalette.dInkFaint
-                                  : MahtemPalette.lInkFaint),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-              ),
+            Row(
+              children: [
+                Expanded(child: _verifyButton(controller, isDark)),
+                if (controller.isVerifying) ...[
+                  const SizedBox(width: 10),
+                  const _StopButton(),
+                ],
+              ],
             ),
             const SizedBox(height: 12),
             _ScanAltButton(onTap: () => openScanner(context)),
           ],
         ),
+      ),
+    );
+  }
+
+  /// The main VERIFY button. While a check is running it keeps the active
+  /// gradient and shows a spinner — the [_StopButton] beside it aborts.
+  Widget _verifyButton(VerifyController controller, bool isDark) {
+    final active = controller.canVerify || controller.isVerifying;
+    return Pressable(
+      onTap:
+          controller.canVerify ? () => runVerificationFlow(context) : null,
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          gradient: active
+              ? const LinearGradient(colors: MahtemPalette.buttonGradient)
+              : null,
+          color: active
+              ? null
+              : (isDark ? MahtemPalette.dCardAlt : MahtemPalette.lBorder),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        child: controller.isVerifying
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              )
+            : Text(
+                'VERIFY RECEIPT',
+                style: TextStyle(
+                  color: controller.canVerify
+                      ? Colors.white
+                      : (isDark
+                          ? MahtemPalette.dInkFaint
+                          : MahtemPalette.lInkFaint),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
       ),
     );
   }
@@ -231,6 +244,38 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ---------------------------------------------------------------- widgets
+
+/// Square red stop control shown next to VERIFY while a check runs —
+/// previously there was no way to cancel a slow verification.
+class _StopButton extends StatelessWidget {
+  const _StopButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: 'Stop verifying',
+      child: Pressable(
+        onTap: () => context.read<VerifyController>().stopVerify(),
+        child: Container(
+          width: 54,
+          height: 50,
+          decoration: BoxDecoration(
+            color: isDark ? MahtemPalette.dCard : MahtemPalette.redSoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: MahtemPalette.red, width: 1.2),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.stop_rounded,
+            color: MahtemPalette.red,
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _BankSelector extends StatelessWidget {
   final VerifyController controller;

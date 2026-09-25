@@ -42,9 +42,14 @@ No signup. No API key. No fees. No middleman server.
 - **Self-stabilizing scanner** — camera readings must agree before they
   are trusted, and the accepted payload is cleaned up automatically:
   decoder-appended trailing letters (a Telebirr `…BEI` scanned as
-  `…BEIc`) and trailing punctuation are stripped, with a verify-time
-  retry on the untouched scan as a safety net — so genuine references
-  that legitimately end in c/e still verify.
+  `…BEIc`) and trailing punctuation are stripped — including junk that
+  rides along INSIDE the decoded Telebirr SuperApp QR blob and glues
+  itself onto the invoice number — with a verify-time retry on the
+  untouched scan as a safety net, so genuine references that
+  legitimately end in c/e still verify.
+- **Stoppable verification** — a red stop button appears next to VERIFY
+  while a check is running; tapping it returns to the form immediately
+  and discards the late result (no result screen, no history entry).
 - **Auto-detect bank** — the app recognizes the bank from the reference
   format (CBE `FT…`, Telebirr `DET…`/`TPS…`, Awash share segments, …)
 - **Simple, focused UI** — one card: pick a bank, paste the reference,

@@ -43,6 +43,11 @@ class VerifyController extends ChangeNotifier {
 
   double? lastDurationMs;
 
+  /// Generation counter for verification runs. Stopping (or restarting)
+  /// a verification bumps it, so an in-flight [verify] recognizes it was
+  /// abandoned and discards its result instead of clobbering state.
+  int _verifyRun = 0;
+
   // -------------------------------------------------------------- accessors
   /// The bank whose fields/styling currently apply.
   MahtemBank? get effectiveBank => manualBank ?? detectedBank;
@@ -151,15 +156,31 @@ class VerifyController extends ChangeNotifier {
   }
 
   // -------------------------------------------------------------- verification
+  /// Aborts an in-flight verification and returns the form to idle.
+  ///
+  /// The HTTP request itself cannot be interrupted, but the late result is
+  /// discarded: when the abandoned [verify] call finally lands it sees its
+  /// generation was superseded and exits without touching any state — so
+  /// no result screen, no history entry, no spinner.
+  void stopVerify() {
+    if (status != VerifyStatus.verifying) return;
+    _verifyRun++;
+    status = VerifyStatus.idle;
+    errorMessage = null;
+    notifyListeners();
+  }
+
   /// Runs the verification natively on the device.
   ///
   /// ALWAYS resolves to a [VerifyResult]: genuine failures (receipt not
   /// found, bank unreachable) become a failed result so the result screen
-  /// can show them — no silent failures.
+  /// can show them — no silent failures. Returns null when the attempt
+  /// was abandoned via [stopVerify] (or superseded by a newer one).
   Future<VerifyResult?> verify() async {
     final bank = effectiveBank;
     if (bank == null || !canVerify) return null;
 
+    final run = ++_verifyRun;
     final engineBank = usingCbeNew ? kCbeNewId : bank.id;
     status = VerifyStatus.verifying;
     errorMessage = null;
@@ -174,6 +195,7 @@ class VerifyController extends ChangeNotifier {
         accountNumber: usingCbeNew ? null : accountNumber.trim(),
         phoneNumber: phoneNumber.trim(),
       );
+      if (run != _verifyRun) return null; // stopped while in flight
 
       // Retry net for sanitized scans: the scanner removes decoder-added
       // trailing letters from the reference it shows (a Telebirr "…BEI"
@@ -194,6 +216,7 @@ class VerifyController extends ChangeNotifier {
             accountNumber: usingCbeNew ? null : accountNumber.trim(),
             phoneNumber: phoneNumber.trim(),
           );
+          if (run != _verifyRun) return null; // stopped during the retry
           if (retry.verified == true) {
             res = retry;
             reference = raw; // show the value that actually verified
@@ -203,6 +226,7 @@ class VerifyController extends ChangeNotifier {
         }
       }
     } catch (e) {
+      if (run != _verifyRun) return null; // stopped while in flight
       stopwatch.stop();
       lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
       res = VerifyResult(
@@ -214,6 +238,7 @@ class VerifyController extends ChangeNotifier {
       );
       errorMessage = res.error;
     }
+    if (run != _verifyRun) return null; // stopped just before completion
     result = res;
     status = VerifyStatus.done;
     lastDurationMs = res.durationMs?.toDouble();

@@ -362,6 +362,26 @@ void main() {
       expect(d.reference, 'DET8FJGUJ4');
     });
 
+    test('camera junk after the invoice does not ride along', () {
+      // A stray 'c' decoded right after the invoice is uppercased and
+      // swallowed by the 8-12 char run — the reported "telebirr scan adds
+      // a trailing c" bug. It must be stripped from the reference.
+      final d = detectReceipt(blob('\x02\x9f\x00DET8FJGUJ4c\x01\xff'));
+      expect(d!.bank, 'telebirr');
+      expect(d.reference, 'DET8FJGUJ4');
+    });
+
+    test('a trailing c/e run is stripped, not just one letter', () {
+      final d = detectReceipt(blob('\x00CHQ261Z4AB2CE\x01'));
+      expect(d!.reference, 'CHQ261Z4AB2');
+    });
+
+    test('an 8-character invoice keeps its trailing letter', () {
+      // Never strip below the invoice format's minimum length.
+      final d = detectReceipt(blob('\x00AB12CD3C\x01'));
+      expect(d!.reference, 'AB12CD3C');
+    });
+
     test('tolerates unpadded base64 from the camera', () {
       var payload = blob('PAYER INFO TPS25191 AMOUNT');
       while (payload.endsWith('=')) {
