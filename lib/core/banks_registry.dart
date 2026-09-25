@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'native/parsers.dart';
 import 'native/verifier.dart';
 
 /// Static registry of the 10 live banks supported by Mahtem.
@@ -418,10 +419,12 @@ BankDetection? _detectFromPlainPayload(String input) {
 
   // Bank of Abyssinia receipt QR codes are AES-encrypted CSV payloads —
   // the full receipt (names, amount, reference) is embedded in the code
-  // itself, so we decrypt it on the spot. When decryption fails we keep
-  // going but remember the blob so we can hint at it below.
+  // itself, so we decrypt it on the spot. Telebirr receipt QRs are ALSO
+  // base64 blobs, but a different encoding: base64 → hex → latin1 text
+  // carrying the invoice number. When BOA decryption fails we try that
+  // before giving up; only then do we remember the blob as unreadable.
   var unreadableBlob = false;
-  final base64ish = RegExp(r'^[A-Za-z0-9+/=]{44,}$');
+  final base64ish = RegExp(r'^[A-Za-z0-9+/=]{24,}$');
   if (base64ish.hasMatch(trimmed)) {
     final decrypted = BoaQrDecryptor.decrypt(trimmed);
     if (decrypted.verified && decrypted.reference != null) {
@@ -430,6 +433,10 @@ BankDetection? _detectFromPlainPayload(String input) {
         reference: decrypted.reference!,
         accountNumber: decrypted.receiverAccount,
       );
+    }
+    final invoice = extractTelebirrInvoiceFromQr(trimmed);
+    if (invoice != null) {
+      return BankDetection(bank: 'telebirr', reference: invoice);
     }
     unreadableBlob = true;
   }

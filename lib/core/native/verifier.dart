@@ -55,6 +55,12 @@ String buildReceiptUrl({
         }
         return ref;
       }
+      // A raw Telebirr receipt QR blob (base64 → hex) can end up here
+      // when the bank was picked manually — decode the invoice number.
+      final invoice = extractTelebirrInvoiceFromQr(ref);
+      if (invoice != null) {
+        return 'https://transactioninfo.ethiotelecom.et/receipt/$invoice';
+      }
       return 'https://transactioninfo.ethiotelecom.et/receipt/$ref';
     case 'boa':
       final suffix = (accountNumber ?? '').trim();

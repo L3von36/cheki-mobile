@@ -80,10 +80,9 @@ class _ScanScreenState extends State<ScanScreen>
     _controller = MobileScannerController(
       // Every frame feeds the stabilizer, which needs repeated readings to
       // separate a stable decode from decoder noise — so "normal" speed.
+      // No format lock: bank apps print several 2-D symbologies and the
+      // sanitizer + detector decide what is a receipt anyway.
       detectionSpeed: DetectionSpeed.normal,
-      // Receipts are QR codes; locking the format skips 1-D barcode
-      // misreads entirely and decodes faster.
-      formats: const [BarcodeFormat.qrCode],
       facing: CameraFacing.back,
       torchEnabled: false,
     );

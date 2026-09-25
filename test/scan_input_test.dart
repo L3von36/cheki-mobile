@@ -46,6 +46,35 @@ void main() {
       expect(s.feed(' DET8FJGUJ4 '), isNull);
       expect(s.feed('DET8FJGUJ4'), 'DET8FJGUJ4');
     });
+
+    test('accepts the best (shortest) candidate at the deadline when '
+        'readings never repeat', () {
+      var t = DateTime(2026, 1, 1, 12);
+      final s = ScanStabilizer(
+        maxWait: const Duration(milliseconds: 1500),
+        now: () => t,
+      );
+      expect(s.feed('NOISY1AAAA'), isNull);
+      expect(s.feed('NOISY2BBBBBB'), isNull); // unrelated → tracker resets
+      t = t.add(const Duration(milliseconds: 100));
+      expect(s.feed('NOISY3CCC'), isNull); // still before the deadline
+      t = t.add(const Duration(milliseconds: 1500));
+      // Dense codes whose readings never agree still accept — the
+      // shortest reading seen so far is the best candidate.
+      expect(s.feed('NOISY4DDDD'), 'NOISY3CCC');
+    });
+
+    test('two-agreement acceptance still wins well before the deadline',
+        () {
+      var t = DateTime(2026, 1, 1, 12);
+      final s = ScanStabilizer(
+        maxWait: const Duration(milliseconds: 1500),
+        now: () => t,
+      );
+      expect(s.feed('DET8FJGUJ4'), isNull);
+      t = t.add(const Duration(milliseconds: 80));
+      expect(s.feed('DET8FJGUJ4'), 'DET8FJGUJ4');
+    });
   });
 
   group('sanitizeScannedCode', () {

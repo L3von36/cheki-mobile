@@ -32,7 +32,9 @@ No signup. No API key. No fees. No middleman server.
   bank links (path, hash-route `#/receipt/…` and query `?id=…` forms), CBE
   `mbreciept` ids, **encrypted BOA receipt QR payloads (decrypted
   on-device)**, Telebirr `TPS…`/`DET…` references — even wrapped inside
-  share text or JSON — plus generic reference codes with a bank picker
+  share text or JSON — **and the real Telebirr SuperApp receipt QR** (a
+  base64→hex encoded blob whose embedded invoice number is decoded
+  on-device), plus generic reference codes with a bank picker
   fallback. Scanning never dead-ends: pay/request QRs and phone-number
   codes get a clear "this is not a receipt" explanation instead of a
   generic error. Camera permission is requested up front with a clear

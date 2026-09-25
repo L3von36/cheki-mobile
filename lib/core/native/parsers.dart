@@ -300,6 +300,36 @@ ParsedReceipt parseMpesa(String body) {
 // Telebirr — HTML receipt tables
 // ===========================================================================
 
+/// Decodes a Telebirr receipt QR payload into its invoice number.
+///
+/// These QR codes are NOT links: the payload is a base64-encoded UTF-8
+/// hex string whose bytes (read as latin1) hold printable text containing
+/// the invoice number as an 8-12 character A-Z0-9 run. Returns null for
+/// anything that does not follow that exact encoding chain.
+String? extractTelebirrInvoiceFromQr(String qrData) {
+  try {
+    var b64 = qrData.trim().replaceAll(RegExp(r'\s'), '');
+    // Tolerate unpadded base64 (the camera payload often drops '=').
+    final pad = b64.length % 4;
+    if (pad == 2) b64 = '$b64==';
+    if (pad == 3) b64 = '$b64=';
+    if (pad == 1) return null;
+    final hexCandidate = utf8.decode(base64Decode(b64), allowMalformed: true);
+    if (hexCandidate.isEmpty ||
+        !RegExp(r'^[0-9a-fA-F]+$').hasMatch(hexCandidate)) {
+      return null;
+    }
+    final bytes = <int>[];
+    for (var i = 0; i + 1 < hexCandidate.length; i += 2) {
+      bytes.add(int.parse(hexCandidate.substring(i, i + 2), radix: 16));
+    }
+    final text = latin1.decode(bytes, allowInvalid: true).toUpperCase();
+    return RegExp(r'[A-Z0-9]{8,12}').firstMatch(text)?.group(0);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Parses the transactioninfo.ethiotelecom.et receipt HTML.
 ParsedReceipt parseTelebirr(String html) {
   if (html.contains('This request is not correct') ||

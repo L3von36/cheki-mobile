@@ -29,6 +29,15 @@ void main() {
         buildReceiptUrl(bank: 'telebirr', reference: 'DET8FJGUJ4'),
         'https://transactioninfo.ethiotelecom.et/receipt/DET8FJGUJ4',
       );
+      // A raw Telebirr receipt QR blob (base64 → hex) pasted or applied
+      // with a manual bank pick decodes to the invoice number.
+      expect(
+        buildReceiptUrl(
+          bank: 'telebirr',
+          reference: telebirrQrBlob('PAYER INFO DET8FJGUJ4 AMOUNT'),
+        ),
+        'https://transactioninfo.ethiotelecom.et/receipt/DET8FJGUJ4',
+      );
       expect(
         buildReceiptUrl(
           bank: 'boa',
@@ -383,3 +392,14 @@ String _encryptForTest(String plaintext) {
 
 List<int> readFixture(String name) =>
     File('test/fixtures/$name').readAsBytesSync();
+
+/// Builds a payload in the real Telebirr receipt QR encoding:
+/// base64(utf8(hex(latin1 text))) with the invoice number embedded as an
+/// A-Z0-9 run inside the decoded text.
+String telebirrQrBlob(String text) {
+  final hex = latin1
+      .encode(text)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return base64Encode(utf8.encode(hex));
+}

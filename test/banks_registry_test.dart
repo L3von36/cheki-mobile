@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:mahtem/core/banks_registry.dart';
 import 'package:mahtem/core/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -331,6 +333,50 @@ void main() {
 
       const server = MahtemException('x', statusCode: 502);
       expect(server.friendly, contains('unavailable'));
+    });
+  });
+
+  group('telebirr receipt QR blobs', () {
+    // Real Telebirr receipt QRs are NOT links: the payload is
+    // base64(utf8(hex(latin1 text))) with the invoice number embedded as
+    // an 8-12 char A-Z0-9 run inside the decoded text.
+    String blob(String text) {
+      final hex = latin1
+          .encode(text)
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
+      return base64Encode(utf8.encode(hex));
+    }
+
+    test('detects the invoice number from the encoded payload', () {
+      final d = detectReceipt(blob('PAYER INFO DET8FJGUJ4 AMOUNT'));
+      expect(d, isNotNull);
+      expect(d!.bank, 'telebirr');
+      expect(d.reference, 'DET8FJGUJ4');
+      expect(d.hint, isNull);
+    });
+
+    test('extracts a lowercase invoice run (uppercased)', () {
+      final d = detectReceipt(blob('payer info det8fjguj4 amount'));
+      expect(d!.bank, 'telebirr');
+      expect(d.reference, 'DET8FJGUJ4');
+    });
+
+    test('tolerates unpadded base64 from the camera', () {
+      var payload = blob('PAYER INFO TPS25191 AMOUNT');
+      while (payload.endsWith('=')) {
+        payload = payload.substring(0, payload.length - 1);
+      }
+      final d = detectReceipt(payload);
+      expect(d!.bank, 'telebirr');
+      expect(d.reference, 'TPS25191');
+    });
+
+    test('a BOA-shaped blob that is neither BOA nor telebirr keeps the '
+        'encrypted hint', () {
+      final d = detectReceipt(base64Encode(List.filled(48, 65)));
+      expect(d, isNotNull);
+      expect(d!.hint, isNotNull);
     });
   });
 }
