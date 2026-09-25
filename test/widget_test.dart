@@ -1,5 +1,5 @@
 import 'package:mahtem/app.dart';
-import 'package:mahtem/core/banks_registry.dart';
+import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,20 +31,17 @@ void main() {
     expect(find.text('Settings'), findsNothing);
   });
 
-  testWidgets('typing a CBE reference auto-detects and arms the button',
+  testWidgets('a typed plain reference needs a bank pick before verifying',
       (tester) async {
     await bootToHome(tester);
 
-    // The verify button is inert before a reference is entered.
-    final buttonFinder = find.text('VERIFY RECEIPT');
-
+    // The verify button is inert before a bank + reference are present.
+    // (Raw references carry no bank information — stylepos rule.)
     await tester.enterText(find.byType(TextField).first, 'FT26140P01YB');
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Bank selector now shows the detected bank; account field appears.
-    expect(find.text('Commercial Bank of Ethiopia'), findsOneWidget);
-    expect(find.text('Last 8 digits only'), findsOneWidget);
-    expect(buttonFinder, findsOneWidget);
+    expect(find.text('Auto-detect bank'), findsOneWidget);
+    expect(find.text('VERIFY RECEIPT'), findsOneWidget);
   });
 
   testWidgets('history tab shows the empty state', (tester) async {
@@ -56,11 +53,16 @@ void main() {
     expect(find.text('No checks yet'), findsOneWidget);
   });
 
-  test('all 10 banks expose a reference example', () {
-    for (final bank in kMahtemBanks) {
-      expect(bank.referenceExample, isNotEmpty, reason: bank.id);
+  test('every catalog bank exposes hint text and initials', () {
+    for (final bank in kVerifyBanks) {
+      expect(bank.referenceHint, isNotEmpty, reason: bank.id);
+      expect(bank.helper, isNotEmpty, reason: bank.id);
       expect(bank.initials, isNotEmpty, reason: bank.id);
     }
+    // The two banks that used to demand account digits in the old engine:
+    // CBE now verifies with the receipt id alone; BOA keeps last-5.
+    expect(bankById('cbe')!.accountDigits, 0);
+    expect(bankById('boa')!.accountDigits, 5);
   });
 
   group('VerifyHistory', () {

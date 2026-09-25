@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/banks_registry.dart';
+import '../../core/receipt_verify/models.dart';
 import '../../core/verify_history.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';

@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/banks_registry.dart';
-import '../../core/models.dart';
+import '../../core/receipt_verify/models.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/confetti.dart';
 
-/// Result — one status circle, the amount, the five details that matter,
-/// and clear next actions. Fee/metadata rows are intentionally gone.
+/// Result — one status circle, the amount, the details that matter, and
+/// clear next actions. Data comes straight from the stylepos verifier's
+/// [VerifyResult]: either a [ReceiptData] or a [VerifyFailure] with tips.
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
 
@@ -20,7 +19,6 @@ class ResultScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
     final result = controller.result;
-    final bank = controller.effectiveBank ?? bankById(result?.bank ?? '');
 
     if (result == null) {
       return Scaffold(
@@ -30,9 +28,12 @@ class ResultScreen extends StatelessWidget {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final verified = result.isVerified;
-    final bankName =
-        bank?.name ?? result.bankName ?? (result.bank ?? 'bank').toUpperCase();
+    final verified = result.ok;
+    final receipt = result.receipt;
+    final failure = result.failure;
+    final bankName = receipt?.bankName ??
+        controller.effectiveBank?.name ??
+        'bank';
 
     return Scaffold(
       appBar: AppBar(
@@ -68,8 +69,7 @@ class ResultScreen extends StatelessWidget {
                   child: Text(
                     verified
                         ? 'This payment is real and confirmed by the bank.'
-                        : (result.error ??
-                            result.reason ??
+                        : (failure?.message ??
                             'This receipt could not be verified.'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
@@ -80,12 +80,16 @@ class ResultScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (!verified && (failure?.tips.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 14),
+                  _TipsCard(tips: failure!.tips),
+                ],
                 const SizedBox(height: 22),
 
-                if (verified) ...[
+                if (verified && receipt != null) ...[
                   Center(
                     child: Text(
-                      formatAmount(result.amount, result.currency),
+                      formatAmount(receipt.amount, receipt.currency),
                       style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w800,
@@ -109,13 +113,12 @@ class ResultScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 18),
-                ],
-
-                _DetailCard(result: result),
-
-                if (!verified && result.fallbackUrl != null) ...[
-                  const SizedBox(height: 14),
-                  _OpenReceiptButton(url: result.fallbackUrl!),
+                  _DetailCard(receipt: receipt),
+                  if (receipt.note != null &&
+                      receipt.note!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _NoteCard(note: receipt.note!),
+                  ],
                 ],
                 const SizedBox(height: 14),
                 Row(
@@ -134,7 +137,7 @@ class ResultScreen extends StatelessWidget {
                       child: _GradientButton(
                         label: verified ? 'Share' : 'Try again',
                         onTap: verified
-                            ? () => _shareResult(result, bankName)
+                            ? () => _shareResult(receipt!, bankName)
                             : () {
                                 controller.reset();
                                 Navigator.of(context).pop();
@@ -151,15 +154,15 @@ class ResultScreen extends StatelessWidget {
     );
   }
 
-  void _shareResult(VerifyResult result, String bankName) {
+  void _shareResult(ReceiptData receipt, String bankName) {
     final buffer = StringBuffer()
       ..writeln('Payment verified via Mahtem')
       ..writeln('Bank: $bankName')
-      ..writeln('Reference: ${result.reference ?? '-'}')
-      ..writeln('Amount: ${formatAmount(result.amount, result.currency)}')
-      ..writeln('Sender: ${result.senderName ?? '-'}')
-      ..writeln('Receiver: ${result.receiverName ?? '-'}')
-      ..writeln('Date: ${result.date ?? '-'}');
+      ..writeln('Reference: ${receipt.reference}')
+      ..writeln('Amount: ${formatAmount(receipt.amount, receipt.currency)}')
+      ..writeln('Sender: ${receipt.senderName ?? '-'}')
+      ..writeln('Receiver: ${receipt.receiverName ?? '-'}')
+      ..writeln('Date: ${receipt.date ?? '-'}');
     SharePlus.instance.share(ShareParams(text: buffer.toString()));
   }
 }
@@ -191,10 +194,97 @@ class _StatusCircle extends StatelessWidget {
   }
 }
 
-class _DetailCard extends StatelessWidget {
-  final VerifyResult result;
+class _TipsCard extends StatelessWidget {
+  final List<String> tips;
 
-  const _DetailCard({required this.result});
+  const _TipsCard({required this.tips});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? MahtemPalette.dCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final tip in tips)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.arrow_right_rounded,
+                      size: 15, color: MahtemPalette.blue),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      tip,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.45,
+                        color: isDark
+                            ? MahtemPalette.dInkDim
+                            : MahtemPalette.lInkDim,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoteCard extends StatelessWidget {
+  final String note;
+
+  const _NoteCard({required this.note});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: (isDark ? MahtemPalette.dCardAlt : MahtemPalette.blueSoft)
+            .withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              size: 15, color: MahtemPalette.blue),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              note,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.45,
+                color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailCard extends StatelessWidget {
+  final ReceiptData receipt;
+
+  const _DetailCard({required this.receipt});
 
   @override
   Widget build(BuildContext context) {
@@ -210,36 +300,57 @@ class _DetailCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Column(
         children: [
-          if (result.senderName != null)
+          if (receipt.senderName != null)
             DetailRow(
               icon: Icons.person_outline_rounded,
               label: 'From',
-              value: result.senderName,
+              value: receipt.senderName,
             ),
-          if (result.receiverName != null)
+          if (receipt.senderAccount != null)
+            DetailRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'From account',
+              value: receipt.senderAccount,
+              mono: true,
+            ),
+          if (receipt.receiverName != null)
             DetailRow(
               icon: Icons.person_outline_rounded,
               label: 'To',
-              value: result.receiverName,
+              value: receipt.receiverName,
             ),
-          if (result.date != null)
+          if (receipt.receiverAccount != null)
+            DetailRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'To account',
+              value: receipt.receiverAccount,
+              mono: true,
+            ),
+          if (receipt.date != null)
             DetailRow(
               icon: Icons.schedule_rounded,
               label: 'Date',
-              value: result.date,
+              value: receipt.date,
             ),
-          if (result.reference != null)
+          if (receipt.reference.isNotEmpty)
             DetailRow(
               icon: Icons.tag_rounded,
               label: 'Reference',
-              value: result.reference,
+              value: receipt.reference,
               mono: true,
             ),
-          if (result.reason != null && (result.reason as String).isNotEmpty)
+          if (receipt.reason != null && receipt.reason!.isNotEmpty)
             DetailRow(
               icon: Icons.notes_rounded,
               label: 'Reason',
-              value: result.reason,
+              value: receipt.reason,
+            ),
+          if (receipt.transactionStatus != null &&
+              receipt.transactionStatus!.isNotEmpty)
+            DetailRow(
+              icon: Icons.verified_outlined,
+              label: 'Status',
+              value: receipt.transactionStatus,
             ),
         ],
       ),
@@ -312,23 +423,6 @@ class DetailRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _OpenReceiptButton extends StatelessWidget {
-  final String url;
-
-  const _OpenReceiptButton({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    return _GhostButton(
-      label: 'Open original receipt',
-      onTap: () async {
-        final uri = Uri.tryParse(url);
-        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-      },
     );
   }
 }

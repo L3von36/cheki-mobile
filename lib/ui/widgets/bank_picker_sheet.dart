@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/banks_registry.dart';
+import '../../core/receipt_verify/models.dart';
 import '../../theme/mahtem_theme.dart';
 import 'bank_avatar.dart';
 
@@ -38,15 +38,15 @@ class BankPickerSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
               child: Text(
-                'Mahtem usually detects this from the reference format — '
-                'pick manually only if auto-detect is wrong.',
+                'Receipt links and QR scans pick the bank automatically — '
+                'pick manually when typing a reference number.',
                 style: TextStyle(color: dim, fontSize: 11.5, height: 1.45),
               ),
             ),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 16),
-                itemCount: kMahtemBanks.length + 1,
+                itemCount: kVerifyBanks.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _Tile(
@@ -63,17 +63,17 @@ class BankPickerSheet extends StatelessWidget {
                           size: 17,
                         ),
                       ),
-                      title: 'Auto-detect from reference',
+                      title: 'Auto-detect from link or scan',
                       subtitle: 'Recommended',
                       selected: selectedId == null,
                       onTap: () => Navigator.of(context).pop(null),
                     );
                   }
-                  final bank = kMahtemBanks[index - 1];
+                  final bank = kVerifyBanks[index - 1];
                   return _Tile(
                     leading: BankAvatar(bank: bank, size: 36, radius: 18),
                     title: bank.name,
-                    subtitle: bank.referenceExample,
+                    subtitle: bank.referenceHint,
                     selected: selectedId == bank.id,
                     onTap: () => Navigator.of(context).pop(bank),
                   );

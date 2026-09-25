@@ -1,24 +1,11 @@
-/// Scan-input hardening: camera readings are stabilized before use and the
-/// accepted payload is cleaned before receipt detection runs.
+/// Camera-input hardening: QR readings are stabilized before use.
 ///
-/// The approach follows what our own POS app (stylepos) does at the counter:
-/// never trust a single camera emission (it gates duplicate readings and
-/// trims the code before handing it on). Mahtem goes a step further:
-///
-///  1. [ScanStabilizer] — a QR is only accepted once the camera stream
-///     agrees with itself. Two identical readings accept immediately, and
-///     when readings differ only at the tail the shorter one wins (QR
-///     payloads decode all-or-nothing, so the extra character is decoder
-///     junk, e.g. `…BEI` vs `…BEIc`).
-///  2. [sanitizeScannedCode] — the accepted payload is trimmed of
-///     zero-width characters and trailing punctuation, and decoder-added
-///     trailing letters ('c' / 'e' reported on real Telebirr scans) are
-///     removed — but only when the shortened value is still recognized at
-///     least as strongly as the original, so a genuine CBE 12-hex receipt
-///     id ending in c/e is never corrupted.
+/// [ScanStabilizer] is the same approach our POS app (stylepos) uses at the
+/// counter: never trust a single camera emission. The accepted payload is
+/// then handed over untouched — bank detection, BOA QR decryption and
+/// Telebirr invoice extraction are owned by the stylepos receipt verifier
+/// (`core/receipt_verify`), which knows every payload shape it supports.
 library;
-
-import 'banks_registry.dart';
 
 // ---------------------------------------------------------------------
 // ScanStabilizer
@@ -111,53 +98,4 @@ class ScanStabilizer {
     _best = null;
     _agreements = 0;
   }
-}
-
-// ---------------------------------------------------------------------
-// sanitizeScannedCode
-// ---------------------------------------------------------------------
-
-/// Characters some cameras / share sheets inject invisibly.
-final RegExp _zeroWidth =
-    RegExp('[\u200b\u200c\u200d\u2060\ufeff]');
-
-/// Punctuation copy/share actions love to append after a link or code.
-final RegExp _trailingJunk = RegExp(r'[\s.,;:!?()\[\]{}…—–|-]+$');
-
-/// The trailing letters reported by real scans: the decoder sometimes
-/// appends a final 'c' or 'e' while the QR leaves the frame.
-final RegExp _trailingCe = RegExp(r'[cCeE]+$');
-
-String? _bankIdOf(String payload) => detectReceipt(payload)?.bank;
-
-/// Cleans a scanned (or pasted) payload before receipt detection:
-///
-///  1. removes zero-width characters and trailing whitespace,
-///  2. strips trailing punctuation,
-///  3. drops a decoder-appended trailing 'c' / 'e' run — but ONLY when the
-///     shortened payload still detects a bank, or the original detected
-///     none. This keeps genuine references that legitimately end in
-///     c/e (like CBE 12-hex receipt ids) untouched, while the reported
-///     Telebirr `…BEI` → `…BEIc` junk is removed.
-String sanitizeScannedCode(String raw) {
-  var code = raw.replaceAll(_zeroWidth, '').trim();
-  if (code.isEmpty) return code;
-
-  // 1 + 2: whitespace / punctuation tail, repeated for "…" runs.
-  while (true) {
-    final next = code.replaceFirst(_trailingJunk, '').trim();
-    if (next.isEmpty || next == code) break;
-    code = next;
-  }
-
-  // 3: trailing decoder junk letters, guarded by re-recognition.
-  final candidate = code.replaceFirst(_trailingCe, '').trim();
-  if (candidate.length < code.length && candidate.isNotEmpty) {
-    final originalBank = _bankIdOf(code);
-    final candidateBank = _bankIdOf(candidate);
-    if (candidateBank != null || originalBank == null) {
-      return candidate;
-    }
-  }
-  return code;
 }

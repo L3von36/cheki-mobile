@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../core/models.dart';
+import '../core/receipt_verify/models.dart';
 import '../core/verify_history.dart';
 import '../state/verify_controller.dart';
 import 'screens/result_screen.dart';
@@ -14,14 +14,14 @@ import 'widgets/bank_picker_sheet.dart';
 /// Shared UX flows so the shell, home screen and app bar all behave
 /// identically: scan → apply → verify → ALWAYS show the result screen.
 
-/// Pushes the full-screen scanner; if the user captures a receipt QR,
+/// Pushes the full-screen scanner; if the user captures a QR payload,
 /// applies it to the controller and immediately runs verification.
 Future<void> openScanner(BuildContext context) async {
-  final detection = await Navigator.of(context).push<BankDetection>(
+  final payload = await Navigator.of(context).push<String>(
     MaterialPageRoute(builder: (_) => const ScanScreen()),
   );
-  if (detection == null || !context.mounted) return;
-  context.read<VerifyController>().applyDetection(detection);
+  if (payload == null || !context.mounted) return;
+  context.read<VerifyController>().applyScan(payload);
   FocusManager.instance.primaryFocus?.unfocus();
   await runVerificationFlow(context);
 }
@@ -36,7 +36,7 @@ Future<void> runVerificationFlow(BuildContext context) async {
     // Couldn't even start (no bank / empty inputs) — open the picker so the
     // user can choose the bank instead of a silently disabled button.
     if (context.mounted &&
-        controller.reference.trim().isNotEmpty &&
+        (controller.reference.trim().isNotEmpty || controller.scannedQr != null) &&
         controller.effectiveBank == null) {
       await pickBankManually(context);
     }
@@ -45,19 +45,22 @@ Future<void> runVerificationFlow(BuildContext context) async {
   if (!context.mounted) return;
 
   // Record the check in local history (verified AND failed).
-  final bank = controller.effectiveBank;
   try {
     await context.read<VerifyHistory>().record(
           result,
-          bankId: bank?.id ?? result.bank ?? '',
-          bankName: bank?.name ?? result.bankName ?? (result.bank ?? 'Bank'),
+          bankId: controller.effectiveBank?.id ??
+              result.receipt?.bankCode ??
+              '',
+          bankName: result.receipt?.bankName ??
+              controller.effectiveBank?.name ??
+              'Bank',
           referenceFallback: controller.reference.trim(),
         );
   } catch (_) {
     // History must never block verification.
   }
 
-  if (result.isVerified) unawaited(HapticFeedback.heavyImpact());
+  if (result.ok) unawaited(HapticFeedback.heavyImpact());
   if (!context.mounted) return;
   await Navigator.of(context).push<void>(
     PageRouteBuilder<void>(
@@ -86,9 +89,9 @@ Future<void> runVerificationFlow(BuildContext context) async {
 
 /// Opens the manual bank picker; popping with a bank selects it on the
 /// controller. Returns the selected bank (or null if dismissed).
-Future<MahtemBank?> pickBankManually(BuildContext context) {
+Future<BankInfo?> pickBankManually(BuildContext context) {
   final controller = context.read<VerifyController>();
-  return showModalBottomSheet<MahtemBank>(
+  return showModalBottomSheet<BankInfo>(
     context: context,
     isScrollControlled: true,
     builder: (_) => BankPickerSheet(selectedId: controller.effectiveBank?.id),

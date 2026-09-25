@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
 
-import '../../core/models.dart';
+import '../../core/receipt_verify/models.dart';
+
+/// Brand colors for the stylepos bank catalog ids.
+const Map<String, int> _kBankColors = {
+  'telebirr': 0xFF00A0DC,
+  'cbe': 0xFF502878,
+  'boa': 0xFF0E4D92,
+  'mpesa': 0xFF00A651,
+  'dashen': 0xFF0066B3,
+  'awash': 0xFF1266A2,
+  'zemen': 0xFF2F5D8C,
+  'cbebirr': 0xFF9C27B0,
+  'siinqee': 0xFF7B1FA2,
+  'ebirr': 0xFF00897B,
+  'cbe-legacy': 0xFF502878,
+};
 
 /// Square brand-colored tile with the bank's initials.
 class BankAvatar extends StatelessWidget {
-  final MahtemBank? bank;
+  final BankInfo? bank;
   final double size;
   final double radius;
 
@@ -12,7 +27,7 @@ class BankAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(bank?.colorValue ?? 0xFF9E9E9E);
+    final color = Color(bank == null ? 0xFF9E9E9E : (_kBankColors[bank!.id] ?? 0xFF546E7A));
     final initials = bank?.initials ?? '??';
     return Container(
       width: size,
@@ -42,7 +57,7 @@ class BankAvatar extends StatelessWidget {
   }
 }
 
-/// Small rounded status chip (e.g. "Needs last 8 digits").
+/// Small rounded status chip.
 class MetaChip extends StatelessWidget {
   final String label;
   final Color? color;

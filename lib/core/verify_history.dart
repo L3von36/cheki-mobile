@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'models.dart';
+import 'receipt_verify/verifier.dart';
 
 /// One saved verification in the local history.
 ///
@@ -32,9 +32,6 @@ class HistoryEntry {
   /// Error / failure message for failed checks.
   final String? message;
 
-  /// Direct receipt URL when the bank endpoint was unreachable.
-  final String? fallbackUrl;
-
   const HistoryEntry({
     required this.id,
     required this.bankId,
@@ -48,7 +45,6 @@ class HistoryEntry {
     required this.verifiedAt,
     required this.status,
     this.message,
-    this.fallbackUrl,
   });
 
   bool get isVerified => status == 'verified';
@@ -75,7 +71,6 @@ class HistoryEntry {
         'verifiedAt': verifiedAt,
         'status': status,
         if (message != null) 'message': message,
-        if (fallbackUrl != null) 'fallbackUrl': fallbackUrl,
       };
 
   factory HistoryEntry.fromJson(Map<String, dynamic> json) => HistoryEntry(
@@ -91,31 +86,30 @@ class HistoryEntry {
         verifiedAt: json['verifiedAt'] as int? ?? 0,
         status: json['status'] as String? ?? 'failed',
         message: json['message'] as String?,
-        fallbackUrl: json['fallbackUrl'] as String?,
       );
 
-  /// Builds an entry from an API verification result.
+  /// Builds an entry from a stylepos verification result.
   factory HistoryEntry.fromResult({
     required VerifyResult result,
     required String bankId,
     required String bankName,
     required String referenceFallback,
   }) {
-    final verified = result.isVerified;
+    final ok = result.ok;
+    final receipt = result.receipt;
     return HistoryEntry(
       id: 'v${DateTime.now().microsecondsSinceEpoch}',
       bankId: bankId,
-      bankName: result.bankName ?? bankName,
-      reference: result.reference ?? referenceFallback,
-      senderName: result.senderName,
-      receiverName: result.receiverName,
-      amount: result.amount,
-      currency: result.currency,
-      receiptDate: result.date,
+      bankName: receipt?.bankName ?? bankName,
+      reference: receipt?.reference ?? referenceFallback,
+      senderName: receipt?.senderName,
+      receiverName: receipt?.receiverName,
+      amount: receipt?.amount,
+      currency: receipt?.currency,
+      receiptDate: receipt?.date,
       verifiedAt: DateTime.now().millisecondsSinceEpoch,
-      status: verified ? 'verified' : 'failed',
-      message: verified ? null : (result.error ?? result.reason),
-      fallbackUrl: result.fallbackUrl,
+      status: ok ? 'verified' : 'failed',
+      message: ok ? null : result.failure?.message,
     );
   }
 }
@@ -168,7 +162,7 @@ class VerifyHistory extends ChangeNotifier {
     await _persist();
   }
 
-  /// Convenience: record straight from a [VerifyResult].
+  /// Convenience: record straight from a stylepos [VerifyResult].
   Future<void> record(
     VerifyResult result, {
     required String bankId,

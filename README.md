@@ -23,48 +23,41 @@ No signup. No API key. No fees. No middleman server.
 
 ## Features
 
-- **Native verification engine** — the app talks to each bank's public
-  receipt endpoint straight from your phone. No hosted API in between, which
-  means Telebirr and M-Pesa work on Ethiopian networks (a hosted
-  non-Ethiopian server could never reach them).
+- **Proven stylepos verification engine** — the app talks to each bank's
+  public receipt endpoint straight from your phone, using the same verifier
+  code that runs in our stylepos shop app (`lib/core/receipt_verify/`). No
+  hosted API in between, which means Telebirr and M-Pesa work on Ethiopian
+  networks (a hosted non-Ethiopian server could never reach them).
 - **Verify any receipt** — paste a reference or a share link from SMS
-- **QR scan that works** — recognizes every receipt QR format we know:
-  bank links (path, hash-route `#/receipt/…` and query `?id=…` forms), CBE
-  `mbreciept` ids, **encrypted BOA receipt QR payloads (decrypted
-  on-device)**, Telebirr `TPS…`/`DET…` references — even wrapped inside
-  share text or JSON — **and the real Telebirr SuperApp receipt QR** (a
-  base64→hex encoded blob whose embedded invoice number is decoded
-  on-device), plus generic reference codes with a bank picker
-  fallback. Scanning never dead-ends: pay/request QRs and phone-number
-  codes get a clear "this is not a receipt" explanation instead of a
-  generic error. Camera permission is requested up front with a clear
-  recovery path if it was denied.
+- **QR scan that works** — every receipt QR format the stylepos verifier
+  knows: bank receipt links, CBE `mbreciept` ids, **encrypted BOA receipt
+  QR payloads (decrypted fully offline on-device)**, the Telebirr SuperApp
+  receipt QR (a base64→hex blob decoded to the invoice number on-device),
+  plus generic reference codes with a bank picker fallback. Camera
+  permission is requested up front with a clear recovery path if it was
+  denied.
 - **Self-stabilizing scanner** — camera readings must agree before they
-  are trusted, and the accepted payload is cleaned up automatically:
-  decoder-appended trailing letters (a Telebirr `…BEI` scanned as
-  `…BEIc`) and trailing punctuation are stripped — including junk that
-  rides along INSIDE the decoded Telebirr SuperApp QR blob and glues
-  itself onto the invoice number — with a verify-time retry on the
-  untouched scan as a safety net, so genuine references that
-  legitimately end in c/e still verify.
+  are trusted, so decoder noise (a Telebirr `…BEI` scanned as `…BEIc`)
+  never reaches verification.
 - **Stoppable verification** — a red stop button appears next to VERIFY
   while a check is running; tapping it returns to the form immediately
   and discards the late result (no result screen, no history entry).
-- **Auto-detect bank** — the app recognizes the bank from the reference
-  format (CBE `FT…`, Telebirr `DET…`/`TPS…`, Awash share segments, …)
+- **Auto-detect bank** — receipt links and QR scans pick the bank and
+  extract the reference automatically; raw references pair with a manual
+  bank pick
 - **Simple, focused UI** — one card: pick a bank, paste the reference,
   verify. No banners, no clutter. Light & dark themes.
 - **Payment History** — every check is saved on-device; tap an entry for
   details, long-press to remove
 - **Honest failures** — receipt not found or bank down? The result screen
-  says exactly why and offers a one-tap "Open original receipt" fallback
+  says exactly why and lists what to do next
 - **Private** — history never leaves the device; nothing to sign up for
 
 ## How verification works
 
-Each bank publishes receipts on a public endpoint; the app's native engine
-(`lib/core/native/`) builds the URL, fetches it with retries, and parses the
-response with its own parsers:
+Each bank publishes receipts on a public endpoint; the app ships the
+stylepos receipt verifier verbatim (`lib/core/receipt_verify/`) — it builds
+the URL, fetches with retries, and parses the response:
 
 | Bank | Endpoint | Response |
 |------|----------|----------|

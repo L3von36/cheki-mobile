@@ -6,27 +6,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../core/banks_registry.dart';
-import '../../core/models.dart';
 import '../../core/scan_input.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
 /// the frame" hint, green corner brackets, and Flash / Gallery buttons.
 ///
-/// Robust by design (approach learned from our stylepos counter scanner):
+/// Robust by design:
 ///   * explicit camera-permission flow (request, recover, open settings)
 ///   * readings must agree before they are trusted — [ScanStabilizer]
-///     collapses the per-frame stream into one code and drops decoder-added
-///     trailing junk (the classic "…BEI" scanned as "…BEIc")
-///   * the accepted payload is sanitized ([sanitizeScannedCode]) — trailing
-///     punctuation and decoder-appended 'c'/'e' letters are removed when
-///     the shortened value still recognizes as a receipt
-///   * recognizes every bank receipt QR we know (URLs, CBE ids, encrypted
-///     BOA payloads, plain references) and pops with a [BankDetection]
-///   * generic reference-shaped payloads pop with `bank: null` so the app
-///     asks which bank to verify against — scanning never dead-ends
-///   * unrecognized codes get a visible, throttled snackbar instead of
-///     being silently dropped
+///     collapses the per-frame stream into one code
+///   * the accepted payload is popped UNTOUCHED — bank detection, BOA QR
+///     decryption and Telebirr invoice extraction are owned by the stylepos
+///     receipt verifier, which pops its own friendly explanation for any
+///     payload it cannot use, so scanning never dead-ends
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -44,7 +36,6 @@ class _ScanScreenState extends State<ScanScreen>
   _CameraState _cameraState = _CameraState.checking;
   bool _handled = false;
   bool _torchOn = false;
-  DateTime _lastHintAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Subtle breathing animation on the brackets.
   late final AnimationController _pulse = AnimationController(
@@ -96,10 +87,8 @@ class _ScanScreenState extends State<ScanScreen>
     super.dispose();
   }
 
-  /// Returns true when the capture was consumed — either a receipt popped
-  /// the screen, or a guidance hint was shown for a non-receipt payload
-  /// (pay-request QR, phone-number QR...). The gallery picker uses this to
-  /// avoid covering the hint with its own "not found" message.
+  /// Returns true when the capture was consumed — a stable reading pops the
+  /// screen with the raw payload.
   bool _onDetect(BarcodeCapture capture) {
     if (_handled) return true;
     for (final barcode in capture.barcodes) {
@@ -108,56 +97,18 @@ class _ScanScreenState extends State<ScanScreen>
       // Only trust the reading once the camera stream stabilizes on it.
       final stable = _stabilizer.feed(raw);
       if (stable == null) continue;
-      if (_tryAccept(stable)) return true;
+      _tryAccept(stable);
+      return _handled;
     }
     return _handled;
   }
 
-  /// Sanitizes a trusted payload, runs receipt detection and pops with the
-  /// result — or shows guidance for payloads that are not receipts.
-  /// [rawPayload] keeps the untouched scan for the verification retry net.
-  bool _tryAccept(String payload) {
-    final clean = sanitizeScannedCode(payload);
-    final detection = detectReceipt(clean);
-    if (detection == null) {
-      _showMessage(
-        'This QR is not a payment receipt. Scan the QR printed on a '
-        'payment receipt, or paste the receipt link or transaction number.',
-      );
-      return false;
-    }
-    if (detection.hint != null) {
-      // Real payload, but not a verifiable receipt (pay/request QR,
-      // phone-number code...). Teach, then keep scanning.
-      _showMessage(detection.hint!);
-      return false;
-    }
+  /// Pops with the untouched payload — the receipt verifier decides what it
+  /// is (receipt link, BOA slip QR, Telebirr blob, plain reference).
+  void _tryAccept(String payload) {
     _handled = true;
     HapticFeedback.heavyImpact();
-    if (mounted) {
-      Navigator.of(context).pop(BankDetection(
-        bank: detection.bank,
-        reference: detection.reference,
-        accountNumber: detection.accountNumber,
-        rawPayload: payload.trim(),
-      ));
-    }
-    return true;
-  }
-
-  void _showMessage(String message) {
-    final now = DateTime.now();
-    if (now.difference(_lastHintAt) < const Duration(seconds: 3)) return;
-    _lastHintAt = now;
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text(message),
-        ),
-      );
+    if (mounted) Navigator.of(context).pop(payload.trim());
   }
 
   Future<void> _pickFromGallery() async {
@@ -176,7 +127,8 @@ class _ScanScreenState extends State<ScanScreen>
         for (final barcode in capture.barcodes) {
           final raw = barcode.rawValue;
           if (raw == null || raw.trim().isEmpty) continue;
-          if (_tryAccept(raw)) return;
+          _tryAccept(raw);
+          return;
         }
       }
       ScaffoldMessenger.of(context).showSnackBar(

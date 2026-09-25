@@ -1,47 +1,48 @@
 import 'package:flutter/foundation.dart';
 
-import '../core/banks_registry.dart';
-import '../core/models.dart';
-import '../core/native/verifier.dart';
+import '../core/receipt_verify/models.dart';
+import '../core/receipt_verify/parsers.dart';
+import '../core/receipt_verify/verifier.dart';
 
 /// Lifecycle of a verification attempt.
 enum VerifyStatus { idle, verifying, done, error }
 
-/// Central app state: selected bank, inputs, auto-detection, verification
-/// calls and the latest result. Exposed app-wide via `provider`.
+/// Central app state: selected bank, inputs, scan/URL resolution,
+/// verification calls and the latest result. Exposed app-wide via `provider`.
+///
+/// All verification logic lives in the stylepos receipt verifier
+/// (`core/receipt_verify`) — this controller only builds a [VerifyInput],
+/// runs it and holds the [VerifyResult].
 class VerifyController extends ChangeNotifier {
-  VerifyController({VerifyEngine? engine})
-      : _engine = engine ?? NativeVerifier();
+  VerifyController({Future<VerifyResult> Function(VerifyInput)? verifyFn})
+      : _verifyFn = verifyFn ?? ReceiptVerifier.I.verify;
 
-  final VerifyEngine _engine;
+  final Future<VerifyResult> Function(VerifyInput input) _verifyFn;
 
   // ------------------------------------------------------------------ state
   VerifyStatus status = VerifyStatus.idle;
 
-  /// Bank chosen manually via the picker (null = auto from reference).
-  MahtemBank? manualBank;
+  /// Bank chosen manually via the picker (null = auto from scan/link).
+  BankInfo? manualBank;
 
-  /// Bank auto-detected from the typed reference / scanned QR.
-  MahtemBank? detectedBank;
-
-  /// True when the user is on the "cbe-new" QR receipt flow.
-  bool usingCbeNew = false;
+  /// Bank auto-detected from the scanned QR or pasted receipt link.
+  BankInfo? detectedBank;
 
   String reference = '';
   String accountNumber = '';
   String phoneNumber = '';
 
-  /// Untouched payload from the last QR scan, when one was applied.
-  /// The scanner strips decoder-added junk (trailing punctuation and
-  /// 'c'/'e' letters) from the reference it shows — this keeps the raw
-  /// value so [verify] can retry with it when the cleaned reference comes
-  /// back not-found. Cleared as soon as the user edits the reference.
-  String? rawScannedReference;
+  /// Raw QR payload from the last scan when it must be passed to the
+  /// verifier untouched (BOA encrypted slip QR — decrypted offline inside
+  /// the verifier). Null when the reference alone carries the input.
+  String? scannedQr;
+
+  /// Bank id passed through to the verifier verbatim, bypassing the
+  /// catalog — used for the retired `cbe-legacy` links so the verifier can
+  /// show its dedicated guidance instead of a generic not-found.
+  String? forcedBankId;
 
   VerifyResult? result;
-  String? errorMessage;
-
-  double? lastDurationMs;
 
   /// Generation counter for verification runs. Stopping (or restarting)
   /// a verification bumps it, so an in-flight [verify] recognizes it was
@@ -50,45 +51,46 @@ class VerifyController extends ChangeNotifier {
 
   // -------------------------------------------------------------- accessors
   /// The bank whose fields/styling currently apply.
-  MahtemBank? get effectiveBank => manualBank ?? detectedBank;
+  BankInfo? get effectiveBank => manualBank ?? detectedBank;
 
   bool get isVerifying => status == VerifyStatus.verifying;
 
   bool get canVerify {
     if (isVerifying) return false;
-    if (reference.trim().isEmpty) return false;
     final bank = effectiveBank;
-    if (bank == null) return false;
-    // CBE-new QR receipts verify with the receipt ID alone.
-    if (!usingCbeNew &&
-        bank.requiresAccount &&
-        bank.accountDigits != null &&
-        accountNumber.trim().length < bank.accountDigits!) {
+    if (bank == null && forcedBankId == null) return false;
+    if (reference.trim().isEmpty && scannedQr == null) return false;
+    if (scannedQr == null) {
+      // BOA QR scans verify offline — no account suffix needed.
+      if (bank != null && bank.accountDigits > 0 && accountNumber.trim().isEmpty) {
+        return false;
+      }
+    }
+    if (bank != null && bank.requiresPhone && phoneNumber.trim().isEmpty) {
       return false;
     }
-    if (bank.requiresPhone && phoneNumber.trim().isEmpty) return false;
     return true;
   }
 
   // ---------------------------------------------------------------- mutation
   void setReference(String value) {
     reference = value;
-    // Reset manual selection whenever the user edits the reference so that
-    // auto-detect gets a chance (matches the web behavior).
-    if (manualBank != null && value.trim().isEmpty) {
-      manualBank = null;
+    // The user took over the input — a previous scan no longer applies.
+    scannedQr = null;
+    forcedBankId = null;
+    if (looksLikeUrl(value)) {
+      final detected = detectBankFromUrl(value);
+      detectedBank = detected == null ? null : bankById(detected.bank);
+      if (detected != null && detected.account != null) {
+        accountNumber = detected.account!;
+      }
+    } else {
+      detectedBank = null;
     }
-    detectedBank = _detectBank(value);
-    usingCbeNew = detectedBank != null &&
-        RegExp(r'^[0-9a-f]{12}$', caseSensitive: false)
-            .hasMatch(reference.trim());
-    // The user took over the reference — the raw scan no longer applies.
-    rawScannedReference = null;
     // Editing inputs clears a finished (failed) attempt.
-    if (status == VerifyStatus.done && result != null && !result!.isVerified) {
+    if (status == VerifyStatus.done && result != null && !result!.ok) {
       status = VerifyStatus.idle;
       result = null;
-      errorMessage = null;
     }
     notifyListeners();
   }
@@ -103,40 +105,87 @@ class VerifyController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectBank(MahtemBank? bank) {
+  void selectBank(BankInfo? bank) {
     manualBank = bank;
-    usingCbeNew = false;
     if (bank == null) {
-      detectedBank = _detectBank(reference);
-      usingCbeNew = detectedBank != null &&
-          RegExp(r'^[0-9a-f]{12}$', caseSensitive: false)
-              .hasMatch(reference.trim());
+      // Back to auto: re-detect from the current input.
+      final detected = looksLikeUrl(reference) ? detectBankFromUrl(reference) : null;
+      detectedBank = detected == null ? null : bankById(detected.bank);
     }
     notifyListeners();
   }
 
-  /// Applies a scanned/typed detection (from QR scan or paste).
+  /// Applies a scanned QR payload (or any raw scanned text).
   ///
-  /// [detection.bank] is null for generic payloads — we keep the reference
-  /// and let the caller open the bank picker.
-  void applyDetection(BankDetection detection) {
-    reference = detection.reference;
-    accountNumber = detection.accountNumber ?? '';
-    rawScannedReference = detection.rawPayload?.trim();
-    manualBank = null;
-    usingCbeNew = detection.bank == kCbeNewId;
-    detectedBank = detection.bank == null
-        ? null
-        : bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);
+  /// Resolution mirrors the stylepos verifier's own input rules:
+  ///   * receipt links auto-detect the bank and extract the reference,
+  ///   * BOA slip QRs are flagged for offline decryption by the verifier,
+  ///   * Telebirr SuperApp QRs are decoded to the invoice number here,
+  ///   * anything else is kept as a plain reference for the user to pair
+  ///     with a bank pick — scanning never dead-ends.
+  void applyScan(String payload) {
+    final raw = payload.trim();
     status = VerifyStatus.idle;
-    errorMessage = null;
+    result = null;
+    manualBank = null;
+    scannedQr = null;
+    forcedBankId = null;
+
+    if (looksLikeUrl(raw)) {
+      final detected = detectBankFromUrl(raw);
+      if (detected != null) {
+        if (detected.bank == 'cbe-legacy') {
+          // Keep the verifier's dedicated retired-endpoint guidance.
+          forcedBankId = detected.bank;
+          reference = detected.reference;
+          accountNumber = detected.account ?? '';
+          detectedBank = null;
+          notifyListeners();
+          return;
+        }
+        detectedBank = bankById(detected.bank);
+        reference = detected.reference;
+        accountNumber = detected.account ?? '';
+        notifyListeners();
+        return;
+      }
+      // Unknown link — the verifier explains it after a bank pick.
+      reference = raw;
+      detectedBank = null;
+      notifyListeners();
+      return;
+    }
+
+    // BOA encrypted slip QR — the verifier decrypts it offline.
+    final boa = decryptBoaQr(raw);
+    if (boa != null && (boa.reference?.isNotEmpty ?? false)) {
+      detectedBank = bankById('boa');
+      reference = '';
+      accountNumber = '';
+      scannedQr = raw;
+      notifyListeners();
+      return;
+    }
+
+    // Telebirr SuperApp QR — base64 → hex → invoice number.
+    final invoice = extractTelebirrInvoiceFromQr(raw);
+    if (invoice != null) {
+      detectedBank = bankById('telebirr');
+      reference = invoice;
+      accountNumber = '';
+      notifyListeners();
+      return;
+    }
+
+    // Plain reference — the user pairs it with a bank.
+    reference = raw;
+    detectedBank = null;
     notifyListeners();
   }
 
   void reset() {
     status = VerifyStatus.idle;
     result = null;
-    errorMessage = null;
     notifyListeners();
   }
 
@@ -144,14 +193,13 @@ class VerifyController extends ChangeNotifier {
   void resetAll() {
     status = VerifyStatus.idle;
     result = null;
-    errorMessage = null;
     reference = '';
     accountNumber = '';
     phoneNumber = '';
     manualBank = null;
     detectedBank = null;
-    usingCbeNew = false;
-    rawScannedReference = null;
+    scannedQr = null;
+    forcedBankId = null;
     notifyListeners();
   }
 
@@ -166,98 +214,46 @@ class VerifyController extends ChangeNotifier {
     if (status != VerifyStatus.verifying) return;
     _verifyRun++;
     status = VerifyStatus.idle;
-    errorMessage = null;
     notifyListeners();
   }
 
-  /// Runs the verification natively on the device.
+  /// Runs the verification through the stylepos verifier.
   ///
-  /// ALWAYS resolves to a [VerifyResult]: genuine failures (receipt not
-  /// found, bank unreachable) become a failed result so the result screen
-  /// can show them — no silent failures. Returns null when the attempt
-  /// was abandoned via [stopVerify] (or superseded by a newer one).
+  /// Returns the [VerifyResult] (receipt OR failure — failures carry
+  /// user-ready messages and tips), or null when the attempt was abandoned
+  /// via [stopVerify] (or superseded by a newer one).
   Future<VerifyResult?> verify() async {
     final bank = effectiveBank;
-    if (bank == null || !canVerify) return null;
+    final bankId = forcedBankId ?? bank?.id;
+    if (bankId == null || !canVerify) return null;
 
     final run = ++_verifyRun;
-    final engineBank = usingCbeNew ? kCbeNewId : bank.id;
     status = VerifyStatus.verifying;
-    errorMessage = null;
     notifyListeners();
 
-    final stopwatch = Stopwatch()..start();
     VerifyResult res;
     try {
-      res = await _engine.verify(
-        bank: engineBank,
+      res = await _verifyFn(VerifyInput(
+        bankId: bankId,
         reference: reference.trim(),
-        accountNumber: usingCbeNew ? null : accountNumber.trim(),
-        phoneNumber: phoneNumber.trim(),
+        account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
+        phone: phoneNumber.trim().isEmpty ? null : phoneNumber.trim(),
+        qrData: scannedQr?.trim(),
+      ));
+    } catch (_) {
+      res = VerifyResult.failed(
+        const VerifyFailure(
+          VerifyErrorKind.unreadable,
+          'Something went wrong while checking this receipt.',
+          tips: ['Try again — the bank may be busy.'],
+        ),
+        0,
       );
-      if (run != _verifyRun) return null; // stopped while in flight
-
-      // Retry net for sanitized scans: the scanner removes decoder-added
-      // trailing letters from the reference it shows (a Telebirr "…BEI"
-      // scanned as "…BEIc", for example). When the cleaned reference comes
-      // back definitively not-found, retry once with the untouched scan —
-      // in the rare case the removed letter was real, the raw value still
-      // verifies instead of dead-ending the user.
-      final raw = rawScannedReference;
-      if (res.success &&
-          res.verified == false &&
-          raw != null &&
-          raw.isNotEmpty &&
-          raw != reference.trim()) {
-        try {
-          final retry = await _engine.verify(
-            bank: engineBank,
-            reference: raw,
-            accountNumber: usingCbeNew ? null : accountNumber.trim(),
-            phoneNumber: phoneNumber.trim(),
-          );
-          if (run != _verifyRun) return null; // stopped during the retry
-          if (retry.verified == true) {
-            res = retry;
-            reference = raw; // show the value that actually verified
-          }
-        } catch (_) {
-          // The retry is best-effort; keep the first result.
-        }
-      }
-    } catch (e) {
-      if (run != _verifyRun) return null; // stopped while in flight
-      stopwatch.stop();
-      lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();
-      res = VerifyResult(
-        success: false,
-        verified: false,
-        bank: engineBank,
-        reference: reference.trim(),
-        error: 'Something went wrong. Check your connection and retry.',
-      );
-      errorMessage = res.error;
     }
-    if (run != _verifyRun) return null; // stopped just before completion
+    if (run != _verifyRun) return null; // stopped while in flight
     result = res;
     status = VerifyStatus.done;
-    lastDurationMs = res.durationMs?.toDouble();
     notifyListeners();
     return res;
-  }
-
-  MahtemBank? _detectBank(String value) {
-    // detectReceipt covers every URL/QR/reference shape we know (hints are
-    // a scanner concern; pasted text just gets the bank, if any).
-    final detection = detectReceipt(value);
-    if (detection == null || detection.bank == null) return null;
-    return bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);
-  }
-
-  @override
-  void dispose() {
-    final engine = _engine;
-    if (engine is NativeVerifier) engine.dispose();
-    super.dispose();
   }
 }

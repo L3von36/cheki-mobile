@@ -1,471 +1,231 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:mahtem/core/banks_registry.dart';
-import 'package:mahtem/core/models.dart';
-import 'package:mahtem/core/native/verifier.dart';
+import 'package:mahtem/core/receipt_verify/models.dart';
+import 'package:mahtem/core/receipt_verify/verifier.dart';
 import 'package:mahtem/state/verify_controller.dart';
-import 'package:mahtem/util/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Scriptable engine stub for controller tests.
-class FakeEngine implements VerifyEngine {
-  VerifyResult? nextResult;
-  Object? nextError;
-  String? lastBank;
-  String? lastReference;
-  String? lastAccount;
-
-  /// Optional scripted results consumed in order before [nextResult].
-  final List<VerifyResult> script = [];
-  final List<String> calls = [];
-
-  @override
-  Future<VerifyResult> verify({
-    required String bank,
-    required String reference,
-    String? accountNumber,
-    String? phoneNumber,
-  }) async {
-    calls.add(reference);
-    lastBank = bank;
-    lastReference = reference;
-    lastAccount = accountNumber;
-    if (nextError != null) throw nextError!;
-    if (script.isNotEmpty) return script.removeAt(0);
-    return nextResult ??
-        VerifyResult(success: true, verified: true, bank: bank, reference: reference);
-  }
+/// Scriptable verifier stub — mirrors the stylepos [VerifyResult] contract.
+VerifyResult _receiptOk({String bank = 'cbe', double amount = 2450}) {
+  return VerifyResult.receipt(
+    ReceiptData(
+      verified: true,
+      bankCode: bank,
+      bankName: 'Test Bank',
+      reference: 'REF123',
+      senderName: 'Alice',
+      receiverName: 'Sami Shop',
+      amount: amount,
+      date: '2026-09-25 10:00:00',
+    ),
+    120,
+  );
 }
 
-/// Engine whose calls suspend until explicitly completed — lets tests
-/// hold a verification in flight to exercise stopVerify().
-class GatedEngine implements VerifyEngine {
-  final List<String> calls = [];
-  final List<Completer<VerifyResult>> _pending = [];
-
-  int get pendingCount => _pending.length;
-
-  void completeNext(VerifyResult result) =>
-      _pending.removeAt(0).complete(result);
-
-  void completeAll(VerifyResult result) {
-    for (final c in _pending) {
-      c.complete(result);
-    }
-    _pending.clear();
-  }
-
-  @override
-  Future<VerifyResult> verify({
-    required String bank,
-    required String reference,
-    String? accountNumber,
-    String? phoneNumber,
-  }) {
-    calls.add(reference);
-    final completer = Completer<VerifyResult>();
-    _pending.add(completer);
-    return completer.future;
-  }
-}
+VerifyResult _notFound(String message) => VerifyResult.failed(
+      VerifyFailure(VerifyErrorKind.notFound, message,
+          tips: const ['Check the reference for typos.']),
+      90,
+    );
 
 void main() {
-  group('VerifyController', () {
-    test('auto-detects bank while typing a reference', () {
-      final controller = VerifyController();
-      controller.setReference('FT26140P01YB');
-      expect(controller.detectedBank?.id, 'cbe');
-      expect(controller.canVerify, isFalse); // CBE needs account digits
-
-      controller.setAccount('60536171');
-      expect(controller.canVerify, isTrue);
-      controller.dispose();
+  group('applyScan — link / QR resolution', () {
+    test('CBE mbreciept link detects the bank and extracts the id', () {
+      final c = VerifyController();
+      c.applyScan('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
+      expect(c.detectedBank?.id, 'cbe');
+      expect(c.reference, 'fHCx8QmLpZ1');
+      expect(c.canVerify, isTrue);
     });
 
-    test('cbe-new QR ids map to the CBE bank with usingCbeNew flag', () {
-      final controller = VerifyController();
-      controller.applyDetection(
-        const BankDetection(bank: 'cbe-new', reference: 'a1b2c3d4e5f6'),
-      );
-      expect(controller.effectiveBank?.id, 'cbe');
-      expect(controller.usingCbeNew, isTrue);
-      expect(controller.canVerify, isTrue); // no account needed for new API
-      controller.dispose();
+    test('CBE legacy link maps to the dedicated guidance path', () {
+      final c = VerifyController();
+      c.applyScan('https://apps.cbe.com.et:100/?id=FT26140P01YB60536171');
+      expect(c.detectedBank, isNull);
+      expect(c.forcedBankId, 'cbe-legacy');
+      expect(c.reference, 'FT26140P01YB');
+      expect(c.accountNumber, '60536171');
+      // The controller passes cbe-legacy through to the verifier.
+      expect(c.canVerify, isTrue);
     });
 
-    test('applyDetection fills account from URL payload', () {
-      final controller = VerifyController();
-      controller.applyDetection(
-        const BankDetection(
-          bank: 'cbe',
-          reference: 'FT26140P01YB',
-          accountNumber: '60536171',
-        ),
-      );
-      expect(controller.reference, 'FT26140P01YB');
-      expect(controller.accountNumber, '60536171');
-      expect(controller.effectiveBank?.id, 'cbe');
-      controller.dispose();
+    test('Telebirr receipt link detects the bank', () {
+      final c = VerifyController();
+      c.applyScan('https://transactioninfo.ethiotelecom.et/receipt/CHQ261Z4AB2C');
+      expect(c.detectedBank?.id, 'telebirr');
+      expect(c.reference, 'CHQ261Z4AB2C');
     });
 
-    test('applyDetection keeps bank open for generic QR payloads', () {
-      final controller = VerifyController();
-      controller.applyDetection(
-        const BankDetection(bank: null, reference: 'PAYOUT99231X'),
-      );
-      expect(controller.reference, 'PAYOUT99231X');
-      expect(controller.effectiveBank, isNull);
-      expect(controller.canVerify, isFalse);
-
-      // Picking a bank manually completes the form.
-      controller.selectBank(bankById('mpesa'));
-      expect(controller.canVerify, isTrue);
-      controller.dispose();
+    test('unknown link keeps the URL as reference without a bank', () {
+      final c = VerifyController();
+      c.applyScan('https://example.com/receipt/123');
+      expect(c.detectedBank, isNull);
+      expect(c.reference, 'https://example.com/receipt/123');
+      expect(c.canVerify, isFalse); // needs a bank pick
     });
 
-    test('manual bank selection overrides auto-detect', () {
-      final controller = VerifyController();
-      controller.setReference('DET8FJGUJ4');
-      expect(controller.effectiveBank?.id, 'telebirr');
-
-      controller.selectBank(bankById('dashen'));
-      expect(controller.effectiveBank?.id, 'dashen');
-      expect(controller.canVerify, isTrue);
-      controller.dispose();
-    });
-
-    test('verify() passes the cbe-new id to the engine', () async {
-      final engine = FakeEngine();
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'cbe-new', reference: 'a1b2c3d4e5f6'),
-      );
-      await controller.verify();
-      expect(engine.lastBank, 'cbe-new');
-      expect(engine.lastReference, 'a1b2c3d4e5f6');
-      expect(engine.lastAccount, isNull);
-      controller.dispose();
-    });
-
-    test('verify() surfaces engine failures as a failed result', () async {
-      final engine = FakeEngine()
-        ..nextResult = const VerifyResult(
-          success: false,
-          verified: false,
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-          error: 'No connection. Check your internet and try again.',
-        );
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
-      );
-      final result = await controller.verify();
-      // Failures are first-class results — no silent errors.
-      expect(result, isNotNull);
-      expect(result!.isVerified, isFalse);
-      expect(result.error, isNotNull);
-      expect(controller.status, VerifyStatus.done);
-      controller.dispose();
-    });
-
-    test('verify() survives engine exceptions', () async {
-      final engine = FakeEngine()..nextError = Exception('boom');
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
-      );
-      final result = await controller.verify();
-      expect(result, isNotNull);
-      expect(result!.isVerified, isFalse);
-      expect(result.error, contains('Something went wrong'));
-      expect(controller.status, VerifyStatus.done);
-      controller.dispose();
-    });
-
-    test('verify() retries with the raw scan when the cleaned reference is '
-        'not-found', () async {
-      final engine = FakeEngine()
-        ..script.addAll([
-          // First attempt: the sanitized reference comes back not-found.
-          const VerifyResult(
-            success: true,
-            verified: false,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4',
-            reason: 'Receipt not found. Double-check the reference number.',
-          ),
-          // Retry with the untouched scan: the receipt exists.
-          const VerifyResult(
-            success: true,
-            verified: true,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4c',
-          ),
-        ]);
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-          rawPayload: 'DET8FJGUJ4c',
-        ),
-      );
-      final result = await controller.verify();
-      expect(engine.calls, ['DET8FJGUJ4', 'DET8FJGUJ4c']);
-      expect(result!.isVerified, isTrue);
-      expect(controller.reference, 'DET8FJGUJ4c'); // shows what verified
-      controller.dispose();
-    });
-
-    test('verify() does not retry when there is no raw scan or it matches',
-        () async {
-      final engine = FakeEngine()
-        ..nextResult = const VerifyResult(
-          success: true,
-          verified: false,
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-        );
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
-      );
-      final result = await controller.verify();
-      expect(engine.calls, ['DET8FJGUJ4']); // single attempt
-      expect(result!.isVerified, isFalse);
-
-      // With a raw payload identical to the reference, still one attempt.
-      controller.applyDetection(
-        const BankDetection(
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-          rawPayload: 'DET8FJGUJ4',
-        ),
-      );
-      await controller.verify();
-      expect(engine.calls, ['DET8FJGUJ4', 'DET8FJGUJ4']);
-      controller.dispose();
-    });
-
-    test('verify() keeps the first result when the retry is also not-found',
-        () async {
-      final engine = FakeEngine()
-        ..script.addAll([
-          const VerifyResult(
-            success: true,
-            verified: false,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4',
-            reason: 'Receipt not found.',
-          ),
-          const VerifyResult(
-            success: true,
-            verified: false,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4c',
-            reason: 'Receipt not found.',
-          ),
-        ]);
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-          rawPayload: 'DET8FJGUJ4c',
-        ),
-      );
-      final result = await controller.verify();
-      expect(engine.calls.length, 2);
-      expect(result!.isVerified, isFalse);
-      expect(controller.reference, 'DET8FJGUJ4'); // unchanged
-      controller.dispose();
-    });
-
-    test('editing the reference clears the raw scan retry value', () {
-      final controller = VerifyController();
-      controller.applyDetection(
-        const BankDetection(
-          bank: 'telebirr',
-          reference: 'DET8FJGUJ4',
-          rawPayload: 'DET8FJGUJ4c',
-        ),
-      );
-      expect(controller.rawScannedReference, 'DET8FJGUJ4c');
-      controller.setReference('DET8FJGUJ4X');
-      expect(controller.rawScannedReference, isNull);
-      controller.dispose();
-    });
-
-    test('a stripped telebirr blob invoice retries with the raw scan',
-        () async {
-      // The registry strips decoder junk ('c') swallowed into the decoded
-      // invoice; when the stripped invoice is not found, the untouched QR
-      // blob is retried and its unstripped invoice still verifies.
-      String blobOf(String text) => base64Encode(utf8.encode(latin1
-          .encode(text)
-          .map((b) => b.toRadixString(16).padLeft(2, '0'))
-          .join()));
-      final blob = blobOf('\x02\x9f\x00DET8FJGUJ4C\x01\xff');
-
-      final engine = FakeEngine()
-        ..script.addAll([
-          const VerifyResult(
-            success: true,
-            verified: false,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4',
-            reason: 'Receipt not found. Double-check the reference number.',
-          ),
-          VerifyResult(
-            success: true,
-            verified: true,
-            bank: 'telebirr',
-            reference: 'DET8FJGUJ4C',
-          ),
-        ]);
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(BankDetection(
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-        rawPayload: blob,
-      ));
-      final result = await controller.verify();
-      expect(engine.calls, ['DET8FJGUJ4', blob]);
-      expect(result!.isVerified, isTrue);
-      expect(controller.reference, blob); // shows the value that verified
-      controller.dispose();
-    });
-
-    test('resetAll clears everything', () {
-      final controller = VerifyController();
-      controller.setReference('FT26140P01YB');
-      controller.setAccount('60536171');
-      controller.resetAll();
-      expect(controller.reference, '');
-      expect(controller.accountNumber, '');
-      expect(controller.effectiveBank, isNull);
-      expect(controller.status, VerifyStatus.idle);
-      controller.dispose();
+    test('plain reference needs a bank pick', () {
+      final c = VerifyController();
+      c.applyScan('FT26140P01YB');
+      expect(c.detectedBank, isNull);
+      expect(c.reference, 'FT26140P01YB');
+      expect(c.canVerify, isFalse);
+      c.selectBank(bankById('cbe'));
+      expect(c.canVerify, isTrue);
     });
   });
 
-  group('VerifyController.stopVerify', () {
-    test('aborts an in-flight check and discards the late result', () async {
-      final engine = GatedEngine();
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
+  group('verify() through the stylepos verifier contract', () {
+    test('receipt result lands in state and status becomes done', () async {
+      late VerifyInput captured;
+      final c = VerifyController(
+        verifyFn: (input) async {
+          captured = input;
+          return _receiptOk();
+        },
       );
-
-      final inFlight = controller.verify();
-      expect(controller.status, VerifyStatus.verifying);
-
-      controller.stopVerify();
-      expect(controller.status, VerifyStatus.idle);
-
-      // The engine eventually answers — the abandoned run ignores it.
-      engine.completeNext(const VerifyResult(
-        success: true,
-        verified: true,
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-      ));
-      expect(await inFlight, isNull);
-      expect(controller.status, VerifyStatus.idle);
-      expect(controller.result, isNull);
-      controller.dispose();
+      c.applyScan('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
+      final res = await c.verify();
+      expect(res, isNotNull);
+      expect(res!.ok, isTrue);
+      expect(res.receipt!.amount, 2450);
+      expect(c.status, VerifyStatus.done);
+      expect(captured.bankId, 'cbe');
+      expect(captured.reference, 'fHCx8QmLpZ1');
     });
 
-    test('is a no-op when nothing is running', () {
-      final controller = VerifyController(engine: GatedEngine());
-      controller.stopVerify();
-      expect(controller.status, VerifyStatus.idle);
-      controller.dispose();
-    });
-
-    test('a verification can start again after a stop', () async {
-      final engine = GatedEngine();
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(
-        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
+    test('failure result carries the verifier message and tips', () async {
+      final c = VerifyController(
+        verifyFn: (_) async => _notFound('No receipt found.'),
       );
-
-      final stopped = controller.verify();
-      controller.stopVerify();
-      engine.completeNext(const VerifyResult(
-        success: true,
-        verified: true,
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-      ));
-      expect(await stopped, isNull);
-
-      final restarted = controller.verify();
-      expect(controller.status, VerifyStatus.verifying);
-      engine.completeNext(const VerifyResult(
-        success: true,
-        verified: true,
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-      ));
-      final result = await restarted;
-      expect(result!.isVerified, isTrue);
-      expect(controller.status, VerifyStatus.done);
-      expect(controller.result!.isVerified, isTrue);
-      controller.dispose();
+      c.selectBank(bankById('telebirr'));
+      c.setReference('CHQ261Z4AB2C');
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(res.failure!.message, 'No receipt found.');
+      expect(res.failure!.tips, isNotEmpty);
     });
 
-    test('stopping during the raw-scan retry keeps the form idle', () async {
-      final engine = GatedEngine();
-      final controller = VerifyController(engine: engine);
-      controller.applyDetection(const BankDetection(
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-        rawPayload: 'DET8FJGUJ4c',
-      ));
+    test('thrown errors become a friendly unreadable failure', () async {
+      final c = VerifyController(
+        verifyFn: (_) async => throw Exception('boom'),
+      );
+      c.selectBank(bankById('telebirr'));
+      c.setReference('CHQ261Z4AB2C');
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.unreadable);
+    });
 
-      final inFlight = controller.verify();
-      // First attempt comes back not-found, which fires the retry net.
-      engine.completeNext(const VerifyResult(
-        success: true,
-        verified: false,
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4',
-      ));
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
-      expect(engine.calls.length, 2);
-
-      controller.stopVerify();
-      engine.completeNext(const VerifyResult(
-        success: true,
-        verified: true,
-        bank: 'telebirr',
-        reference: 'DET8FJGUJ4c',
-      ));
-      expect(await inFlight, isNull);
-      expect(controller.status, VerifyStatus.idle);
-      expect(controller.result, isNull);
-      expect(controller.reference, 'DET8FJGUJ4'); // raw not adopted
-      controller.dispose();
+    test('VerifyInput carries account / phone / qrData', () async {
+      late VerifyInput captured;
+      final c = VerifyController(
+        verifyFn: (input) async {
+          captured = input;
+          return _receiptOk(bank: 'boa');
+        },
+      );
+      c.selectBank(bankById('boa'));
+      c.setReference('FT26140P01YB');
+      c.setAccount('60536171');
+      c.setPhone('0911000000'); // ignored for BOA, but must not crash
+      await c.verify();
+      expect(captured.bankId, 'boa');
+      expect(captured.account, '60536171');
+      expect(captured.qrData, isNull);
     });
   });
 
-  group('format helpers', () {
-    test('formatAmount renders ETB with thousands separators', () {
-      expect(formatAmount(20000, 'ETB'), 'ETB 20,000.00');
-      expect(formatAmount(null, 'ETB'), '—');
+  group('canVerify rules (stylepos catalog)', () {
+    test('CBE needs no account digits anymore', () {
+      final c = VerifyController();
+      c.selectBank(bankById('cbe'));
+      c.setReference('fHCx8QmLpZ1');
+      expect(c.canVerify, isTrue);
     });
 
-    test('formatReceiptDate parses M/D/YYYY h:mm:ss AM', () {
-      expect(
-        formatReceiptDate('5/20/2026, 7:29:00 PM'),
-        '20 May 2026 · 7:29 PM',
+    test('BOA typed reference needs the account suffix', () {
+      final c = VerifyController();
+      c.selectBank(bankById('boa'));
+      c.setReference('FT26140P01YB');
+      expect(c.canVerify, isFalse);
+      c.setAccount('60536171');
+      expect(c.canVerify, isTrue);
+    });
+
+    test('CBE Birr needs the payer phone number', () {
+      final c = VerifyController();
+      c.selectBank(bankById('cbebirr'));
+      c.setReference('FT26140P01YB');
+      expect(c.canVerify, isFalse);
+      c.setPhone('0911000000');
+      expect(c.canVerify, isTrue);
+    });
+  });
+
+  group('stopVerify', () {
+    test('an in-flight verification is discarded when stopped', () async {
+      final gate = Completer<void>();
+      VerifyResult? delivered;
+      final c = VerifyController(
+        verifyFn: (input) async {
+          await gate.future;
+          delivered = _receiptOk();
+          return delivered!;
+        },
       );
-      expect(formatReceiptDate('2026-05-20 19:29:00'), contains('2026'));
-      expect(formatReceiptDate(null), '—');
+      c.selectBank(bankById('cbe'));
+      c.setReference('fHCx8QmLpZ1');
+
+      final future = c.verify();
+      await pumpEventQueue();
+      expect(c.isVerifying, isTrue);
+
+      c.stopVerify();
+      expect(c.isVerifying, isFalse);
+
+      gate.complete();
+      final res = await future;
+      expect(res, isNull); // abandoned — no result delivered
+      expect(c.result, isNull);
+      expect(c.status, VerifyStatus.idle);
+      expect(delivered, isNotNull); // the fetch itself did finish
+    });
+  });
+
+  group('reset / resetAll', () {
+    test('resetAll clears the whole form', () {
+      final c = VerifyController();
+      c.applyScan('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
+      c.resetAll();
+      expect(c.reference, isEmpty);
+      expect(c.detectedBank, isNull);
+      expect(c.scannedQr, isNull);
+      expect(c.status, VerifyStatus.idle);
+    });
+
+    test('editing the reference clears a failed attempt', () async {
+      final c = VerifyController(
+        verifyFn: (_) async => _notFound('No receipt found.'),
+      );
+      c.selectBank(bankById('telebirr'));
+      c.setReference('CHQ261Z4AB2C');
+      await c.verify();
+      expect(c.status, VerifyStatus.done);
+      c.setReference('CHQ261Z4AB2D');
+      expect(c.status, VerifyStatus.idle);
+      expect(c.result, isNull);
+    });
+
+    test('editing the reference after a scan drops the raw scan payload',
+        () async {
+      final c = VerifyController(verifyFn: (_) async => _receiptOk());
+      c.selectBank(bankById('telebirr'));
+      c.setReference('CHQ261Z4AB2C');
+      // Simulate a scan having been applied, then the user editing.
+      c.applyScan('CHQ261Z4AB2C');
+      c.setReference('CHQ261Z4AB2C');
+      expect(c.scannedQr, isNull);
     });
   });
 }

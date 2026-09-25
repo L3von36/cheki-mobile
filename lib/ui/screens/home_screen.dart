@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/models.dart';
+import '../../core/receipt_verify/models.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../flow.dart';
@@ -63,8 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
             _Field(
               controller: _referenceCtrl,
-              label: 'Reference number or receipt link',
-              hint: controller.effectiveBank?.referenceExample ?? 'FT26140P01YB',
+              label: controller.effectiveBank?.referenceLabel ??
+                  'Reference number or receipt link',
+              hint: controller.effectiveBank?.referenceHint ??
+                  'Paste a receipt link or type the number',
               icon: Icons.tag_rounded,
               onChanged: (v) {
                 if (_syncing) return;
@@ -91,40 +93,42 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
             ),
-            if (controller.usingCbeNew)
+            if (controller.effectiveBank?.helper case final helper?)
+              _Hint(helper)
+            else
               const _Hint(
-                'New CBE receipt detected — the receipt ID is enough.',
-              )
-            else ...[
-              if (controller.effectiveBank?.requiresAccount == true) ...[
-                const SizedBox(height: 10),
-                _Field(
-                  controller: _accountCtrl,
-                  label: controller.effectiveBank!.accountLabel,
-                  hint:
-                      'Last ${controller.effectiveBank!.accountDigits} digits only',
-                  icon: Icons.account_balance_wallet_outlined,
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    if (_syncing) return;
-                    controller.setAccount(v);
-                  },
-                ),
-              ],
-              if (controller.effectiveBank?.requiresPhone == true) ...[
-                const SizedBox(height: 10),
-                _Field(
-                  controller: _phoneCtrl,
-                  label: 'Phone number on the wallet',
-                  hint: '09xxxxxxxx',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  onChanged: (v) {
-                    if (_syncing) return;
-                    controller.setPhone(v);
-                  },
-                ),
-              ],
+                'Pick the bank or wallet that issued the receipt — '
+                'receipt links and QR scans pick it automatically.',
+              ),
+            if (controller.effectiveBank != null &&
+                controller.effectiveBank!.accountDigits > 0) ...[
+              const SizedBox(height: 10),
+              _Field(
+                controller: _accountCtrl,
+                label: controller.effectiveBank!.accountLabel,
+                hint:
+                    'Last ${controller.effectiveBank!.accountDigits} digits only',
+                icon: Icons.account_balance_wallet_outlined,
+                keyboardType: TextInputType.number,
+                onChanged: (v) {
+                  if (_syncing) return;
+                  controller.setAccount(v);
+                },
+              ),
+            ],
+            if (controller.effectiveBank?.requiresPhone == true) ...[
+              const SizedBox(height: 10),
+              _Field(
+                controller: _phoneCtrl,
+                label: 'Phone number on the wallet',
+                hint: '09xxxxxxxx',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+                onChanged: (v) {
+                  if (_syncing) return;
+                  controller.setPhone(v);
+                },
+              ),
             ],
             if (controller.detectedBank != null && controller.manualBank == null)
               Padding(
@@ -318,9 +322,7 @@ class _BankSelector extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      controller.usingCbeNew
-                          ? 'New CBE receipt · ID only'
-                          : bank.referenceFormat,
+                      bank.referenceHint,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -464,7 +466,7 @@ class _PasteButton extends StatelessWidget {
 }
 
 class _DetectedChip extends StatelessWidget {
-  final MahtemBank bank;
+  final BankInfo bank;
 
   const _DetectedChip({required this.bank});
 
