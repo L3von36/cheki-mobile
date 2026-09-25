@@ -2,21 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/banks_registry.dart';
 import '../../core/models.dart';
-import '../../state/theme_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/cheki_theme.dart';
+import '../flow.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/bank_picker_sheet.dart';
-import '../widgets/dashed_divider.dart';
+import '../widgets/pressable.dart';
+import '../widgets/ticker_strip.dart';
 import '../widgets/verify_button.dart';
-import 'banks_screen.dart';
-import 'result_screen.dart';
-import 'scan_screen.dart';
 
 /// Home — the receipt verification form.
 class HomeScreen extends StatefulWidget {
@@ -38,49 +35,44 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
 
-    return Scaffold(
-      appBar: const _ChekiAppBar(),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          children: [
-            _Hero(isDark: isDark, dim: dim),
-            const SizedBox(height: 28),
-            _ReferenceField(
-              focusNode: _referenceFocus,
-              onChanged: controller.setReference,
-            ),
-            const SizedBox(height: 10),
-            const _DetectChip(),
-            const SizedBox(height: 18),
-            _BankSelector(controller: controller),
-            _ConditionalFields(controller: controller),
-            if (controller.effectiveBank?.geoBlocked ?? false) ...[
-              const SizedBox(height: 12),
-              _GeoNote(bank: controller.effectiveBank!),
-            ],
-            const SizedBox(height: 24),
-            VerifyButton(
-              loading: controller.isVerifying,
-              onPressed:
-                  controller.canVerify ? () => _runVerification(context) : null,
-              loadingHint: _loadingHint(controller),
-            ),
-            const SizedBox(height: 14),
-            _ScanOutlineButton(onTap: () => _openScanner(context)),
-            if (controller.status == VerifyStatus.error &&
-                controller.errorMessage != null) ...[
-              const SizedBox(height: 20),
-              _ErrorCard(message: controller.errorMessage!),
-            ],
-            const SizedBox(height: 36),
-            _Footer(dim: dim, isDark: isDark),
-          ],
-        ),
-      ),
+    var step = 0;
+    Widget staged(Widget child) => _Stagger(index: step++, child: child);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      children: [
+        staged(const _Hero()),
+        const SizedBox(height: 18),
+        staged(_ReferenceField(
+          focusNode: _referenceFocus,
+          onChanged: controller.setReference,
+        )),
+        const SizedBox(height: 6),
+        staged(const _DetectChip()),
+        const SizedBox(height: 12),
+        staged(_BankSelector(controller: controller)),
+        staged(_QuickBanks(controller: controller)),
+        staged(_ConditionalFields(controller: controller)),
+        if (controller.effectiveBank?.geoBlocked ?? false) ...[
+          const SizedBox(height: 10),
+          staged(_GeoNote(bank: controller.effectiveBank!)),
+        ],
+        const SizedBox(height: 18),
+        staged(VerifyButton(
+          loading: controller.isVerifying,
+          onPressed:
+              controller.canVerify ? () => _runVerification(context) : null,
+          loadingHint: _loadingHint(controller),
+        )),
+        if (controller.status == VerifyStatus.error &&
+            controller.errorMessage != null) ...[
+          const SizedBox(height: 14),
+          staged(_ErrorCard(message: controller.errorMessage!)),
+        ],
+        const SizedBox(height: 26),
+        staged(const _Footer()),
+      ],
     );
   }
 
@@ -96,110 +88,57 @@ class _HomeScreenState extends State<HomeScreen> {
     };
   }
 
-  Future<void> _runVerification(BuildContext context) async {
-    final controller = context.read<VerifyController>();
-    unawaited(HapticFeedback.mediumImpact());
-    final result = await controller.verify();
-    if (!context.mounted) return;
-    if (result != null && result.success) {
-      unawaited(HapticFeedback.heavyImpact());
-      await Navigator.of(context).push<void>(
-        PageRouteBuilder<void>(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const ResultScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            );
-            return FadeTransition(
-              opacity: curved,
-              child: SlideTransition(
-                position: Tween(
-                  begin: const Offset(0, 0.04),
-                  end: Offset.zero,
-                ).animate(curved),
-                child: child,
-              ),
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 320),
-        ),
-      );
-    }
-  }
-
-  Future<void> _openScanner(BuildContext context) async {
-    final detection = await Navigator.of(context).push<BankDetection>(
-      MaterialPageRoute(builder: (_) => const ScanScreen()),
-    );
-    if (detection != null && context.mounted) {
-      context.read<VerifyController>().applyDetection(detection);
-      FocusManager.instance.primaryFocus?.unfocus();
-      await _runVerification(context);
-    }
-  }
+  Future<void> _runVerification(BuildContext context) =>
+      runVerificationFlow(context);
 }
 
-// ─────────────────────────────────────────────────────────────── app bar
+// ─────────────────────────────────────────────────────── staggered entrance
 
-class _ChekiAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _ChekiAppBar();
+/// Slides + fades its child in, staggered by [index] via an Interval curve
+/// (no delayed timers — test-safe), producing the cascading "settle into
+/// place" feel on first paint.
+class _Stagger extends StatefulWidget {
+  final int index;
+  final Widget child;
+  const _Stagger({required this.index, required this.child});
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  State<_Stagger> createState() => _StaggerState();
+}
+
+class _StaggerState extends State<_Stagger>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 640),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final themeController = context.watch<ThemeController>();
-    return AppBar(
-      title: Row(
-        children: [
-          Text(
-            'cheki',
-            style: monoStyle(size: 22, weight: FontWeight.w800, letterSpacing: -0.5),
-          ),
-          const SizedBox(width: 2),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              color: ChekiPalette.green,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ],
+    final begin = (0.09 * widget.index).clamp(0.0, 0.9);
+    final curved = CurvedAnimation(
+      parent: _c,
+      curve: Interval(begin, 1, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween(begin: const Offset(0, 0.05), end: Offset.zero)
+            .animate(curved),
+        child: widget.child,
       ),
-      actions: [
-        IconButton(
-          tooltip: 'Scan QR receipt',
-          icon: const Icon(Icons.qr_code_scanner_rounded),
-          onPressed: () {
-            final root = context;
-            unawaited(
-              Navigator.of(root)
-                  .push<BankDetection>(
-                    MaterialPageRoute(builder: (_) => const ScanScreen()),
-                  )
-                  .then((d) {
-                if (d != null && root.mounted) {
-                  root.read<VerifyController>().applyDetection(d);
-                }
-              }),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Toggle theme',
-          icon: Icon(
-            themeController.isDark
-                ? Icons.light_mode_rounded
-                : Icons.dark_mode_rounded,
-          ),
-          onPressed: themeController.toggle,
-        ),
-        const SizedBox(width: 4),
-      ],
     );
   }
 }
@@ -207,26 +146,90 @@ class _ChekiAppBar extends StatelessWidget implements PreferredSizeWidget {
 // ───────────────────────────────────────────────────────────────── hero
 
 class _Hero extends StatelessWidget {
-  final bool isDark;
-  final Color dim;
-  const _Hero({required this.isDark, required this.dim});
+  const _Hero();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Is that payment\nreceipt real?',
-          style: Theme.of(context).textTheme.headlineLarge?.copyWith(height: 1.12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Is that receipt real?',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineLarge
+                    ?.copyWith(height: 1.1),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Paste a reference or scan the QR — cheki checks it against '
+                'the bank\u2019s official record in seconds.',
+                style: TextStyle(color: dim, fontSize: 12.5, height: 1.5),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        Text(
-          'Paste any Ethiopian bank receipt reference — cheki fetches the '
-          'official record from the bank and tells you if it is genuine.',
-          style: TextStyle(color: dim, fontSize: 14.5, height: 1.5),
-        ),
+        const SizedBox(width: 12),
+        const _WavingStamp(),
       ],
+    );
+  }
+}
+
+/// A tiny rubber stamp that rocks back and forth — pure personality.
+class _WavingStamp extends StatefulWidget {
+  const _WavingStamp();
+
+  @override
+  State<_WavingStamp> createState() => _WavingStampState();
+}
+
+class _WavingStampState extends State<_WavingStamp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final angle = -0.14 + 0.14 * Curves.easeInOut.transform(_c.value);
+        return Transform.rotate(
+          angle: angle,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: ChekiPalette.green.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: ChekiPalette.green.withValues(alpha: 0.5),
+              ),
+            ),
+            child: const Icon(
+              Icons.approval_rounded,
+              color: ChekiPalette.greenInk,
+              size: 26,
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -247,45 +250,81 @@ class _ReferenceField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _FieldLabel(text: 'RECEIPT REFERENCE OR LINK'),
-        const SizedBox(height: 8),
-        TextField(
-          focusNode: focusNode,
-          onChanged: onChanged,
-          controller: TextEditingController.fromValue(
-            TextEditingValue(
-              text: controller.reference,
-              selection: TextSelection.collapsed(
-                offset: controller.reference.length,
-              ),
-            ),
-          ),
-          style: monoStyle(size: 16, weight: FontWeight.w600),
-          textCapitalization: TextCapitalization.characters,
-          autocorrect: false,
-          enableSuggestions: false,
-          maxLines: 2,
-          minLines: 1,
-          decoration: InputDecoration(
-            hintText: 'FT26140P01YB',
-            suffixIcon: controller.reference.isEmpty
-                ? IconButton(
-                    tooltip: 'Paste',
-                    icon: const Icon(Icons.content_paste_rounded, size: 20),
-                    onPressed: () async {
+        const SizedBox(height: 6),
+        // When empty and unfocused the whole field is one big paste target;
+        // once focused (or non-empty) it behaves like a normal text field.
+        ListenableBuilder(
+          listenable: focusNode,
+          builder: (context, _) {
+            final pasteTarget =
+                controller.reference.isEmpty && !focusNode.hasFocus;
+            return GestureDetector(
+              onTap: pasteTarget
+                  ? () async {
                       final data =
                           await Clipboard.getData(Clipboard.kTextPlain);
-                      if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                      if (data?.text != null &&
+                          data!.text!.trim().isNotEmpty) {
                         onChanged(data.text!.trim());
                         unawaited(HapticFeedback.selectionClick());
+                      } else {
+                        focusNode.requestFocus();
                       }
-                    },
-                  )
-                : IconButton(
-                    tooltip: 'Clear',
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    onPressed: () => onChanged(''),
+                    }
+                  : null,
+              child: AbsorbPointer(
+                absorbing: pasteTarget,
+                child: TextField(
+                  focusNode: focusNode,
+                  onChanged: onChanged,
+                  controller: TextEditingController.fromValue(
+                    TextEditingValue(
+                      text: controller.reference,
+                      selection: TextSelection.collapsed(
+                        offset: controller.reference.length,
+                      ),
+                    ),
                   ),
-          ),
+                  style: monoStyle(size: 14, weight: FontWeight.w600),
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLines: 2,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: 'FT26140P01YB — or tap to paste',
+                    suffixIcon: controller.reference.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.content_paste_rounded,
+                                    size: 15, color: ChekiPalette.greenInk),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'PASTE',
+                                  style: monoStyle(
+                                    size: 9,
+                                    weight: FontWeight.w700,
+                                    letterSpacing: 1.2,
+                                    color: ChekiPalette.greenInk,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'Clear',
+                            iconSize: 18,
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => onChanged(''),
+                          ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -302,9 +341,9 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       text,
       style: monoStyle(
-        size: 11,
+        size: 9.5,
         weight: FontWeight.w700,
-        letterSpacing: 1.2,
+        letterSpacing: 1.1,
         color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
       ),
     );
@@ -320,10 +359,9 @@ class _DetectChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
     final detected = controller.detectedBank;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutBack,
       transitionBuilder: (child, anim) => ScaleTransition(
         scale: anim,
@@ -333,31 +371,28 @@ class _DetectChip extends StatelessWidget {
           ? const SizedBox(height: 0)
           : Padding(
               key: ValueKey(detected.id),
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: 2),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.auto_awesome_rounded,
-                    size: 15,
+                    size: 13,
                     color: ChekiPalette.green,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                   Text(
                     'Looks like ${detected.shortName}',
-                    style: TextStyle(
-                      color: ChekiPalette.green,
-                      fontSize: 12.5,
+                    style: const TextStyle(
+                      color: ChekiPalette.greenInk,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (controller.usingCbeNew) ...[
-                    const SizedBox(width: 8),
-                    MetaChip(
-                      label: 'New CBE QR receipt',
-                      color: isDark
-                          ? ChekiPalette.dInkDim
-                          : ChekiPalette.lInkDim,
-                      icon: Icons.qr_code_rounded,
+                    const SizedBox(width: 7),
+                    Text(
+                      'new CBE QR flow',
+                      style: monoStyle(size: 10, color: ChekiPalette.greenInk),
                     ),
                   ],
                 ],
@@ -380,52 +415,54 @@ class _BankSelector extends StatelessWidget {
     final border = isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder;
     final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
     final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+    final isManual = controller.manualBank != null;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _openBankSheet(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: border),
-            borderRadius: BorderRadius.circular(14),
-            color: Colors.transparent,
+    return Pressable(
+      onTap: () => _openBankSheet(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isManual
+                ? ChekiPalette.green.withValues(alpha: 0.55)
+                : border,
           ),
-          child: Row(
-            children: [
-              BankAvatar(bank: bank, size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      bank?.name ?? 'Select bank (or leave to auto-detect)',
-                      style: TextStyle(
-                        color: ink,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          borderRadius: BorderRadius.circular(13),
+          color: isDark ? ChekiPalette.dField : ChekiPalette.lSurface,
+        ),
+        child: Row(
+          children: [
+            BankAvatar(bank: bank, size: 34, radius: 10),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    bank?.name ?? 'Auto-detect the bank',
+                    style: TextStyle(
+                      color: ink,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
                     ),
-                    if (bank != null)
-                      Text(
-                        bank.id == kCbeNewId
-                            ? 'Verified with the new CBE receipt API'
-                            : bank.referenceFormat,
-                        style: TextStyle(color: dim, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    bank == null
+                        ? 'Recommended — we read it from the reference'
+                        : (bank.id == kCbeNewId
+                            ? 'New CBE receipt API'
+                            : bank.referenceFormat),
+                    style: TextStyle(color: dim, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              Icon(Icons.expand_more_rounded, color: dim),
-            ],
-          ),
+            ),
+            Icon(Icons.expand_more_rounded, color: dim, size: 20),
+          ],
         ),
       ),
     );
@@ -443,6 +480,107 @@ class _BankSelector extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────── quick bank chips
+
+class _QuickBanks extends StatelessWidget {
+  final VerifyController controller;
+  const _QuickBanks({required this.controller});
+
+  static const _ids = ['cbe', 'telebirr', 'boa', 'mpesa', 'dashen'];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final faint = isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint;
+    final banks = [
+      for (final id in _ids)
+        kChekiBanks.firstWhere((b) => b.id == id, orElse: () => kChekiBanks.first),
+    ];
+    final current = controller.effectiveBank;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'POPULAR',
+            style: monoStyle(
+              size: 8.5,
+              weight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: faint,
+            ),
+          ),
+          const SizedBox(height: 7),
+          SizedBox(
+            height: 58,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: banks.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final bank = banks[i];
+                final active = current?.id == bank.id;
+                return Pressable(
+                  onTap: () =>
+                      controller.selectBank(active ? null : bank),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? ChekiPalette.green.withValues(alpha: 0.12)
+                          : (isDark
+                              ? ChekiPalette.dField
+                              : ChekiPalette.lSurface),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: active
+                            ? ChekiPalette.green
+                            : (isDark
+                                ? ChekiPalette.dBorder
+                                : ChekiPalette.lBorder),
+                        width: active ? 1.4 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        BankAvatar(bank: bank, size: 22, radius: 6),
+                        const SizedBox(height: 3),
+                        Text(
+                          bank.shortName,
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            height: 1.1,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w600,
+                            color: active
+                                ? ChekiPalette.greenInk
+                                : (isDark
+                                    ? ChekiPalette.dInkDim
+                                    : ChekiPalette.lInkDim),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────── conditional extra fields
 
 class _ConditionalFields extends StatelessWidget {
@@ -455,18 +593,18 @@ class _ConditionalFields extends StatelessWidget {
     if (bank == null || bank.id == kCbeNewId) return const SizedBox.shrink();
 
     return AnimatedSize(
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (bank.requiresAccount) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _AccountField(bank: bank),
           ],
           if (bank.requiresPhone) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _PhoneField(bank: bank),
           ],
         ],
@@ -489,7 +627,7 @@ class _AccountField extends StatelessWidget {
         _FieldLabel(
           text: '${bank.accountLabel.toUpperCase()} · LAST $digits DIGITS',
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         TextField(
           onChanged: controller.setAccount,
           keyboardType: TextInputType.number,
@@ -503,7 +641,7 @@ class _AccountField extends StatelessWidget {
               ),
             ),
           ),
-          style: monoStyle(size: 16, weight: FontWeight.w600, letterSpacing: 1.5),
+          style: monoStyle(size: 14.5, weight: FontWeight.w600, letterSpacing: 1.5),
           decoration: InputDecoration(
             counterText: '',
             hintText: '•' * digits,
@@ -523,11 +661,12 @@ class _PhoneField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _FieldLabel(text: 'WALLET PHONE NUMBER'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         TextField(
           onChanged: controller.setPhone,
           keyboardType: TextInputType.phone,
@@ -539,19 +678,17 @@ class _PhoneField extends StatelessWidget {
               ),
             ),
           ),
-          style: monoStyle(size: 16, weight: FontWeight.w600),
+          style: monoStyle(size: 14.5, weight: FontWeight.w600),
           decoration: const InputDecoration(
             hintText: '09•• ••• ••••',
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           '${bank.name} needs the phone number tied to the transaction.',
           style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? ChekiPalette.dInkFaint
-                : ChekiPalette.lInkFaint,
+            fontSize: 10.5,
+            color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
           ),
         ),
       ],
@@ -569,65 +706,28 @@ class _GeoNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: ChekiPalette.amber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(color: ChekiPalette.amber.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.public_rounded, size: 17, color: ChekiPalette.amber),
-          const SizedBox(width: 10),
+          const Icon(Icons.public_rounded, size: 15, color: ChekiPalette.amber),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${bank.shortName} restricts direct access by region — cheki '
-              'verifies through its own servers, so this works anywhere.',
+              '${bank.shortName} restricts access by region — cheki verifies '
+              'through its own servers, so this works anywhere.',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 height: 1.4,
                 color: isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim,
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────── scan button
-
-class _ScanOutlineButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _ScanOutlineButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(Icons.qr_code_scanner_rounded, color: ink, size: 21),
-        label: Text(
-          'Scan receipt QR code',
-          style: GoogleFonts.inter(
-            color: ink,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
       ),
     );
   }
@@ -643,24 +743,24 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: ChekiPalette.red.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: ChekiPalette.red.withValues(alpha: 0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.error_outline_rounded,
-              color: ChekiPalette.red, size: 20),
-          const SizedBox(width: 10),
+              color: ChekiPalette.red, size: 17),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
                 color: isDark ? ChekiPalette.dInk : ChekiPalette.lInk,
-                fontSize: 13.5,
+                fontSize: 12,
                 height: 1.45,
               ),
             ),
@@ -674,44 +774,27 @@ class _ErrorCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────── footer
 
 class _Footer extends StatelessWidget {
-  final Color dim;
-  final bool isDark;
-  const _Footer({required this.dim, required this.isDark});
+  const _Footer();
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+
     return Column(
       children: [
-        DashedDivider(),
-        const SizedBox(height: 18),
+        const BankTickerStrip(),
+        const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_outline_rounded, size: 13, color: dim),
-            const SizedBox(width: 6),
+            Icon(Icons.lock_outline_rounded, size: 11, color: dim),
+            const SizedBox(width: 5),
             Text(
               'Free forever · No signup · Official bank data',
-              style: monoStyle(size: 11, color: dim, letterSpacing: 0.3),
+              style: monoStyle(size: 9.5, color: dim, letterSpacing: 0.3),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: () => unawaited(
-            Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const BanksScreen()),
-            ),
-          ),
-          child: Text(
-            'See all 10 supported banks',
-            style: TextStyle(
-              color: ChekiPalette.green,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.underline,
-              decorationColor: ChekiPalette.green.withValues(alpha: 0.5),
-            ),
-          ),
         ),
       ],
     );

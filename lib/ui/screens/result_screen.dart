@@ -10,6 +10,7 @@ import '../../state/verify_controller.dart';
 import '../../theme/cheki_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
+import '../widgets/confetti.dart';
 import '../widgets/dashed_divider.dart';
 import '../widgets/receipt_paper.dart';
 import '../widgets/ticker_amount.dart';
@@ -56,11 +57,19 @@ class ResultScreen extends StatelessWidget {
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        child: Stack(
           children: [
+            // Celebration! Fires once when the receipt is genuine.
+            if (verified)
+              const Positioned.fill(
+                child: IgnorePointer(child: ConfettiBurst()),
+              ),
+            Positioned.fill(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                children: [
             ReceiptPaper(
-              padding: const EdgeInsets.fromLTRB(22, 26, 22, 26),
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -75,23 +84,23 @@ class ResultScreen extends StatelessWidget {
                             Text(
                               'OFFICIAL RECEIPT DATA',
                               style: monoStyle(
-                                size: 10.5,
+                                size: 9,
                                 weight: FontWeight.w700,
-                                letterSpacing: 1.6,
+                                letterSpacing: 1.5,
                                 color: dim,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 7),
                             Row(
                               children: [
-                                BankAvatar(bank: bank, size: 34, radius: 10),
-                                const SizedBox(width: 10),
+                                BankAvatar(bank: bank, size: 30, radius: 9),
+                                const SizedBox(width: 9),
                                 Flexible(
                                   child: Text(
                                     bankName,
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 15,
+                                      fontSize: 13,
                                     ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
@@ -113,7 +122,7 @@ class ResultScreen extends StatelessWidget {
                     ],
                   ),
 
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 20),
 
                   // Amount hero.
                   Center(
@@ -122,18 +131,18 @@ class ResultScreen extends StatelessWidget {
                         Text(
                           'AMOUNT',
                           style: monoStyle(
-                            size: 10.5,
+                            size: 9,
                             weight: FontWeight.w700,
-                            letterSpacing: 1.6,
+                            letterSpacing: 1.5,
                             color: dim,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         TickerAmount(
                           amount: result.amount,
                           currency: result.currency,
                           style: monoStyle(
-                            size: 38,
+                            size: 30,
                             weight: FontWeight.w800,
                             letterSpacing: -0.5,
                             color: isDark
@@ -144,23 +153,23 @@ class ResultScreen extends StatelessWidget {
                         if (result.totalPaid != null &&
                             result.totalPaid != result.amount)
                           Padding(
-                            padding: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.only(top: 3),
                             child: Text(
                               'total paid ${formatAmount(result.totalPaid, result.currency)}',
-                              style: monoStyle(size: 11.5, color: dim),
+                              style: monoStyle(size: 10, color: dim),
                             ),
                           ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                   DashedDivider(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   if (!verified && result.reason != null) ...[
                     _ReasonBanner(reason: result.reason!),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
                   ],
 
                   // Detail rows.
@@ -228,39 +237,39 @@ class ResultScreen extends StatelessWidget {
                   ),
                   if (result.amountInWords != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.only(top: 10),
                       child: Text(
                         '"${result.amountInWords}"',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontStyle: FontStyle.italic,
-                          fontSize: 12.5,
+                          fontSize: 11,
                           color: dim,
                           height: 1.5,
                         ),
                       ),
                     ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   DashedDivider(),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
                   // Source + latency.
                   Row(
                     children: [
-                      Icon(Icons.link_rounded, size: 13, color: dim),
-                      const SizedBox(width: 6),
+                      Icon(Icons.link_rounded, size: 12, color: dim),
+                      const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           'Fetched from the bank\u2019s official endpoint',
-                          style: monoStyle(size: 10.5, color: dim),
+                          style: monoStyle(size: 9, color: dim),
                         ),
                       ),
                       if (controller.lastDurationMs != null)
                         Text(
                           '${(controller.lastDurationMs! / 1000).toStringAsFixed(1)}s',
                           style: monoStyle(
-                            size: 10.5,
+                            size: 9,
                             color: ChekiPalette.green,
                             weight: FontWeight.w700,
                           ),
@@ -271,7 +280,7 @@ class ResultScreen extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 22),
+            const SizedBox(height: 18),
 
             // Actions.
             Row(
@@ -283,7 +292,7 @@ class ResultScreen extends StatelessWidget {
                     onTap: () => _copyResult(context, controller),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _ActionButton(
                     icon: Icons.share_rounded,
@@ -293,10 +302,10 @@ class ResultScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              height: 56,
+              height: 48,
               child: FilledButton(
                 onPressed: () {
                   context.read<VerifyController>().resetAll();
@@ -308,26 +317,29 @@ class ResultScreen extends StatelessWidget {
                   foregroundColor:
                       Theme.of(context).colorScheme.onPrimary,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 child: Text(
                   'Verify another receipt',
                   style: GoogleFonts.inter(
-                    fontSize: 15.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             Center(
               child: Text(
                 'Data comes straight from ${bank?.shortName ?? 'the bank'} \u2014 '
                 'cheki never stores receipts.',
                 textAlign: TextAlign.center,
-                style: monoStyle(size: 10.5, color: dim),
+                style: monoStyle(size: 9, color: dim),
+              ),
+            ),
+          ],
               ),
             ),
           ],
@@ -415,7 +427,7 @@ class _ReasonBanner extends StatelessWidget {
             child: Text(
               reason,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 11.5,
                 height: 1.45,
                 color: isDark ? ChekiPalette.dInk : ChekiPalette.lInk,
               ),
@@ -448,18 +460,18 @@ class _Row extends StatelessWidget {
         ? ChekiPalette.dInk
         : ChekiPalette.lInk;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 108,
+            width: 96,
             child: Text(
               label,
               style: monoStyle(
-                size: 10,
+                size: 8.5,
                 weight: FontWeight.w700,
-                letterSpacing: 1.2,
+                letterSpacing: 1.1,
                 color: dim,
               ),
             ),
@@ -469,10 +481,10 @@ class _Row extends StatelessWidget {
               value!,
               textAlign: TextAlign.right,
               style: mono
-                  ? monoStyle(size: 13.5, weight: FontWeight.w600, color: ink)
+                  ? monoStyle(size: 12, weight: FontWeight.w600, color: ink)
                   : TextStyle(
                       color: ink,
-                      fontSize: 13.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
             ),
@@ -499,17 +511,17 @@ class CopyableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
           SizedBox(
-            width: 108,
+            width: 96,
             child: Text(
               label,
               style: monoStyle(
-                size: 10,
+                size: 8.5,
                 weight: FontWeight.w700,
-                letterSpacing: 1.2,
+                letterSpacing: 1.1,
                 color: dim,
               ),
             ),
@@ -519,7 +531,7 @@ class CopyableRow extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: monoStyle(
-                size: 13.5,
+                size: 12,
                 weight: FontWeight.w700,
                 color: ChekiPalette.green,
                 letterSpacing: 0.5,
@@ -535,7 +547,7 @@ class CopyableRow extends StatelessWidget {
                 SnackBar(content: Text('$label copied')),
               );
             },
-            child: Icon(Icons.copy_rounded, size: 15, color: dim),
+            child: Icon(Icons.copy_rounded, size: 14, color: dim),
           ),
         ],
       ),
@@ -559,16 +571,16 @@ class _ActionButton extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
     return SizedBox(
-      height: 50,
+      height: 44,
       child: OutlinedButton.icon(
         onPressed: onTap,
-        icon: Icon(icon, size: 18, color: ink),
+        icon: Icon(icon, size: 16, color: ink),
         label: Text(
           label,
           style: GoogleFonts.inter(
             color: ink,
             fontWeight: FontWeight.w600,
-            fontSize: 14,
+            fontSize: 12.5,
           ),
         ),
         style: OutlinedButton.styleFrom(
@@ -576,7 +588,7 @@ class _ActionButton extends StatelessWidget {
             color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
           ),
         ),
       ),

@@ -95,7 +95,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 13,
+                  fontSize: 12,
                   height: 1.45,
                 ),
               ),
@@ -242,7 +242,7 @@ class _ScanErrorView extends StatelessWidget {
               'Camera unavailable',
               style: GoogleFonts.inter(
                 color: Colors.white,
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -253,7 +253,7 @@ class _ScanErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 13.5,
+                fontSize: 12.5,
                 height: 1.5,
               ),
             ),

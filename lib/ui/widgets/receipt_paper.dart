@@ -199,19 +199,19 @@ class StampBadge extends StatelessWidget {
       child: Transform.rotate(
         angle: -8 * math.pi / 180,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
           decoration: BoxDecoration(
-            border: Border.all(color: color, width: 2.4),
-            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color, width: 2),
+            borderRadius: BorderRadius.circular(7),
             color: color.withValues(alpha: 0.08),
           ),
           child: Text(
             text,
             style: TextStyle(
               fontFamily: 'monospace',
-              fontSize: 15,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
-              letterSpacing: 2.4,
+              letterSpacing: 2,
               color: color,
             ),
           ),

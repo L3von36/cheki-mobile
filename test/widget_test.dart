@@ -9,7 +9,9 @@ void main() {
     await tester.pump();
     expect(find.text('cheki'), findsOneWidget);
     expect(find.text('Verify receipt'), findsOneWidget);
-    expect(find.text('Scan receipt QR code'), findsOneWidget);
+    // Scan now lives on the raised center button of the bottom bar.
+    expect(find.text('SCAN'), findsOneWidget);
+    expect(find.text('Banks'), findsOneWidget);
   });
 
   testWidgets('typing a CBE reference shows the auto-detect chip',
@@ -18,10 +20,12 @@ void main() {
     await tester.pump();
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'FT26140P01YB').first,
+      find.byType(TextField).first,
       'FT26140P01YB',
     );
-    await tester.pumpAndSettle();
+    // The app has ambient looping animations (pulse dot, stamp, ticker),
+    // so pump a fixed duration instead of pumpAndSettle.
+    await tester.pump(const Duration(milliseconds: 700));
 
     expect(find.text('Looks like CBE'), findsOneWidget);
   });

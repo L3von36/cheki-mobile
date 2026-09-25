@@ -30,7 +30,7 @@ class BankPickerSheet extends StatelessWidget {
                 'Which bank issued the receipt?',
                 style: TextStyle(
                   color: ink,
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -40,7 +40,7 @@ class BankPickerSheet extends StatelessWidget {
               child: Text(
                 'Cheki usually detects this from the reference format — '
                 'pick manually only if auto-detect is wrong.',
-                style: TextStyle(color: dim, fontSize: 12.5, height: 1.45),
+                style: TextStyle(color: dim, fontSize: 11.5, height: 1.45),
               ),
             ),
             Expanded(
@@ -51,12 +51,12 @@ class BankPickerSheet extends StatelessWidget {
                   if (index == 0) {
                     return _Tile(
                       leading: CircleAvatar(
-                        radius: 20,
+                        radius: 18,
                         backgroundColor: ChekiPalette.green.withValues(alpha: 0.15),
                         child: const Icon(
                           Icons.auto_awesome_rounded,
                           color: ChekiPalette.green,
-                          size: 19,
+                          size: 17,
                         ),
                       ),
                       title: 'Auto-detect from reference',
@@ -67,7 +67,7 @@ class BankPickerSheet extends StatelessWidget {
                   }
                   final bank = kChekiBanks[index - 1];
                   return _Tile(
-                    leading: BankAvatar(bank: bank, size: 40, radius: 20),
+                    leading: BankAvatar(bank: bank, size: 36, radius: 18),
                     title: bank.name,
                     subtitle: bank.referenceExample,
                     selected: selectedId == bank.id,
@@ -106,7 +106,7 @@ class _Tile extends StatelessWidget {
       title: Text(
         title,
         style: TextStyle(
-          fontSize: 14.5,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: Theme.of(context).brightness == Brightness.dark
               ? ChekiPalette.dInk
@@ -118,13 +118,13 @@ class _Tile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: monoStyle(
-          size: 11.5,
+          size: 10.5,
           color: selected ? ChekiPalette.green : null,
         ),
       ),
       trailing: selected
           ? const Icon(Icons.check_circle_rounded,
-              color: ChekiPalette.green, size: 20)
+              color: ChekiPalette.green, size: 18)
           : null,
       onTap: onTap,
     );

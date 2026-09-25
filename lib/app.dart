@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'state/theme_controller.dart';
 import 'state/verify_controller.dart';
 import 'theme/cheki_theme.dart';
-import 'ui/screens/home_screen.dart';
+import 'ui/shell.dart';
 
 /// Root widget: providers + theme wiring.
 class ChekiApp extends StatelessWidget {
@@ -25,7 +25,7 @@ class ChekiApp extends StatelessWidget {
             theme: ChekiTheme.light(),
             darkTheme: ChekiTheme.dark(),
             themeMode: theme.mode,
-            home: const HomeScreen(),
+            home: const ShellScreen(),
           );
         },
       ),

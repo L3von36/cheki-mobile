@@ -66,10 +66,34 @@ abstract final class ChekiTheme {
 
     final bg = isDark ? ChekiPalette.dBg : ChekiPalette.lBg;
     final ink = isDark ? ChekiPalette.dInk : ChekiPalette.lInk;
+    final dim = isDark ? ChekiPalette.dInkDim : ChekiPalette.lInkDim;
+    final border = isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder;
 
     final baseText = GoogleFonts.interTextTheme(
       ThemeData(brightness: brightness).textTheme,
     ).apply(bodyColor: ink, displayColor: ink);
+
+    // Compact type scale — deliberately one notch smaller than Material
+    // defaults so the UI feels dense, calm and receipt-like.
+    final textTheme = baseText.copyWith(
+      headlineLarge: baseText.headlineLarge
+          ?.copyWith(fontSize: 24, fontWeight: FontWeight.w800, height: 1.15),
+      headlineMedium: baseText.headlineMedium
+          ?.copyWith(fontSize: 21, fontWeight: FontWeight.w800, height: 1.15),
+      titleLarge: baseText.titleLarge
+          ?.copyWith(fontSize: 16.5, fontWeight: FontWeight.w700),
+      titleMedium: baseText.titleMedium
+          ?.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+      titleSmall:
+          baseText.titleSmall?.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+      bodyLarge: baseText.bodyLarge?.copyWith(fontSize: 13.5, height: 1.5),
+      bodyMedium: baseText.bodyMedium?.copyWith(fontSize: 12.5, height: 1.5),
+      bodySmall: baseText.bodySmall?.copyWith(fontSize: 11, height: 1.45),
+      labelLarge: baseText.labelLarge
+          ?.copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+      labelMedium: baseText.labelMedium?.copyWith(fontSize: 11),
+      labelSmall: baseText.labelSmall?.copyWith(fontSize: 9.5),
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -77,55 +101,42 @@ abstract final class ChekiTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: bg,
       splashFactory: InkSparkle.splashFactory,
-      textTheme: baseText.copyWith(
-        headlineLarge: baseText.headlineLarge?.copyWith(
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
-        ),
-        titleLarge: baseText.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-        bodyMedium: baseText.bodyMedium?.copyWith(height: 1.45),
-      ),
-      dividerTheme: DividerThemeData(
-        color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
-        thickness: 1,
-        space: 1,
-      ),
+      textTheme: textTheme,
+      dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? ChekiPalette.dField : ChekiPalette.lSurface,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
-          ),
+          borderRadius: BorderRadius.circular(13),
+          borderSide: BorderSide(color: border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: isDark ? ChekiPalette.dBorder : ChekiPalette.lBorder,
-          ),
+          borderRadius: BorderRadius.circular(13),
+          borderSide: BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: ChekiPalette.green, width: 1.6),
+          borderRadius: BorderRadius.circular(13),
+          borderSide: const BorderSide(color: ChekiPalette.green, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colorScheme.error, width: 1.4),
+          borderRadius: BorderRadius.circular(13),
+          borderSide: BorderSide(color: colorScheme.error, width: 1.3),
         ),
         hintStyle: TextStyle(
           color: isDark ? ChekiPalette.dInkFaint : ChekiPalette.lInkFaint,
           fontWeight: FontWeight.w400,
+          fontSize: 13.5,
         ),
+        helperStyle: TextStyle(color: dim, fontSize: 10.5),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: isDark ? ChekiPalette.dSurface : ChekiPalette.lSurface,
         modalBackgroundColor:
             isDark ? ChekiPalette.dSurface : ChekiPalette.lSurface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
         showDragHandle: true,
       ),
@@ -134,21 +145,31 @@ abstract final class ChekiTheme {
         contentTextStyle: GoogleFonts.inter(
           color: isDark ? ChekiPalette.dInk : ChekiPalette.lBg,
           fontWeight: FontWeight.w500,
+          fontSize: 12.5,
         ),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: bg,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: ink),
+        iconTheme: IconThemeData(color: ink, size: 21),
         titleTextStyle: GoogleFonts.inter(
           color: ink,
-          fontSize: 18,
+          fontSize: 15.5,
           fontWeight: FontWeight.w700,
         ),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: dim,
+        titleTextStyle: TextStyle(
+          color: ink,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+        ),
+        subtitleTextStyle: TextStyle(color: dim, fontSize: 11),
       ),
     );
   }
@@ -156,7 +177,7 @@ abstract final class ChekiTheme {
 
 /// Mono text style used for references, amounts and meta labels.
 TextStyle monoStyle({
-  double size = 14,
+  double size = 13,
   FontWeight weight = FontWeight.w500,
   Color? color,
   double letterSpacing = 0,
