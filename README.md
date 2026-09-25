@@ -37,6 +37,12 @@ No signup. No API key. No fees. No middleman server.
   codes get a clear "this is not a receipt" explanation instead of a
   generic error. Camera permission is requested up front with a clear
   recovery path if it was denied.
+- **Self-stabilizing scanner** — camera readings must agree before they
+  are trusted, and the accepted payload is cleaned up automatically:
+  decoder-appended trailing letters (a Telebirr `…BEI` scanned as
+  `…BEIc`) and trailing punctuation are stripped, with a verify-time
+  retry on the untouched scan as a safety net — so genuine references
+  that legitimately end in c/e still verify.
 - **Auto-detect bank** — the app recognizes the bank from the reference
   format (CBE `FT…`, Telebirr `DET…`/`TPS…`, Awash share segments, …)
 - **Simple, focused UI** — one card: pick a bank, paste the reference,

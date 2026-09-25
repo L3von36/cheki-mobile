@@ -31,6 +31,13 @@ class VerifyController extends ChangeNotifier {
   String accountNumber = '';
   String phoneNumber = '';
 
+  /// Untouched payload from the last QR scan, when one was applied.
+  /// The scanner strips decoder-added junk (trailing punctuation and
+  /// 'c'/'e' letters) from the reference it shows — this keeps the raw
+  /// value so [verify] can retry with it when the cleaned reference comes
+  /// back not-found. Cleared as soon as the user edits the reference.
+  String? rawScannedReference;
+
   VerifyResult? result;
   String? errorMessage;
 
@@ -70,6 +77,8 @@ class VerifyController extends ChangeNotifier {
     usingCbeNew = detectedBank != null &&
         RegExp(r'^[0-9a-f]{12}$', caseSensitive: false)
             .hasMatch(reference.trim());
+    // The user took over the reference — the raw scan no longer applies.
+    rawScannedReference = null;
     // Editing inputs clears a finished (failed) attempt.
     if (status == VerifyStatus.done && result != null && !result!.isVerified) {
       status = VerifyStatus.idle;
@@ -108,6 +117,7 @@ class VerifyController extends ChangeNotifier {
   void applyDetection(BankDetection detection) {
     reference = detection.reference;
     accountNumber = detection.accountNumber ?? '';
+    rawScannedReference = detection.rawPayload?.trim();
     manualBank = null;
     usingCbeNew = detection.bank == kCbeNewId;
     detectedBank = detection.bank == null
@@ -136,6 +146,7 @@ class VerifyController extends ChangeNotifier {
     manualBank = null;
     detectedBank = null;
     usingCbeNew = false;
+    rawScannedReference = null;
     notifyListeners();
   }
 
@@ -163,6 +174,34 @@ class VerifyController extends ChangeNotifier {
         accountNumber: usingCbeNew ? null : accountNumber.trim(),
         phoneNumber: phoneNumber.trim(),
       );
+
+      // Retry net for sanitized scans: the scanner removes decoder-added
+      // trailing letters from the reference it shows (a Telebirr "…BEI"
+      // scanned as "…BEIc", for example). When the cleaned reference comes
+      // back definitively not-found, retry once with the untouched scan —
+      // in the rare case the removed letter was real, the raw value still
+      // verifies instead of dead-ending the user.
+      final raw = rawScannedReference;
+      if (res.success &&
+          res.verified == false &&
+          raw != null &&
+          raw.isNotEmpty &&
+          raw != reference.trim()) {
+        try {
+          final retry = await _engine.verify(
+            bank: engineBank,
+            reference: raw,
+            accountNumber: usingCbeNew ? null : accountNumber.trim(),
+            phoneNumber: phoneNumber.trim(),
+          );
+          if (retry.verified == true) {
+            res = retry;
+            reference = raw; // show the value that actually verified
+          }
+        } catch (_) {
+          // The retry is best-effort; keep the first result.
+        }
+      }
     } catch (e) {
       stopwatch.stop();
       lastDurationMs = stopwatch.elapsedMilliseconds.toDouble();

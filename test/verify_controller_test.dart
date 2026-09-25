@@ -13,6 +13,10 @@ class FakeEngine implements VerifyEngine {
   String? lastReference;
   String? lastAccount;
 
+  /// Optional scripted results consumed in order before [nextResult].
+  final List<VerifyResult> script = [];
+  final List<String> calls = [];
+
   @override
   Future<VerifyResult> verify({
     required String bank,
@@ -20,10 +24,12 @@ class FakeEngine implements VerifyEngine {
     String? accountNumber,
     String? phoneNumber,
   }) async {
+    calls.add(reference);
     lastBank = bank;
     lastReference = reference;
     lastAccount = accountNumber;
     if (nextError != null) throw nextError!;
+    if (script.isNotEmpty) return script.removeAt(0);
     return nextResult ??
         VerifyResult(success: true, verified: true, bank: bank, reference: reference);
   }
@@ -140,6 +146,120 @@ void main() {
       expect(result!.isVerified, isFalse);
       expect(result.error, contains('Something went wrong'));
       expect(controller.status, VerifyStatus.done);
+      controller.dispose();
+    });
+
+    test('verify() retries with the raw scan when the cleaned reference is '
+        'not-found', () async {
+      final engine = FakeEngine()
+        ..script.addAll([
+          // First attempt: the sanitized reference comes back not-found.
+          const VerifyResult(
+            success: true,
+            verified: false,
+            bank: 'telebirr',
+            reference: 'DET8FJGUJ4',
+            reason: 'Receipt not found. Double-check the reference number.',
+          ),
+          // Retry with the untouched scan: the receipt exists.
+          const VerifyResult(
+            success: true,
+            verified: true,
+            bank: 'telebirr',
+            reference: 'DET8FJGUJ4c',
+          ),
+        ]);
+      final controller = VerifyController(engine: engine);
+      controller.applyDetection(
+        const BankDetection(
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+          rawPayload: 'DET8FJGUJ4c',
+        ),
+      );
+      final result = await controller.verify();
+      expect(engine.calls, ['DET8FJGUJ4', 'DET8FJGUJ4c']);
+      expect(result!.isVerified, isTrue);
+      expect(controller.reference, 'DET8FJGUJ4c'); // shows what verified
+      controller.dispose();
+    });
+
+    test('verify() does not retry when there is no raw scan or it matches',
+        () async {
+      final engine = FakeEngine()
+        ..nextResult = const VerifyResult(
+          success: true,
+          verified: false,
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+        );
+      final controller = VerifyController(engine: engine);
+      controller.applyDetection(
+        const BankDetection(bank: 'telebirr', reference: 'DET8FJGUJ4'),
+      );
+      final result = await controller.verify();
+      expect(engine.calls, ['DET8FJGUJ4']); // single attempt
+      expect(result!.isVerified, isFalse);
+
+      // With a raw payload identical to the reference, still one attempt.
+      controller.applyDetection(
+        const BankDetection(
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+          rawPayload: 'DET8FJGUJ4',
+        ),
+      );
+      await controller.verify();
+      expect(engine.calls, ['DET8FJGUJ4', 'DET8FJGUJ4']);
+      controller.dispose();
+    });
+
+    test('verify() keeps the first result when the retry is also not-found',
+        () async {
+      final engine = FakeEngine()
+        ..script.addAll([
+          const VerifyResult(
+            success: true,
+            verified: false,
+            bank: 'telebirr',
+            reference: 'DET8FJGUJ4',
+            reason: 'Receipt not found.',
+          ),
+          const VerifyResult(
+            success: true,
+            verified: false,
+            bank: 'telebirr',
+            reference: 'DET8FJGUJ4c',
+            reason: 'Receipt not found.',
+          ),
+        ]);
+      final controller = VerifyController(engine: engine);
+      controller.applyDetection(
+        const BankDetection(
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+          rawPayload: 'DET8FJGUJ4c',
+        ),
+      );
+      final result = await controller.verify();
+      expect(engine.calls.length, 2);
+      expect(result!.isVerified, isFalse);
+      expect(controller.reference, 'DET8FJGUJ4'); // unchanged
+      controller.dispose();
+    });
+
+    test('editing the reference clears the raw scan retry value', () {
+      final controller = VerifyController();
+      controller.applyDetection(
+        const BankDetection(
+          bank: 'telebirr',
+          reference: 'DET8FJGUJ4',
+          rawPayload: 'DET8FJGUJ4c',
+        ),
+      );
+      expect(controller.rawScannedReference, 'DET8FJGUJ4c');
+      controller.setReference('DET8FJGUJ4X');
+      expect(controller.rawScannedReference, isNull);
       controller.dispose();
     });
 

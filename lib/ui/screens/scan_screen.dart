@@ -8,12 +8,19 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/banks_registry.dart';
 import '../../core/models.dart';
+import '../../core/scan_input.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
 /// the frame" hint, green corner brackets, and Flash / Gallery buttons.
 ///
-/// Robust by design:
+/// Robust by design (approach learned from our stylepos counter scanner):
 ///   * explicit camera-permission flow (request, recover, open settings)
+///   * readings must agree before they are trusted — [ScanStabilizer]
+///     collapses the per-frame stream into one code and drops decoder-added
+///     trailing junk (the classic "…BEI" scanned as "…BEIc")
+///   * the accepted payload is sanitized ([sanitizeScannedCode]) — trailing
+///     punctuation and decoder-appended 'c'/'e' letters are removed when
+///     the shortened value still recognizes as a receipt
 ///   * recognizes every bank receipt QR we know (URLs, CBE ids, encrypted
 ///     BOA payloads, plain references) and pops with a [BankDetection]
 ///   * generic reference-shaped payloads pop with `bank: null` so the app
@@ -33,6 +40,7 @@ class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin {
   MobileScannerController? _controller;
   final ImagePicker _picker = ImagePicker();
+  final ScanStabilizer _stabilizer = ScanStabilizer();
   _CameraState _cameraState = _CameraState.checking;
   bool _handled = false;
   bool _torchOn = false;
@@ -70,7 +78,12 @@ class _ScanScreenState extends State<ScanScreen>
   void _startCamera() {
     _controller?.dispose();
     _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
+      // Every frame feeds the stabilizer, which needs repeated readings to
+      // separate a stable decode from decoder noise — so "normal" speed.
+      detectionSpeed: DetectionSpeed.normal,
+      // Receipts are QR codes; locking the format skips 1-D barcode
+      // misreads entirely and decodes faster.
+      formats: const [BarcodeFormat.qrCode],
       facing: CameraFacing.back,
       torchEnabled: false,
     );
@@ -93,26 +106,44 @@ class _ScanScreenState extends State<ScanScreen>
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue;
       if (raw == null || raw.trim().isEmpty) continue;
-      final detection = detectReceipt(raw);
-      if (detection == null) {
-        _showMessage(
-          'This QR is not a payment receipt. Scan the QR printed on a '
-          'payment receipt, or paste the receipt link or transaction number.',
-        );
-        continue;
-      }
-      if (detection.hint != null) {
-        // Real payload, but not a verifiable receipt (pay/request QR,
-        // phone-number code...). Teach, then keep scanning.
-        _showMessage(detection.hint!);
-        continue;
-      }
-      _handled = true;
-      HapticFeedback.heavyImpact();
-      if (mounted) Navigator.of(context).pop(detection);
-      return true;
+      // Only trust the reading once the camera stream stabilizes on it.
+      final stable = _stabilizer.feed(raw);
+      if (stable == null) continue;
+      if (_tryAccept(stable)) return true;
     }
     return _handled;
+  }
+
+  /// Sanitizes a trusted payload, runs receipt detection and pops with the
+  /// result — or shows guidance for payloads that are not receipts.
+  /// [rawPayload] keeps the untouched scan for the verification retry net.
+  bool _tryAccept(String payload) {
+    final clean = sanitizeScannedCode(payload);
+    final detection = detectReceipt(clean);
+    if (detection == null) {
+      _showMessage(
+        'This QR is not a payment receipt. Scan the QR printed on a '
+        'payment receipt, or paste the receipt link or transaction number.',
+      );
+      return false;
+    }
+    if (detection.hint != null) {
+      // Real payload, but not a verifiable receipt (pay/request QR,
+      // phone-number code...). Teach, then keep scanning.
+      _showMessage(detection.hint!);
+      return false;
+    }
+    _handled = true;
+    HapticFeedback.heavyImpact();
+    if (mounted) {
+      Navigator.of(context).pop(BankDetection(
+        bank: detection.bank,
+        reference: detection.reference,
+        accountNumber: detection.accountNumber,
+        rawPayload: payload.trim(),
+      ));
+    }
+    return true;
   }
 
   void _showMessage(String message) {
@@ -140,7 +171,15 @@ class _ScanScreenState extends State<ScanScreen>
       if (controller == null) return;
       final capture = await controller.analyzeImage(image.path);
       if (!mounted) return;
-      if (capture != null && _onDetect(capture)) return;
+      // Gallery images decode exactly once — accept directly, no need for
+      // the camera stream's stability rule.
+      if (capture != null) {
+        for (final barcode in capture.barcodes) {
+          final raw = barcode.rawValue;
+          if (raw == null || raw.trim().isEmpty) continue;
+          if (_tryAccept(raw)) return;
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,

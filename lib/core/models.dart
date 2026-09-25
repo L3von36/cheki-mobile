@@ -236,15 +236,21 @@ class BankDetection {
   /// Guidance shown when the payload is not a verifiable receipt.
   final String? hint;
 
+  /// The raw scanned payload BEFORE sanitization, when it came from the
+  /// camera. Kept so verification can retry with the untouched value when
+  /// the cleaned reference turns out to be not-found.
+  final String? rawPayload;
+
   const BankDetection({
     required this.bank,
     required this.reference,
     this.accountNumber,
     this.hint,
+    this.rawPayload,
   });
 
   @override
   String toString() =>
       'BankDetection(bank: $bank, reference: $reference, account: $accountNumber,'
-      'hint: $hint)';
+      'hint: $hint, rawPayload: $rawPayload)';
 }
