@@ -222,6 +222,10 @@ class MahtemBank {
 ///
 /// [bank] is null for generic QR payloads we cannot attribute to a bank —
 /// the flow then asks the user to pick one before verifying.
+///
+/// [hint] is set when the payload is real but NOT a verifiable receipt
+/// (e.g. a Telebirr pay-request QR or a phone-number code): the scanner
+/// shows the guidance instead of starting a verification.
 class BankDetection {
   final String? bank;
   final String reference;
@@ -229,13 +233,18 @@ class BankDetection {
   /// Account suffix parsed from CBE/BOA receipt URLs.
   final String? accountNumber;
 
+  /// Guidance shown when the payload is not a verifiable receipt.
+  final String? hint;
+
   const BankDetection({
     required this.bank,
     required this.reference,
     this.accountNumber,
+    this.hint,
   });
 
   @override
   String toString() =>
-      'BankDetection(bank: $bank, reference: $reference, account: $accountNumber)';
+      'BankDetection(bank: $bank, reference: $reference, account: $accountNumber,'
+      'hint: $hint)';
 }

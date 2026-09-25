@@ -44,7 +44,18 @@ String buildReceiptUrl({
       // some newer FT refs resolve there.
       return '$_cbeNewApi/$reference';
     case 'telebirr':
-      return 'https://transactioninfo.ethiotelecom.et/receipt/$reference';
+      final ref = reference.trim();
+      if (ref.toLowerCase().startsWith('http')) {
+        // A full receipt link was pasted as the reference — pull the
+        // transaction number out of any link shape we know.
+        final m = RegExp(r'/receipt/([^/?#]+)', caseSensitive: false)
+            .firstMatch(ref);
+        if (m != null) {
+          return 'https://transactioninfo.ethiotelecom.et/receipt/${m.group(1)}';
+        }
+        return ref;
+      }
+      return 'https://transactioninfo.ethiotelecom.et/receipt/$ref';
     case 'boa':
       final suffix = (accountNumber ?? '').trim();
       final last5 = suffix.length >= 5 ? suffix.substring(suffix.length - 5) : suffix;

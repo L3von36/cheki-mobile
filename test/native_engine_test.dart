@@ -333,9 +333,18 @@ void main() {
       expect(detection.reference, 'PAYOUT99231X');
     });
 
-    test('unrelated QR content is rejected', () {
-      expect(detectReceipt('WIFI:S:HomeNet;T:WPA;P:hunter2;;'), isNull);
-      expect(detectReceipt('BEGIN:VCARD'), isNull);
+    test('unrelated QR content gets targeted guidance, not silence', () {
+      // Non-receipt payloads used to be rejected with null; they now carry
+      // an explanatory hint so the scanner can teach instead of dead-end.
+      final wifi = detectReceipt('WIFI:S:HomeNet;T:WPA;P:hunter2;;');
+      expect(wifi, isNotNull);
+      expect(wifi!.bank, isNull);
+      expect(wifi.hint, kNotReceiptHint);
+
+      final vcard = detectReceipt('BEGIN:VCARD');
+      expect(vcard, isNotNull);
+      expect(vcard!.bank, isNull);
+      expect(vcard.hint, kNotReceiptHint);
     });
   });
 }

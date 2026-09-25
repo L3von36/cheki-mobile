@@ -84,24 +84,38 @@ class _ScanScreenState extends State<ScanScreen>
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_handled) return;
+  /// Returns true when the capture was consumed — either a receipt popped
+  /// the screen, or a guidance hint was shown for a non-receipt payload
+  /// (pay-request QR, phone-number QR...). The gallery picker uses this to
+  /// avoid covering the hint with its own "not found" message.
+  bool _onDetect(BarcodeCapture capture) {
+    if (_handled) return true;
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue;
       if (raw == null || raw.trim().isEmpty) continue;
       final detection = detectReceipt(raw);
       if (detection == null) {
-        _showUnrecognizedHint();
+        _showMessage(
+          'This QR is not a payment receipt. Scan the QR printed on a '
+          'payment receipt, or paste the receipt link or transaction number.',
+        );
+        continue;
+      }
+      if (detection.hint != null) {
+        // Real payload, but not a verifiable receipt (pay/request QR,
+        // phone-number code...). Teach, then keep scanning.
+        _showMessage(detection.hint!);
         continue;
       }
       _handled = true;
       HapticFeedback.heavyImpact();
       if (mounted) Navigator.of(context).pop(detection);
-      return;
+      return true;
     }
+    return _handled;
   }
 
-  void _showUnrecognizedHint() {
+  void _showMessage(String message) {
     final now = DateTime.now();
     if (now.difference(_lastHintAt) < const Duration(seconds: 3)) return;
     _lastHintAt = now;
@@ -109,12 +123,9 @@ class _ScanScreenState extends State<ScanScreen>
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(
-            'This QR code is not a supported payment receipt. '
-            'Try the receipt link or reference number instead.',
-          ),
+          content: Text(message),
         ),
       );
   }
@@ -129,10 +140,7 @@ class _ScanScreenState extends State<ScanScreen>
       if (controller == null) return;
       final capture = await controller.analyzeImage(image.path);
       if (!mounted) return;
-      if (capture != null) {
-        _onDetect(capture);
-        if (_handled) return;
-      }
+      if (capture != null && _onDetect(capture)) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -210,6 +218,18 @@ class _ScanScreenState extends State<ScanScreen>
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Use the QR printed on a payment receipt — '
+                    'not a pay or receive-money QR',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.1,
                     ),
                   ),
                 ],

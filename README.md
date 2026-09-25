@@ -29,12 +29,16 @@ No signup. No API key. No fees. No middleman server.
   non-Ethiopian server could never reach them).
 - **Verify any receipt** — paste a reference or a share link from SMS
 - **QR scan that works** — recognizes every receipt QR format we know:
-  bank links, CBE `mbreciept` ids, **encrypted BOA receipt QR payloads
-  (decrypted on-device)**, plain references — and generic reference codes
-  with a bank picker fallback. Camera permission is requested up front with
-  a clear recovery path if it was denied.
+  bank links (path, hash-route `#/receipt/…` and query `?id=…` forms), CBE
+  `mbreciept` ids, **encrypted BOA receipt QR payloads (decrypted
+  on-device)**, Telebirr `TPS…`/`DET…` references — even wrapped inside
+  share text or JSON — plus generic reference codes with a bank picker
+  fallback. Scanning never dead-ends: pay/request QRs and phone-number
+  codes get a clear "this is not a receipt" explanation instead of a
+  generic error. Camera permission is requested up front with a clear
+  recovery path if it was denied.
 - **Auto-detect bank** — the app recognizes the bank from the reference
-  format (CBE `FT…`, Telebirr `DET…`, Awash share segments, …)
+  format (CBE `FT…`, Telebirr `DET…`/`TPS…`, Awash share segments, …)
 - **Simple, focused UI** — one card: pick a bank, paste the reference,
   verify. No banners, no clutter. Light & dark themes.
 - **Payment History** — every check is saved on-device; tap an entry for

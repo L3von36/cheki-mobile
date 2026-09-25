@@ -183,23 +183,11 @@ class VerifyController extends ChangeNotifier {
   }
 
   MahtemBank? _detectBank(String value) {
-    final detection = detectBankFromUrl(value) ?? _detectPlain(value);
+    // detectReceipt covers every URL/QR/reference shape we know (hints are
+    // a scanner concern; pasted text just gets the bank, if any).
+    final detection = detectReceipt(value);
     if (detection == null || detection.bank == null) return null;
     return bankById(detection.bank == kCbeNewId ? 'cbe' : detection.bank!);
-  }
-
-  BankDetection? _detectPlain(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    // CBE new QR receipts encode a bare receipt ID (12 hex chars).
-    if (RegExp(r'^[0-9a-f]{12}$', caseSensitive: false).hasMatch(trimmed)) {
-      return BankDetection(bank: kCbeNewId, reference: trimmed);
-    }
-    final byRef = detectBankFromReference(trimmed);
-    if (byRef != null) {
-      return BankDetection(bank: byRef.bank.id, reference: byRef.reference);
-    }
-    return null;
   }
 
   @override
