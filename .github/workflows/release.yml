@@ -76,6 +76,12 @@ jobs:
           flutter build apk --release --split-per-abi \
             --obfuscate \
             --split-debug-info=build/symbols
+          # Modern Flutter no longer emits the fat APK from --split-per-abi,
+          # so build the universal one as a second pass (gradle cache makes
+          # this incremental).
+          flutter build apk --release \
+            --obfuscate \
+            --split-debug-info=build/symbols
 
       - name: Rename APKs with tag
         id: rename
