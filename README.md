@@ -92,9 +92,12 @@ Notes:
 ## Install
 
 Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/releases):
-1. Download `mahtem-vX.Y.Z.apk`
-2. Allow "Install unknown apps" if prompted
-3. Install & stamp your first receipt as verified
+1. Download **`mahtem-vX.Y.Z-arm64.apk`** — for almost every phone sold since
+   2016 (~2.5x smaller than the old universal APK)
+2. Very old phone? Use `mahtem-vX.Y.Z-arm32.apk`. Not sure?
+   `mahtem-vX.Y.Z-universal.apk` works on everything (larger download)
+3. Allow "Install unknown apps" if prompted
+4. Install & stamp your first receipt as verified
 
 > **Upgrading from v1.3.0 or earlier (installed as "Cheki")?** The app was
 > fully rebranded in v1.4.0 — new name, new icon, new app id

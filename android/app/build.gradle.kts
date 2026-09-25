@@ -59,6 +59,16 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+
+            // Shrink the Java/Kotlin side with R8 and drop unused resources.
+            // (Dart code is already AOT-compiled; the big win comes from the
+            // per-ABI APK splits done by `flutter build apk --split-per-abi`.)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
