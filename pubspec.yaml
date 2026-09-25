@@ -1,0 +1,29 @@
+name: cheki_mobile
+description: >-
+  Cheki for Android — free Ethiopian bank receipt verification. Verify CBE,
+  Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen, CBE Birr, Siinqee and eBirr
+  payment receipts in seconds. No signup, no API key, no fees.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  http: ^1.4.0
+  intl: ^0.20.2
+  mobile_scanner: ^7.0.1
+  provider: ^6.1.2
+  share_plus: ^11.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
