@@ -5,7 +5,7 @@ import 'package:mahtem/core/receipt_verify/models.dart';
 
 ReceiptData _receipt({
   String bankCode = 'telebirr',
-  double? amount = 150,
+  double? amount = 10,
   String? receiverAccount = '989680816',
   String? receiverName = 'NOVEL WOLDE MICHAEL',
   String? date = '20-09-2026 12:00:00',
@@ -50,12 +50,12 @@ void main() {
 
   group('planDaysForAmount', () {
     test('exact plan prices unlock their plan', () {
-      expect(planDaysForAmount(150), kMonthlyPlanDays);
-      expect(planDaysForAmount(1200), kYearlyPlanDays);
+      expect(planDaysForAmount(10), kMonthlyPlanDays);
+      expect(planDaysForAmount(100), kYearlyPlanDays);
     });
 
     test('anything else unlocks nothing', () {
-      expect(planDaysForAmount(150.5), isNull);
+      expect(planDaysForAmount(10.5), isNull);
       expect(planDaysForAmount(99), isNull);
       expect(planDaysForAmount(null), isNull);
     });
@@ -93,13 +93,13 @@ void main() {
       final out = evaluateActivationReceipt(_receipt(), now: now);
       expect(out, isA<ReceiptActivationAccepted>());
       final ok = out as ReceiptActivationAccepted;
-      expect(ok.amountEtb, 150);
+      expect(ok.amountEtb, 10);
       expect(ok.planDays, kMonthlyPlanDays);
     });
 
     test('a yearly payment is accepted for the yearly plan', () {
       final out = evaluateActivationReceipt(
-          _receipt(amount: 1200), now: now);
+          _receipt(amount: 100), now: now);
       expect(out, isA<ReceiptActivationAccepted>());
       expect((out as ReceiptActivationAccepted).planDays, kYearlyPlanDays);
     });
@@ -111,9 +111,10 @@ void main() {
     });
 
     test('a wrong amount is rejected with the expected price', () {
-      final out = evaluateActivationReceipt(_receipt(amount: 100), now: now);
+      final out = evaluateActivationReceipt(_receipt(amount: 50), now: now);
       expect(out, isA<ReceiptActivationRejected>());
-      expect((out as ReceiptActivationRejected).message, contains('150'));
+      expect((out as ReceiptActivationRejected).message,
+          contains('exactly 10 ETB'));
     });
 
     test('a missing amount is rejected', () {

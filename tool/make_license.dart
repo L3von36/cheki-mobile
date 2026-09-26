@@ -5,7 +5,7 @@
 ///   dart run tool/make_license.dart MAH-7Q2M4VB --days 7     # custom
 ///
 /// The device code comes from the customer's paywall screen; the payment
-/// (150 ETB/month) is confirmed by YOU on Telebirr first. The signing seed
+/// (10 ETB/month) is confirmed by YOU on Telebirr first. The signing seed
 /// lives in tool/license_secret.key — keep it private and BACKED UP; anyone
 /// holding it can mint free codes.
 library;

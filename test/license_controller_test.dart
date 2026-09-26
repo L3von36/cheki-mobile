@@ -35,9 +35,9 @@ LicenseController _controller(
 }
 
 /// A verified Telebirr receipt the fake engine hands back: a genuine
-/// 150 ETB payment to the owner, paid 2026-09-20 (fresh vs the clock).
+/// 10 ETB payment to the owner, paid 2026-09-20 (fresh vs the clock).
 ReceiptData _paidReceipt({
-  double amount = 150,
+  double amount = 10,
   String invoice = 'CHQ261Z4AB2C',
   String receiverAccount = '989680816',
   String receiverName = 'NOVEL WOLDE MICHAEL',
@@ -204,7 +204,7 @@ void main() {
   });
 
   group('receipt self-activation', () {
-    test('a genuine 150 ETB receipt to the owner unlocks instantly',
+    test('a genuine 10 ETB receipt to the owner unlocks instantly',
         () async {
       final (store, now) = fixtures();
       VerifyInput? seen;
@@ -260,13 +260,14 @@ void main() {
         now: now,
         publicKeyHex: await publicKeyHexFuture,
         verifier: (_) async =>
-            VerifyResult.receipt(_paidReceipt(amount: 100), 10),
+            VerifyResult.receipt(_paidReceipt(amount: 50), 10),
       );
       await c.ensureLoaded();
 
       final out = await c.activateWithReceipt('CHQ261Z4AB2C');
       expect(out, isA<ReceiptActivationRejected>());
-      expect((out as ReceiptActivationRejected).message, contains('150'));
+      expect((out as ReceiptActivationRejected).message,
+          contains('exactly 10 ETB'));
       expect(c.isEntitled, isFalse);
       // Trials were untouched — the user can still fall back to them.
       expect(c.canVerifyNow, isTrue);
@@ -276,7 +277,7 @@ void main() {
         now: now,
         publicKeyHex: await publicKeyHexFuture,
         verifier: (_) async =>
-            VerifyResult.receipt(_paidReceipt(amount: 100), 10),
+            VerifyResult.receipt(_paidReceipt(amount: 50), 10),
       );
       await c2.ensureLoaded();
       expect(c2.isEntitled, isFalse);

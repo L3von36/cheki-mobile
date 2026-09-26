@@ -25,7 +25,7 @@ No signup. No API key. No middleman server. Your first 5 checks are free.
 
 - **5 free checks, then Mahtem Pro** — every install verifies 5 receipts
   for free. After that an in-app subscription unlocks unlimited checks
-  (150 ETB/month or 1200 ETB/year): pay via Telebirr to the owner's
+  (10 ETB/month or 100 ETB/year): pay via Telebirr to the owner's
   account, paste the receipt number from the confirmation SMS, and the
   app verifies that receipt with its own engine — amount and recipient
   are checked against the plan — and unlocks instantly. Zero human in the

@@ -8,7 +8,7 @@
 ///
 ///   * the receipt exists at Telebirr (verified live),
 ///   * the transaction completed successfully,
-///   * the settled amount equals a plan price exactly (150 / 1200 ETB),
+///   * the settled amount equals a plan price exactly (10 / 100 ETB),
 ///   * the money went to the owner (credited account digits or name),
 ///   * the receipt is fresh (paid within the last few days).
 ///

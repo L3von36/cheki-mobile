@@ -16,9 +16,9 @@ const String kPayTelebirrName = 'Novel Wolde Michael';
 
 /// Pricing. A receipt unlocks the matching plan by its EXACT settled
 /// amount — see `receipt_activation.dart`.
-const int kMonthlyPriceEtb = 150;
+const int kMonthlyPriceEtb = 10;
 const int kMonthlyPlanDays = 31;
-const int kYearlyPriceEtb = 1200;
+const int kYearlyPriceEtb = 100;
 const int kYearlyPlanDays = 366;
 
 /// How many days back a payment receipt may still be used to activate
