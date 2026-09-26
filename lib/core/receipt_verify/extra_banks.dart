@@ -1,24 +1,29 @@
-/// App-side bank additions: Wegagen Bank and Amhara Bank.
+/// App-side bank additions: Wegagen Bank, Amhara Bank and Awash Bank.
 ///
 /// The stylepos engine files (`verifier.dart`, `parsers.dart`, `models.dart`)
 /// stay VERBATIM — this additive module extends them without touching a
 /// line:
 ///
 ///   * two extra [BankInfo] catalog entries + a combined catalog
-///     ([kAllVerifyBanks] / [bankByIdAll]),
+///     ([kAllVerifyBanks] / [bankByIdAll]) — Awash itself is already in the
+///     engine catalog, so no third entry is needed,
 ///   * URL detection for the banks' own share links
 ///     ([detectExtraBankFromUrl], runs before the engine detector),
 ///   * a verifier ([verifyExtraBank]) the controller routes `wegagen` /
-///     `amhara` inputs to, using the same HTTP client factory.
+///     `amhara` / `awash` inputs to, using the same HTTP client factory.
 ///
-/// Endpoints (both behind the banks' own React receipt pages — we call the
-/// JSON APIs the pages themselves call):
+/// Endpoints (behind the banks' own React receipt pages — we call the APIs
+/// the pages themselves call):
 ///
 ///   * Wegagen  — `https://transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/{id}`
 ///     where `{id}` is the full token in the shared
 ///     `transinfo.wegagenbanksc.com.et:8183/?id=…` receipt link.
 ///   * Amhara   — `https://transaction.amharabank.com.et/{trx}` where `{trx}`
 ///     is the `FT…` number of the `receipt.amharabank.com.et/?trx=…` link.
+///   * Awash    — `https://awashpay.awashbank.com:8225/{token}` — the EXACT
+///     token as shared, leading dash included. The engine's own detector
+///     strips that dash and the bank then answers 403, which is why Awash
+///     receipts failed before this module took the bank over.
 library;
 
 import 'dart:convert';
@@ -58,7 +63,8 @@ const BankInfo kAmharaBank = BankInfo(
       'the shared receipt link.',
 );
 
-/// The two new entries, appended after the stylepos catalog.
+/// The two new entries, appended after the stylepos catalog (Awash already
+/// ships inside the engine catalog — see [detectExtraBankFromUrl]).
 const List<BankInfo> kExtraBanks = [kWegagenBank, kAmharaBank];
 
 /// Full catalog: the verbatim stylepos list first, then the extras.
@@ -73,8 +79,10 @@ BankInfo? bankByIdAll(String id) {
 }
 
 /// True when [id] must be verified by [verifyExtraBank] instead of the
-/// stylepos verifier.
-bool isExtraBank(String id) => id == 'wegagen' || id == 'amhara';
+/// stylepos verifier. Awash is included even though its catalog entry comes
+/// from the engine — its share links need the dash-preserving detection and
+/// the 403-tolerant fetch below.
+bool isExtraBank(String id) => id == 'wegagen' || id == 'amhara' || id == 'awash';
 
 // ---------------------------------------------------------------------------
 // URL detection
@@ -104,6 +112,20 @@ UrlDetection? detectExtraBankFromUrl(String input) {
   ).firstMatch(text);
   if (am != null) return UrlDetection('amhara', am.group(1)!);
 
+  // Awash: https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG — the
+  // token is PATH-styled and its LEADING DASH IS PART OF IT. The bank
+  // answers 403 for the dash-stripped variant, so the token is kept
+  // verbatim (only trailing punctuation from prose pastes is trimmed).
+  // This must run before the engine detector, which strips the dash.
+  final aw = RegExp(
+    r'awashbank\.com(?::\d+)?/(-?[A-Za-z0-9][A-Za-z0-9_-]{6,})',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (aw != null) {
+    final ref = aw.group(1)!.replaceFirst(RegExp(r'[.,;:!?\])}]+$'), '');
+    if (ref.isNotEmpty) return UrlDetection('awash', ref);
+  }
+
   if (!looksLikeUrl(text)) return null;
   final uri = Uri.tryParse(text);
   if (uri == null || uri.host.isEmpty) return null;
@@ -127,6 +149,14 @@ UrlDetection? detectExtraBankFromUrl(String input) {
     if (segments.isNotEmpty &&
         RegExp(r'^[A-Za-z0-9]{6,}$').hasMatch(segments.last)) {
       return UrlDetection('amhara', segments.last);
+    }
+  }
+
+  if (host.endsWith('.awashbank.com') || host == 'awashbank.com') {
+    final segments = uri.pathSegments;
+    if (segments.isNotEmpty &&
+        RegExp(r'^-?[A-Za-z0-9][A-Za-z0-9_-]{6,}$').hasMatch(segments.last)) {
+      return UrlDetection('awash', segments.last);
     }
   }
 
@@ -215,6 +245,32 @@ ReceiptData? parseWegagenReceiptJson(String body) {
         _clean(decoded['paymentMethod'] as String?),
     transactionStatus: _clean(decoded['messageStatus'] as String?),
     invoiceNumber: ref,
+  );
+}
+
+/// Parses the engine's [parseAwashHtml] outcome into a [ReceiptData].
+/// Returns null when the page did not yield a complete receipt.
+ReceiptData? parseAwashPage(Parsed parsed, String fallbackReference) {
+  if (!parsed.verified) return null;
+  final bank = bankByIdAll('awash')!;
+  return ReceiptData(
+    verified: true,
+    bankCode: bank.id,
+    bankName: bank.name,
+    reference: parsed.reference ?? fallbackReference,
+    senderName: parsed.senderName,
+    senderAccount: parsed.senderAccount,
+    receiverName: parsed.receiverName,
+    receiverAccount: parsed.receiverAccount,
+    amount: parsed.amount,
+    currency: parsed.currency,
+    date: parsed.date,
+    branch: parsed.branch,
+    reason: parsed.reason,
+    transactionType: parsed.transactionType,
+    transactionStatus: parsed.transactionStatus,
+    invoiceNumber: parsed.invoiceNumber ?? parsed.reference ?? fallbackReference,
+    note: parsed.note,
   );
 }
 
@@ -310,6 +366,28 @@ Future<ExtraHttpResponse> _defaultHttp(Uri uri, Map<String, String> headers) asy
   }
 }
 
+/// Amhara's API reports references it cannot serve as
+/// `{"status":false,"message":…}`. Returns a user-ready message when [body]
+/// is such a definitive answer, null otherwise (the caller keeps its retry
+/// path for transport-level failures).
+String? _amharaServiceRejection(String body) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } catch (_) {
+    return null;
+  }
+  if (decoded is! Map) return null;
+  final flag = decoded['status'];
+  final rejected = flag == false || flag.toString().toLowerCase() == 'false';
+  if (!rejected) return null;
+  final message = decoded['message']?.toString().trim() ?? '';
+  if (message.isEmpty) return null;
+  return 'Amhara Bank\u2019s receipt service could not return this transaction '
+      '(it answered: \u201c$message\u201d). The number may be wrong, or this transfer '
+      'was made inside the ABa app and never got a web receipt.';
+}
+
 /// Verifies Wegagen / Amhara receipts — the controller routes inputs whose
 /// bankId passes [isExtraBank] here, everything else stays in the verbatim
 /// stylepos verifier. Failure shapes (not-found messages, tips, retries)
@@ -321,7 +399,19 @@ Future<VerifyResult> verifyExtraBank(
   final sw = Stopwatch()..start();
   final bankId = input.bankId;
   final bank = bankByIdAll(bankId);
-  final reference = input.reference.trim();
+  var reference = input.reference.trim();
+
+  // Pasted links can arrive with the FULL URL still in the reference field
+  // (the home-screen paste path keeps the text as typed; the engine
+  // verifier re-extracts the reference from links itself). Mirror that
+  // here: pull the token back out before building the request URI. Only an
+  // extraction that agrees with the selected bank is adopted — anything
+  // else keeps the raw input and fails honestly below.
+  final extracted =
+      detectExtraBankFromUrl(reference) ?? detectBankFromUrl(reference);
+  if (extracted != null && extracted.bank == bankId) {
+    reference = extracted.reference;
+  }
 
   VerifyFailure failure(String message, {List<String> tips = const []}) =>
       VerifyFailure(VerifyErrorKind.network, message, tips: tips);
@@ -345,22 +435,84 @@ Future<VerifyResult> verifyExtraBank(
     );
   }
 
-  final uri = bankId == 'wegagen'
-      ? Uri.parse(
-          'https://transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/$reference')
-      : Uri.parse(
-          'https://transaction.amharabank.com.et/${Uri.encodeQueryComponent(reference)}');
+  final uri = switch (bankId) {
+    'wegagen' => Uri.parse(
+        'https://transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/$reference'),
+    'awash' => Uri.parse('https://awashpay.awashbank.com:8225/$reference'),
+    _ => Uri.parse(
+        'https://transaction.amharabank.com.et/${Uri.encodeQueryComponent(reference)}'),
+  };
 
   final fetch = httpFn ?? _defaultHttp;
   final headers = <String, String>{
     'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Accept': 'application/json',
+    'Accept': bankId == 'awash'
+        ? 'text/html,application/xhtml+xml,application/json,*/*'
+        : 'application/json',
   };
 
   for (var attempt = 0; attempt <= 2; attempt++) {
     try {
-      final resp = await fetch(uri, headers);
+      var resp = await fetch(uri, headers);
+
+      // Awash answers 403 for a token shape it does not recognise. Shared
+      // links carry a LEADING DASH as part of the token (the engine's own
+      // detector strips it — that exact bug made every Awash receipt
+      // fail), while a token typed by hand omits it. When the first shape
+      // is rejected, try the flipped one once before giving up.
+      if (bankId == 'awash' && resp.statusCode == 403) {
+        final flipped =
+            reference.startsWith('-') ? reference.substring(1) : '-$reference';
+        if (flipped.isNotEmpty && flipped != '-') {
+          resp = await fetch(
+            Uri.parse('https://awashpay.awashbank.com:8225/$flipped'),
+            headers,
+          );
+        }
+      }
+
+      // Amhara's API reports references it cannot serve as
+      // {"status":false,"message":…} with odd status codes (HTTP 500 —
+      // including for numbers that simply do not exist, and for in-app MB
+      // transfers that never get a web receipt). Retrying cannot help and
+      // the generic fallback blames the user's internet — answer with the
+      // truth instead.
+      if (bankId == 'amhara' &&
+          resp.statusCode != 200 &&
+          resp.statusCode != 404) {
+        final body = utf8.decode(resp.bodyBytes, allowMalformed: true);
+        final rejection = _amharaServiceRejection(body);
+        if (rejection != null) {
+          return VerifyResult.failed(
+            VerifyFailure(
+              VerifyErrorKind.notFound,
+              rejection,
+              tips: const [
+                'Double-check every character of the transaction number.',
+                'Ask the sender to re-share the receipt link from the ABa app.',
+              ],
+            ),
+            sw.elapsedMilliseconds,
+          );
+        }
+      }
+
+      // Awash returns 403 (not 404) for links it will not serve — an
+      // unknown, expired, or mistyped token.
+      if (bankId == 'awash' && resp.statusCode == 403) {
+        return VerifyResult.failed(
+          VerifyFailure(
+            VerifyErrorKind.notFound,
+            'No receipt found for this link at ${bank.name}.',
+            tips: const [
+              'Paste the link exactly as the sender shared it.',
+              'Ask the sender to re-share the receipt from the Awash app.',
+            ],
+          ),
+          sw.elapsedMilliseconds,
+        );
+      }
       if (resp.statusCode == 404) {
         return VerifyResult.failed(
           VerifyFailure(
@@ -386,6 +538,25 @@ Future<VerifyResult> verifyExtraBank(
                 tips: const [
                   'Double-check every character of the reference.',
                   'Ask the sender to re-share the receipt link.',
+                ],
+              ),
+              sw.elapsedMilliseconds,
+            );
+          }
+          return VerifyResult.receipt(receipt, sw.elapsedMilliseconds);
+        }
+
+        if (bankId == 'awash') {
+          final body = utf8.decode(resp.bodyBytes, allowMalformed: true);
+          final receipt = parseAwashPage(parseAwashHtml(body), reference);
+          if (receipt == null) {
+            return VerifyResult.failed(
+              VerifyFailure(
+                VerifyErrorKind.notFound,
+                'No receipt found for this link at ${bank.name}.',
+                tips: const [
+                  'Paste the link exactly as the sender shared it.',
+                  'Ask the sender to re-share the receipt from the Awash app.',
                 ],
               ),
               sw.elapsedMilliseconds,

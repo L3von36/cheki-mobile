@@ -4,6 +4,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/core/receipt_verify/extra_banks.dart';
@@ -72,6 +73,7 @@ void main() {
       expect(bankByIdAll('nope'), isNull);
       expect(isExtraBank('wegagen'), isTrue);
       expect(isExtraBank('amhara'), isTrue);
+      expect(isExtraBank('awash'), isTrue); // engine entry, app-layer verifier
       expect(isExtraBank('cbe'), isFalse);
     });
   });
@@ -108,11 +110,31 @@ void main() {
 
     test('leaves every other bank to the engine detector', () {
       expect(detectExtraBankFromUrl(
-          'https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG'), isNull);
-      expect(detectExtraBankFromUrl(
           'https://mbreciept.cbe.com.et/abc123'), isNull);
       expect(detectExtraBankFromUrl('FT262507XG9T'), isNull);
       expect(detectExtraBankFromUrl(''), isNull);
+    });
+
+    test('reads the Awash share link and KEEPS the leading dash', () {
+      final d = detectExtraBankFromUrl(
+          'https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG');
+      expect(d!.bank, 'awash');
+      // The dash is part of the token — stripping it makes the bank 403.
+      expect(d.reference, '-2KHIQYW30P-5VQUNG');
+    });
+
+    test('reads a dash-less Awash token and trims prose punctuation', () {
+      final d = detectExtraBankFromUrl(
+          'Payment done https://awashpay.awashbank.com:8225/2KHIQYW30P5VQUNG.');
+      expect(d!.bank, 'awash');
+      expect(d.reference, '2KHIQYW30P5VQUNG');
+    });
+
+    test('Awash detection also works via the host fallback', () {
+      final d = detectExtraBankFromUrl(
+          'https://awashpay.awashbank.com/-3ABCDEF123456');
+      expect(d!.bank, 'awash');
+      expect(d.reference, '-3ABCDEF123456');
     });
   });
 
@@ -297,6 +319,113 @@ void main() {
     });
   });
 
+  group('verifyExtraBank — Awash', () {
+    // Real page captured from awashpay.awashbank.com:8225 (Sep 2026).
+    final awashHtml =
+        File('test/fixtures/awash_receipt.html').readAsStringSync();
+
+    test('parses the real receipt page end-to-end', () async {
+      final seen = <Uri?>[];
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'awash', reference: '-2KHIQYW30P-5VQUNG'),
+        httpFn: (uri, headers) async {
+          seen.add(uri);
+          return ExtraHttpResponse(200, utf8.encode(awashHtml));
+        },
+      );
+      expect(res.ok, isTrue);
+      final r = res.receipt!;
+      expect(r.bankCode, 'awash');
+      expect(r.bankName, 'Awash Bank');
+      expect(r.reference, '260915115082057'); // Transaction ID on the page
+      expect(r.senderName, 'SERAWIT ASEBELIGN MOKONNEN');
+      expect(r.senderAccount, '01320******402/BANK');
+      expect(r.receiverName, 'FIREHIWOT KEBEDE'); // Merchant
+      expect(r.receiverAccount, '68048000'); // Till Number
+      expect(r.amount, 100.0);
+      expect(r.currency, 'ETB');
+      expect(r.date, '2026-09-15 11:50:07');
+      expect(r.transactionType, 'Merchant Payment');
+      // The request must carry the token EXACTLY as shared (dash kept).
+      expect(
+          seen.single!.toString(),
+          'https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG');
+    });
+
+    test('a dash-less token retries once with the dash prepended', () async {
+      final urls = <Uri>[];
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'awash', reference: '2KHIQYW30P5VQUNG'),
+        httpFn: (uri, headers) async {
+          urls.add(uri);
+          if (uri.pathSegments.last == '-2KHIQYW30P5VQUNG') {
+            return ExtraHttpResponse(200, utf8.encode(awashHtml));
+          }
+          return const ExtraHttpResponse(403, []); // dash-less: 403
+        },
+      );
+      expect(res.ok, isTrue);
+      expect(res.receipt!.amount, 100.0);
+      expect(urls, hasLength(2));
+      expect(urls.last.pathSegments.last, '-2KHIQYW30P5VQUNG');
+    });
+
+    test('403 for both dash shapes maps to not-found', () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'awash', reference: '-UNKNOWN000000'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return const ExtraHttpResponse(403, []);
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message, contains('No receipt found'));
+      expect(calls, 2); // as-shared then flipped — no 5xx retry storm
+    });
+  });
+
+  group('verifyExtraBank — Amhara service rejections', () {
+    test('HTTP 500 status:false maps to an honest message, no retries',
+        () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'amhara', reference: 'FT262478FQ3P'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return ExtraHttpResponse(
+              500,
+              utf8.encode(
+                  '{"status":false,"message":"Internal server error."}'));
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message,
+          contains('receipt service could not return this transaction'));
+      expect(res.failure!.message, contains('Internal server error.'));
+      expect(res.failure!.message, contains('never got a web receipt'));
+      expect(calls, 1); // definitive answer — no retry storm
+    });
+
+    test('a 5xx without the status:false JSON keeps the retry path',
+        () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'amhara', reference: 'FT262507XG9T'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return ExtraHttpResponse(500, utf8.encode('<html>boom</html>'));
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.network);
+      expect(calls, 3);
+    });
+  });
+
   group('controller routing', () {
     test('a pasted Wegagen link auto-detects and verifies through the '
         'extra verifier', () async {
@@ -320,6 +449,76 @@ void main() {
       expect(seen!.bankId, 'wegagen');
       expect(seen!.reference, '150TBAW2626221151113DAAT');
       expect(c.result!.failure!.kind, VerifyErrorKind.notFound);
+    });
+
+    test('a pasted Awash link auto-detects; the verifier extracts the token',
+        () async {
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.failed(
+            const VerifyFailure(VerifyErrorKind.notFound, 'x'),
+            5,
+          );
+        },
+      );
+      // setReference (the paste path) keeps the URL as typed — the bank is
+      // detected and the EXTRA VERIFIER extracts the token from it.
+      c.setReference(
+          'https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG');
+      expect(c.detectedBank!.id, 'awash');
+      expect(c.canVerify, isTrue);
+
+      await c.verify();
+      expect(seen!.bankId, 'awash');
+      expect(seen!.reference, '-2KHIQYW30P-5VQUNG');
+      expect(c.result!.failure!.kind, VerifyErrorKind.notFound);
+    });
+
+    test('a pasted Wegagen link verifies even with the full URL in the field',
+        () async {
+      // Regression: the home-screen paste path used to hand the FULL URL to
+      // the verifier, which then called …/txn/https://… and always failed.
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.receipt(
+            parseWegagenReceiptJson(_wegagenJson)!,
+            5,
+          );
+        },
+      );
+      c.setReference(
+          'https://transinfo.wegagenbanksc.com.et:8183/?id=150TBAW2626221151113DAAT');
+      expect(c.detectedBank!.id, 'wegagen');
+      expect(c.canVerify, isTrue);
+
+      final res = await c.verify();
+      expect(seen!.bankId, 'wegagen');
+      expect(seen!.reference, '150TBAW2626221151113DAAT');
+      expect(res!.ok, isTrue);
+    });
+
+    test('a pasted Amhara link verifies even with the full URL in the field',
+        () async {
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.receipt(
+            parseAmharaReceiptJson(_amharaOutgoingJson).receipt!,
+            5,
+          );
+        },
+      );
+      c.setReference('https://receipt.amharabank.com.et/?trx=FT262507XG9T');
+      expect(c.detectedBank!.id, 'amhara');
+
+      final res = await c.verify();
+      expect(seen!.reference, 'FT262507XG9T');
+      expect(res!.ok, isTrue);
     });
 
     test('a manually picked Amhara bank routes to the extra verifier',

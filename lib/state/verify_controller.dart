@@ -101,9 +101,19 @@ class VerifyController extends ChangeNotifier {
     rawScannedReference = null;
     if (looksLikeUrl(value)) {
       final detected = _detect(value);
-      detectedBank = detected == null ? null : bankByIdAll(detected.bank);
-      if (detected != null && detected.account != null) {
-        accountNumber = detected.account!;
+      final info = detected == null ? null : bankByIdAll(detected.bank);
+      detectedBank = info;
+      if (detected != null && info != null) {
+        // Store the extracted token (like applyScan does) so the verifier
+        // gets a clean reference — the field keeps showing the pasted link
+        // until the next sync, but the verification itself uses the token.
+        // Regression guard: handing the FULL URL to the extra-bank
+        // verifier used to make every pasted Wegagen/Amhara/Awash link
+        // fail against the bank API.
+        reference = detected.reference;
+        if (detected.account != null) {
+          accountNumber = detected.account!;
+        }
       }
     } else {
       detectedBank = null;
@@ -131,7 +141,9 @@ class VerifyController extends ChangeNotifier {
     if (bank == null) {
       // Back to auto: re-detect from the current input.
       final detected = looksLikeUrl(reference) ? _detect(reference) : null;
-      detectedBank = detected == null ? null : bankByIdAll(detected.bank);
+      final info = detected == null ? null : bankByIdAll(detected.bank);
+      detectedBank = info;
+      if (detected != null && info != null) reference = detected.reference;
     }
     notifyListeners();
   }
