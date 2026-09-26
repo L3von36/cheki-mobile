@@ -24,12 +24,16 @@ No signup. No API key. No middleman server. Your first 5 checks are free.
 ## Features
 
 - **5 free checks, then Mahtem Pro** — every install verifies 5 receipts
-  for free. After that a one-time in-app activation unlocks unlimited
-  checks (150 ETB/month): pay via Telebirr, send your device code + receipt
-  on Telegram, paste the activation code back. Codes are Ed25519-signed,
-  bound to the device that paid and carry their own expiry — fully offline
-  verification, no server needed (`lib/core/licensing/`, owner-side code
-  generator in `tool/make_license.dart`).
+  for free. After that an in-app subscription unlocks unlimited checks
+  (150 ETB/month or 1200 ETB/year): pay via Telebirr to the owner's
+  account, paste the receipt number from the confirmation SMS, and the
+  app verifies that receipt with its own engine — amount and recipient
+  are checked against the plan — and unlocks instantly. Zero human in the
+  loop. Anti-abuse: each receipt grants one plan on one device, used
+  receipts are remembered, and stale receipts are refused. Owner-minted
+  activation codes (Ed25519-signed, device-bound, offline verification)
+  remain available as a fallback (`lib/core/licensing/`, code generator
+  in `tool/make_license.dart`).
 
 - **Proven stylepos verification engine** — the app talks to each bank's
   public receipt endpoint straight from your phone, using the same verifier

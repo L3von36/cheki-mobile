@@ -3,23 +3,27 @@
 /// from here, so one edit rebrands the whole flow.
 library;
 
-/// Telebirr account that receives the 150 ETB/month payments.
-const String kPayTelebirrNumber = '09XX-XXX-XXX'; // TODO(owner): your number
+/// Telebirr account that receives the plan payments. Shown on the paywall.
+const String kPayTelebirrNumber = '+251 98 968 0816';
 
-/// Name shown on that Telebirr account (so users know it is yours).
-const String kPayTelebirrName = 'Mahtem';
+/// Machine-readable digits of that number — a receipt only counts as a
+/// valid payment when the credited account ends with these digits.
+const String kPayTelebirrDigits = '989680816';
 
-/// Where users send the device code + payment receipt and receive their
-/// activation code (Telegram is the usual channel).
-const String kSupportTelegram = '@your_handle'; // TODO(owner): your handle
+/// Name registered on that Telebirr account (also how the receipt's
+/// "Credited Party name" is matched).
+const String kPayTelebirrName = 'Novel Wolde Michael';
 
-const String kSupportTelegramLink = 'https://t.me/your_handle';
-
-/// Pricing.
+/// Pricing. A receipt unlocks the matching plan by its EXACT settled
+/// amount — see `receipt_activation.dart`.
 const int kMonthlyPriceEtb = 150;
 const int kMonthlyPlanDays = 31;
 const int kYearlyPriceEtb = 1200;
 const int kYearlyPlanDays = 366;
+
+/// How many days back a payment receipt may still be used to activate
+/// (users activate right after paying; older receipts are stale).
+const int kActivationReceiptMaxAgeDays = 7;
 
 /// Free checks before the paywall appears.
 const int kFreeTrialChecks = 5;

@@ -3,19 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/licensing/license.dart';
 import '../../core/licensing/paywall_config.dart';
+import '../../core/licensing/receipt_activation.dart';
 import '../../state/license_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../widgets/confetti.dart';
 import '../widgets/pressable.dart';
 
-/// The paywall: shows the trial status, the Telebirr payment instructions,
-/// THIS device's code (needed to mint a license) and the activation box.
+/// The paywall: trial status, the Telebirr payment details and the
+/// self-activation box — the user pays the plan price, pastes the receipt
+/// number from the confirmation SMS, and the app verifies that receipt
+/// with its own engine and unlocks itself. No code, no chat app.
 ///
-/// Pops `true` when a license was activated, so the caller can resume the
+/// The owner-minted activation code stays as a fallback for edge cases
+/// (failed receipt checks, gifts, support).
+///
+/// Pops `true` when a plan was activated, so the caller can resume the
 /// verification the user was trying to run.
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key});
@@ -25,9 +30,13 @@ class PaywallScreen extends StatefulWidget {
 }
 
 class _PaywallScreenState extends State<PaywallScreen> {
+  final _receiptCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
-  bool _activating = false;
-  String? _error;
+  bool _checking = false; // receipt self-activation in flight
+  bool _activating = false; // code fallback in flight
+  String? _error; // receipt path
+  String? _codeError; // code path
+  bool _showCodeFallback = false;
   bool _celebrated = false;
 
   @override
@@ -38,50 +47,76 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   @override
   void dispose() {
+    _receiptCtrl.dispose();
     _codeCtrl.dispose();
     super.dispose();
   }
+
+  // ── self-activation: pay → paste receipt number → app verifies it ────────
+
+  Future<void> _verifyAndActivate() async {
+    if (_checking) return;
+    final raw = _receiptCtrl.text;
+    if (raw.trim().isEmpty) {
+      setState(() =>
+          _error = 'Paste the receipt number from the Telebirr SMS.');
+      return;
+    }
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    final outcome =
+        await context.read<LicenseController>().activateWithReceipt(raw);
+    if (!mounted) return;
+    setState(() => _checking = false);
+
+    if (outcome is ReceiptActivationSuccess) {
+      await _celebrate(outcome.expiryUtc);
+      return;
+    }
+    if (outcome is ReceiptActivationRejected) {
+      setState(() => _error = outcome.message);
+    } else if (outcome is ReceiptActivationError) {
+      final failure = outcome.failure;
+      final tip = failure.tips.isEmpty ? '' : ' ${failure.tips.first}';
+      setState(() => _error = '${failure.message}$tip');
+    }
+    unawaited(HapticFeedback.vibrate());
+  }
+
+  // ── fallback: owner-minted activation code ────────────────────────────────
 
   Future<void> _activate() async {
     if (_activating) return;
     final controller = context.read<LicenseController>();
     final raw = _codeCtrl.text;
     if (raw.trim().isEmpty) {
-      setState(() => _error = 'Paste the activation code you received.');
+      setState(() => _codeError = 'Paste the activation code you received.');
       return;
     }
     setState(() {
       _activating = true;
-      _error = null;
+      _codeError = null;
     });
     final validation = await controller.activate(raw);
     if (!mounted) return;
     setState(() => _activating = false);
 
     if (validation is LicenseValid) {
-      setState(() => _celebrated = true);
-      unawaited(HapticFeedback.heavyImpact());
-      final until = _fmt(validation.expiryUtc);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: MahtemPalette.greenDeep,
-        content: Text('Mahtem Pro is active until $until 🎉'),
-      ));
-      await Future<void>.delayed(const Duration(milliseconds: 900));
-      if (mounted) Navigator.of(context).pop(true);
+      await _celebrate(validation.expiryUtc);
       return;
     }
 
     setState(() {
-      _error = switch (validation) {
+      _codeError = switch (validation) {
         LicenseBadFormat() =>
           "That doesn't look like a Mahtem activation code.",
         LicenseBadSignature() =>
           'This code is not valid — ask the sender to resend it.',
         LicenseWrongDevice() =>
           'This code was issued for a different device. Send the device '
-              'code shown above with your payment.',
+              'code shown below with your payment.',
         LicenseExpired(:final expiryUtc) =>
           'This code expired on ${_fmt(expiryUtc)}. Buy a new one to renew.',
         _ => 'This code could not be accepted.',
@@ -90,28 +125,49 @@ class _PaywallScreenState extends State<PaywallScreen> {
     unawaited(HapticFeedback.vibrate());
   }
 
-  Future<void> _pasteCode() async {
+  Future<void> _celebrate(DateTime expiryUtc) async {
+    setState(() {
+      _celebrated = true;
+      _error = null;
+      _codeError = null;
+    });
+    unawaited(HapticFeedback.heavyImpact());
+    final until = _fmt(expiryUtc);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: MahtemPalette.greenDeep,
+      content: Text('Mahtem Pro is active until $until 🎉'),
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _pasteInto(TextEditingController ctrl) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim();
     if (text == null || text.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Your clipboard is empty — copy the code first.'),
+          content: Text('Your clipboard is empty — copy the number first.'),
         ));
       }
       return;
     }
-    _codeCtrl.text = text;
-    setState(() => _error = null);
+    ctrl.text = text;
+    setState(() {
+      _error = null;
+      _codeError = null;
+    });
   }
 
-  Future<void> _copyDeviceCode(String code) async {
-    await Clipboard.setData(ClipboardData(text: code));
+  Future<void> _copy(String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
-      content: Text('Device code $code copied — send it with your payment.'),
+      content: Text(message),
     ));
   }
 
@@ -146,48 +202,98 @@ class _PaywallScreenState extends State<PaywallScreen> {
       body: Stack(
         children: [
           ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-        children: [
-          _StatusCard(license: license),
-          const SizedBox(height: 14),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+            children: [
+              _StatusCard(license: license),
+              const SizedBox(height: 14),
 
-          _PriceCard(),
-          const SizedBox(height: 14),
+              const _PriceCard(),
+              const SizedBox(height: 14),
 
-          _StepsCard(
-            deviceCode: license.deviceCode,
-            onCopyDeviceCode: () => _copyDeviceCode(license.deviceCode),
+              _StepsCard(
+                onCopyNumber: () => _copy(
+                  '+251$kPayTelebirrDigits',
+                  'Telebirr number +251$kPayTelebirrDigits copied — paste it '
+                      'into the Telebirr app.',
+                ),
+                onCopyAmount: () => _copy(
+                  '$kMonthlyPriceEtb',
+                  'Amount $kMonthlyPriceEtb ETB copied.',
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              _ReceiptActivationCard(
+                controller: _receiptCtrl,
+                error: _error,
+                checking: _checking,
+                card: card,
+                border: border,
+                ink: ink,
+                dim: dim,
+                onPaste: () => _pasteInto(_receiptCtrl),
+                onVerify: _verifyAndActivate,
+              ),
+              const SizedBox(height: 10),
+
+              Text(
+                'One receipt activates one plan on this device. To renew, '
+                'pay again and paste the fresh receipt number — paid days '
+                'always stack.',
+                style: TextStyle(color: dim, fontSize: 11.5, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+
+              Center(
+                child: Pressable(
+                  onTap: () =>
+                      setState(() => _showCodeFallback = !_showCodeFallback),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _showCodeFallback
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 17,
+                        color: dim,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _showCodeFallback
+                            ? 'Hide activation code'
+                            : 'Have an activation code instead?',
+                        style: TextStyle(
+                          color: dim,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_showCodeFallback) ...[
+                const SizedBox(height: 10),
+                _CodeFallbackCard(
+                  controller: _codeCtrl,
+                  deviceCode: license.deviceCode,
+                  error: _codeError,
+                  activating: _activating,
+                  card: card,
+                  border: border,
+                  ink: ink,
+                  dim: dim,
+                  onCopyDeviceCode: () =>
+                      _copy(license.deviceCode, 'Device code copied.'),
+                  onPaste: () => _pasteInto(_codeCtrl),
+                  onActivate: _activate,
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 14),
-
-          _ActivationCard(
-            controller: _codeCtrl,
-            error: _error,
-            activating: _activating,
-            celebrated: _celebrated,
-            card: card,
-            border: border,
-            ink: ink,
-            dim: dim,
-            onPaste: _pasteCode,
-            onActivate: _activate,
-          ),
-          const SizedBox(height: 10),
-
-          Text(
-            'Activation codes are bound to one device and expire with the '
-            'plan — buying again for another phone? Send that phone\'s '
-            'device code instead.',
-            style: TextStyle(
-              color: dim,
-              fontSize: 11.5,
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          ],
-        ),
-        if (_celebrated) const Positioned.fill(child: ConfettiBurst()),
+          if (_celebrated) const Positioned.fill(child: ConfettiBurst()),
         ],
       ),
     );
@@ -269,6 +375,8 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _PriceCard extends StatelessWidget {
+  const _PriceCard();
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -312,6 +420,12 @@ class _PriceCard extends StatelessWidget {
             'Telebirr, BOA, M-Pesa and more.',
             style: TextStyle(color: dim, fontSize: 12.5, height: 1.5),
           ),
+          const SizedBox(height: 4),
+          Text(
+            'Or pay $kYearlyPriceEtb ETB once for a whole year.',
+            style: TextStyle(
+                color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -319,12 +433,12 @@ class _PriceCard extends StatelessWidget {
 }
 
 class _StepsCard extends StatelessWidget {
-  final String deviceCode;
-  final VoidCallback onCopyDeviceCode;
+  final VoidCallback onCopyNumber;
+  final VoidCallback onCopyAmount;
 
   const _StepsCard({
-    required this.deviceCode,
-    required this.onCopyDeviceCode,
+    required this.onCopyNumber,
+    required this.onCopyAmount,
   });
 
   @override
@@ -353,55 +467,53 @@ class _StepsCard extends StatelessWidget {
           const SizedBox(height: 14),
           _Step(
             n: 1,
-            title: 'Pay $kMonthlyPriceEtb ETB via Telebirr',
-            body: Text.rich(
-              TextSpan(style: stepDim, children: [
-                const TextSpan(text: 'Send to '),
-                TextSpan(
-                    text: kPayTelebirrNumber,
-                    style: stepStyle.copyWith(fontWeight: FontWeight.w900)),
-                TextSpan(text: ' ($kPayTelebirrName) and keep the receipt.'),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _Step(
-            n: 2,
-            title: 'Send your device code + receipt',
+            title: 'Pay $kMonthlyPriceEtb ETB (or $kYearlyPriceEtb ETB / '
+                'year) via Telebirr',
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'We mint your personal activation code from this device '
-                  'code:',
+                  'Send the exact amount to this Telebirr account:',
                   style: stepDim,
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? MahtemPalette.dBg
-                        : MahtemPalette.lBg,
+                    color:
+                        isDark ? MahtemPalette.dBg : MahtemPalette.lBg,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: border),
                   ),
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          deviceCode.isEmpty ? '…' : deviceCode,
-                          style: TextStyle(
-                            color: ink,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              kPayTelebirrNumber,
+                              style: TextStyle(
+                                color: ink,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              kPayTelebirrName,
+                              style: TextStyle(
+                                  color: dim,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
                         ),
                       ),
                       Pressable(
-                        onTap: onCopyDeviceCode,
+                        onTap: onCopyNumber,
                         child: Icon(Icons.copy_rounded,
                             size: 18, color: dim),
                       ),
@@ -410,28 +522,14 @@ class _StepsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Pressable(
-                  onTap: () async {
-                    final url = Uri.parse(kSupportTelegramLink);
-                    try {
-                      await launchUrl(url,
-                          mode: LaunchMode.externalApplication);
-                    } catch (_) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          content: Text(
-                              'Find us on Telegram: $kSupportTelegram'),
-                        ));
-                      }
-                    }
-                  },
+                  onTap: onCopyAmount,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.send_rounded,
-                          size: 15, color: MahtemPalette.blue),
+                      Icon(Icons.copy_rounded,
+                          size: 13, color: MahtemPalette.blue),
                       const SizedBox(width: 5),
-                      Text('Open Telegram — $kSupportTelegram',
+                      Text('Copy amount — $kMonthlyPriceEtb ETB',
                           style: const TextStyle(
                               color: MahtemPalette.blue,
                               fontSize: 12.5,
@@ -444,10 +542,14 @@ class _StepsCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _Step(
-            n: 3,
-            title: 'Paste the activation code below',
+            n: 2,
+            title: 'Paste the receipt number below',
             body: Text(
-              'Paste it exactly as received — extra spaces are fine.',
+              'Telebirr sends a confirmation SMS with a receipt number '
+              '(e.g. CHQ261Z4AB2C) — paste it here and the app checks it '
+              'with Telebirr itself. If it is a real $kMonthlyPriceEtb ETB '
+              'payment to the account above, Mahtem Pro unlocks '
+              'instantly.',
               style: stepDim,
             ),
           ),
@@ -506,27 +608,158 @@ class _Step extends StatelessWidget {
   }
 }
 
-class _ActivationCard extends StatelessWidget {
+class _ReceiptActivationCard extends StatelessWidget {
   final TextEditingController controller;
   final String? error;
-  final bool activating;
-  final bool celebrated;
+  final bool checking;
   final Color card;
   final Color border;
   final Color ink;
   final Color dim;
   final VoidCallback onPaste;
-  final VoidCallback onActivate;
+  final VoidCallback onVerify;
 
-  const _ActivationCard({
+  const _ReceiptActivationCard({
     required this.controller,
     required this.error,
-    required this.activating,
-    required this.celebrated,
+    required this.checking,
     required this.card,
     required this.border,
     required this.ink,
     required this.dim,
+    required this.onPaste,
+    required this.onVerify,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+            color: error != null ? MahtemPalette.red : border, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Telebirr receipt number',
+              style: TextStyle(
+                  color: ink, fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: controller,
+            enabled: !checking,
+            style: TextStyle(
+                color: ink, fontSize: 14, fontWeight: FontWeight.w700),
+            decoration: InputDecoration(
+              hintText: 'e.g. CHQ261Z4AB2C',
+              hintStyle: TextStyle(color: dim, fontWeight: FontWeight.w500),
+              filled: true,
+              fillColor: dim.withValues(alpha: 0.06),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(13),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(error!,
+                style: const TextStyle(
+                    color: MahtemPalette.red,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600)),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: checking ? null : onPaste,
+                  icon: const Icon(Icons.content_paste_rounded, size: 17),
+                  label: const Text('Paste'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ink,
+                    side: BorderSide(color: border),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: Pressable(
+                  onTap: checking ? null : onVerify,
+                  child: Container(
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: MahtemPalette.green,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    alignment: Alignment.center,
+                    child: checking
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.4, color: Colors.white),
+                              ),
+                              const SizedBox(width: 9),
+                              Text('Checking with Telebirr…',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700)),
+                            ],
+                          )
+                        : const Text('Verify & Activate',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CodeFallbackCard extends StatelessWidget {
+  final TextEditingController controller;
+  final String deviceCode;
+  final String? error;
+  final bool activating;
+  final Color card;
+  final Color border;
+  final Color ink;
+  final Color dim;
+  final VoidCallback onCopyDeviceCode;
+  final VoidCallback onPaste;
+  final VoidCallback onActivate;
+
+  const _CodeFallbackCard({
+    required this.controller,
+    required this.deviceCode,
+    required this.error,
+    required this.activating,
+    required this.card,
+    required this.border,
+    required this.ink,
+    required this.dim,
+    required this.onCopyDeviceCode,
     required this.onPaste,
     required this.onActivate,
   });
@@ -547,6 +780,42 @@ class _ActivationCard extends StatelessWidget {
           Text('Activation code',
               style: TextStyle(
                   color: ink, fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(
+            'Codes are bound to one device. If a receipt check ever fails, '
+            'send this device code with your payment and a code is minted '
+            'for this phone.',
+            style: TextStyle(color: dim, fontSize: 12, height: 1.45),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDarkBg(context),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    deviceCode.isEmpty ? '…' : deviceCode,
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                Pressable(
+                  onTap: onCopyDeviceCode,
+                  child: Icon(Icons.copy_rounded, size: 18, color: dim),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
           TextField(
             controller: controller,
@@ -565,7 +834,6 @@ class _ActivationCard extends StatelessWidget {
                 borderSide: BorderSide.none,
               ),
             ),
-            onChanged: (_) {},
           ),
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -595,34 +863,28 @@ class _ActivationCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Pressable(
-                      onTap: activating ? null : onActivate,
-                      child: Container(
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: MahtemPalette.green,
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                        alignment: Alignment.center,
-                        child: activating
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2.4,
-                                    color: Colors.white),
-                              )
-                            : const Text('Activate',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14.5,
-                                    fontWeight: FontWeight.w800)),
-                      ),
+                child: Pressable(
+                  onTap: activating ? null : onActivate,
+                  child: Container(
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: MahtemPalette.green,
+                      borderRadius: BorderRadius.circular(13),
                     ),
-                  ],
+                    alignment: Alignment.center,
+                    child: activating
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.4, color: Colors.white),
+                          )
+                        : const Text('Activate',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800)),
+                  ),
                 ),
               ),
             ],
@@ -631,6 +893,13 @@ class _ActivationCard extends StatelessWidget {
       ),
     );
   }
+
+  static bool _isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color isDarkBg(BuildContext context) => _isDark(context)
+      ? MahtemPalette.dBg
+      : MahtemPalette.lBg;
 }
 
 class _ProCard {
