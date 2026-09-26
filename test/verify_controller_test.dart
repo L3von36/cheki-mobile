@@ -80,7 +80,8 @@ void main() {
     test('receipt result lands in state and status becomes done', () async {
       late VerifyInput captured;
       final c = VerifyController(
-        verifyFn: (input) async {
+        // CBE now routes to the extra verifier (transient-400 hardening).
+        extraVerifyFn: (input) async {
           captured = input;
           return _receiptOk();
         },
@@ -175,8 +176,8 @@ void main() {
           return delivered!;
         },
       );
-      c.selectBank(bankById('cbe'));
-      c.setReference('fHCx8QmLpZ1');
+      c.selectBank(bankById('telebirr'));
+      c.setReference('CHQ261Z4AB2C');
 
       final future = c.verify();
       await pumpEventQueue();

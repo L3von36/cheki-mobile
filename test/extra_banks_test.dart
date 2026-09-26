@@ -74,7 +74,7 @@ void main() {
       expect(isExtraBank('wegagen'), isTrue);
       expect(isExtraBank('amhara'), isTrue);
       expect(isExtraBank('awash'), isTrue); // engine entry, app-layer verifier
-      expect(isExtraBank('cbe'), isFalse);
+      expect(isExtraBank('cbe'), isTrue); // engine entry, hardened app flow
     });
   });
 
@@ -106,6 +106,39 @@ void main() {
           'https://transaction.amharabank.com.et/FT26248K7Q1P');
       expect(d!.bank, 'amhara');
       expect(d.reference, 'FT26248K7Q1P');
+    });
+
+    test('reads the Amhara QR JSON payload — the real scanned text', () {
+      // Decoded from the QR on the user's Amhara web receipt screenshots.
+      final d = detectExtraBankFromUrl(
+          '{"transactionId":"FT262507XG9T","creditAccountNo":"ETB1756000010003"}');
+      expect(d!.bank, 'amhara');
+      expect(d.reference, 'FT262507XG9T');
+
+      final d2 = detectExtraBankFromUrl(
+          '{"transactionId":"FT26248K7Q1P","creditAccountNo":"9900050363768"}');
+      expect(d2!.bank, 'amhara');
+      expect(d2.reference, 'FT26248K7Q1P');
+    });
+
+    test('reads the Wegagen QR prose — the real scanned text', () {
+      // Decoded from the QR on the user's Wegagen receipt screenshot: the
+      // link sits inside SMS prose, so the payload is NOT a bare URL.
+      const prose = 'Amount ETB-2000 is Transferred From : FIREHIWOT KEBEDE '
+          'MENGESHA 1*****4231701 To --- (2519*****45), with transaction ID: '
+          '150TBAW262622115 on date Sat Sep 19 2026. For more information, '
+          'click here: https://transinfo.wegagenbanksc.com.et:8183/'
+          '?id=150TBAW2626221151113DAAT - Wegagen Bank.';
+      final d = detectExtraBankFromUrl(prose);
+      expect(d!.bank, 'wegagen');
+      expect(d.reference, '150TBAW2626221151113DAAT');
+    });
+
+    test('JSON without a usable transactionId stays undetected', () {
+      expect(detectExtraBankFromUrl('{"amount":100}'), isNull);
+      expect(detectExtraBankFromUrl('{"transactionId":""}'), isNull);
+      expect(detectExtraBankFromUrl('{"transactionId":12345}'), isNull);
+      expect(detectExtraBankFromUrl('{ broken json'), isNull);
     });
 
     test('leaves every other bank to the engine detector', () {
@@ -426,7 +459,187 @@ void main() {
     });
   });
 
-  group('controller routing', () {
+  group('verifyExtraBank — CBE', () {
+    // Real payload captured live from Mb.cbe.com.et's transaction-detail
+    // API (Sep 2026) — the receipt behind the mbreciept.cbe.com.et link on
+    // the user's CBE app screenshot.
+    final cbeJson = File('test/fixtures/cbe_receipt.json').readAsStringSync();
+
+    test('parses the real receipt end-to-end with the app headers', () async {
+      final seen = <Uri?>[];
+      Map<String, String>? seenHeaders;
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'cbe', reference: 'v2-hfHCxGKF1KZsUlmmWpFL'),
+        httpFn: (uri, headers) async {
+          seen.add(uri);
+          seenHeaders = headers;
+          return ExtraHttpResponse(200, utf8.encode(cbeJson));
+        },
+      );
+      expect(res.ok, isTrue);
+      final r = res.receipt!;
+      expect(r.bankCode, 'cbe');
+      expect(r.bankName, 'Commercial Bank of Ethiopia');
+      expect(r.reference, 'FT262478FQ3P');
+      expect(r.senderName, 'Lidya Michael Tezera');
+      expect(r.senderAccount, '1********5276');
+      expect(r.receiverName, 'Abdulrehim Mohammed Usman');
+      expect(r.receiverAccount, '1********2206');
+      expect(r.amount, 5100.00);
+      expect(r.currency, 'ETB');
+      // 2026-09-04T10:59:00Z → Ethiopia wall time (UTC+3)
+      expect(r.date, '2026-09-04 13:59');
+      expect(r.reason, 'MB Transfer');
+      expect(r.transactionStatus, isNull); // parseCbeNewJson maps no status
+      // The API needs the app-identity headers or it refuses.
+      expect(seenHeaders!['X-App-ID'], 'd1292e42-7400-49de-a2d3-9731caa4c819');
+      expect(seenHeaders!['X-App-Version'],
+          '0a01980b-9859-1369-8198-59f403820000');
+      expect(seen.single!.path,
+          '/api/v1/transactions/public/transaction-detail/v2-hfHCxGKF1KZsUlmmWpFL');
+    });
+
+    test('a transient 400 is retried and the retry verifies', () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'cbe', reference: 'v2-hfHCxGKF1KZsUlmmWpFL'),
+        httpFn: (uri, headers) async {
+          calls++;
+          if (calls == 1) {
+            // Observed live: 400 “transaction not found with id:
+            // FT262478FQ3P” followed by 200 for the SAME request.
+            return ExtraHttpResponse(
+                400,
+                utf8.encode(
+                    '{"status":400,"detail":"transaction not found with id: FT262478FQ3P"}'));
+          }
+          return ExtraHttpResponse(200, utf8.encode(cbeJson));
+        },
+      );
+      expect(res.ok, isTrue);
+      expect(res.receipt!.amount, 5100.00);
+      expect(calls, 2);
+    });
+
+    test('a persistent 400 maps to an honest not-found', () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'cbe', reference: 'v2-doesnotexist0000'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return ExtraHttpResponse(
+              400,
+              utf8.encode(
+                  '{"status":400,"detail":"transaction not found with id: X"}'));
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message, contains('No receipt found'));
+      expect(calls, 3); // retried like a 5xx before giving up
+    });
+
+    test('a 200 without a usable record maps to not-found', () async {
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'cbe', reference: 'v2-emptyrecord0000'),
+        httpFn: (uri, headers) async =>
+            ExtraHttpResponse(200, utf8.encode('{"detail":"nope"}')),
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+    });
+  });
+
+  group('controller routing — scan payload shapes from the real QRs', () {
+    test('scanning the Wegagen receipt QR (prose) auto-detects Wegagen',
+        () async {
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.receipt(
+            parseWegagenReceiptJson(_wegagenJson)!,
+            5,
+          );
+        },
+      );
+      c.applyScan(
+          'Amount ETB-1000 is Transferred From : FIREHIWOT KEBEDE MENGESHA '
+          '1*****4231701 To --- (2519*****45), with transaction ID: '
+          '150TBAW262612099 on date Fri Sep 18 2026. For more information, '
+          'click here: https://transinfo.wegagenbanksc.com.et:8183/'
+          '?id=150TBAW2626120991113DAAT - Wegagen Bank.');
+      expect(c.detectedBank!.id, 'wegagen');
+      expect(c.reference, '150TBAW2626120991113DAAT');
+      expect(c.canVerify, isTrue);
+
+      final res = await c.verify();
+      expect(seen!.bankId, 'wegagen');
+      expect(res!.ok, isTrue);
+    });
+
+    test('scanning the Amhara receipt QR (bare JSON) auto-detects Amhara',
+        () async {
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.receipt(
+            parseAmharaReceiptJson(_amharaOutgoingJson).receipt!,
+            5,
+          );
+        },
+      );
+      c.applyScan(
+          '{"transactionId":"FT262507XG9T","creditAccountNo":"ETB1756000010003"}');
+      expect(c.detectedBank!.id, 'amhara');
+      expect(c.reference, 'FT262507XG9T');
+      expect(c.canVerify, isTrue);
+
+      final res = await c.verify();
+      expect(seen!.bankId, 'amhara');
+      expect(seen!.reference, 'FT262507XG9T');
+      expect(res!.ok, isTrue);
+    });
+
+    test('pasting the Amhara QR JSON into the field detects Amhara too',
+        () {
+      final c = VerifyController();
+      c.setReference(
+          '{"transactionId":"FT26248K7Q1P","creditAccountNo":"9900050363768"}');
+      expect(c.detectedBank!.id, 'amhara');
+      expect(c.reference, 'FT26248K7Q1P');
+    });
+
+    test('scanning the CBE app QR routes to the extra verifier', () async {
+      VerifyInput? seen;
+      final c = VerifyController(
+        extraVerifyFn: (input) async {
+          seen = input;
+          return VerifyResult.failed(
+            const VerifyFailure(VerifyErrorKind.notFound, 'x'),
+            5,
+          );
+        },
+      );
+      c.applyScan('https://mbreciept.cbe.com.et/v2-hfHCxGKF1KZsUlmmWpFL');
+      expect(c.detectedBank!.id, 'cbe');
+      expect(c.reference, 'v2-hfHCxGKF1KZsUlmmWpFL');
+      await c.verify();
+      expect(seen!.bankId, 'cbe'); // extra verifier (engine stays verbatim)
+    });
+
+    test('an unknown link still falls back to the manual-bank flow', () {
+      final c = VerifyController();
+      c.applyScan('https://example.com/receipt/123');
+      expect(c.detectedBank, isNull);
+      expect(c.reference, 'https://example.com/receipt/123');
+    });
+  });
+
+  group('controller routing — pasted links (v1.5.1 regressions)', () {
     test('a pasted Wegagen link auto-detects and verifies through the '
         'extra verifier', () async {
       VerifyInput? seen;

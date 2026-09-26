@@ -1,16 +1,22 @@
-/// App-side bank additions: Wegagen Bank, Amhara Bank and Awash Bank.
+/// App-side bank additions: Wegagen Bank, Amhara Bank, Awash Bank and a
+/// hardened CBE receipt flow.
 ///
 /// The stylepos engine files (`verifier.dart`, `parsers.dart`, `models.dart`)
 /// stay VERBATIM — this additive module extends them without touching a
 /// line:
 ///
 ///   * two extra [BankInfo] catalog entries + a combined catalog
-///     ([kAllVerifyBanks] / [bankByIdAll]) — Awash itself is already in the
-///     engine catalog, so no third entry is needed,
-///   * URL detection for the banks' own share links
+///     ([kAllVerifyBanks] / [bankByIdAll]) — Awash and CBE itself are already
+///     in the engine catalog, so no extra entries are needed,
+///   * text detection for the banks' own share links — bare URLs, links
+///     embedded in SMS-style prose (the Wegagen receipt QR holds exactly
+///     that), and the Amhara QR's bare JSON payload
 ///     ([detectExtraBankFromUrl], runs before the engine detector),
 ///   * a verifier ([verifyExtraBank]) the controller routes `wegagen` /
-///     `amhara` / `awash` inputs to, using the same HTTP client factory.
+///     `amhara` / `awash` / `cbe` inputs to, using the same HTTP client
+///     factory. CBE rides along so its API's flaky transient HTTP 400
+///     (observed live: a valid token answered 400 and then 200 on the next
+///     call) gets retried instead of surfacing as an error.
 ///
 /// Endpoints (behind the banks' own React receipt pages — we call the APIs
 /// the pages themselves call):
@@ -81,22 +87,49 @@ BankInfo? bankByIdAll(String id) {
 /// True when [id] must be verified by [verifyExtraBank] instead of the
 /// stylepos verifier. Awash is included even though its catalog entry comes
 /// from the engine — its share links need the dash-preserving detection and
-/// the 403-tolerant fetch below.
-bool isExtraBank(String id) => id == 'wegagen' || id == 'amhara' || id == 'awash';
+/// the 403-tolerant fetch below. CBE rides along so the extra verifier can
+/// retry the bank's flaky transient HTTP 400 (the engine's verbatim loop
+/// only retries 5xx).
+bool isExtraBank(String id) =>
+    id == 'wegagen' || id == 'amhara' || id == 'awash' || id == 'cbe';
 
 // ---------------------------------------------------------------------------
 // URL detection
 // ---------------------------------------------------------------------------
 
-/// Detects Wegagen / Amhara receipt links, returning the engine's own
-/// [UrlDetection] shape so callers can chain:
+/// Detects Wegagen / Amhara / Awash receipts inside scanned or pasted TEXT,
+/// returning the engine's own [UrlDetection] shape so callers can chain:
 /// `detectExtraBankFromUrl(x) ?? detectBankFromUrl(x)`.
 ///
-/// The marker regexes also catch links embedded INSIDE pasted SMS text —
-/// Wegagen's SMS arrives as prose with the link at the end.
+/// Three payload shapes seen in the wild, all handled here:
+///
+///   1. the bare share link (`…?id=…`, `…?trx=…`, `awashpay…/{token}`),
+///   2. the link embedded in SMS-style prose — the Wegagen receipt QR is
+///      exactly that: “Amount ETB-2000 is Transferred From : … click here:
+///      https://transinfo…/?id=… - Wegagen Bank.”,
+///   3. the Amhara web receipt's QR, which holds a BARE JSON payload with
+///      no URL at all: `{"transactionId":"FT262507XG9T","creditAccountNo":
+///      "ETB1756000010003"}`.
 UrlDetection? detectExtraBankFromUrl(String input) {
   final text = input.trim();
   if (text.isEmpty) return null;
+
+  // Amhara QR JSON payload — the transactionId is the same FT… number the
+  // web API serves. Scoped to the exact field name the bank's receipts
+  // carry, so arbitrary JSON never hijacks detection.
+  if (text.startsWith('{')) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) {
+        final tid = decoded['transactionId']?.toString().trim() ?? '';
+        if (RegExp(r'^[A-Za-z0-9]{6,}$').hasMatch(tid)) {
+          return UrlDetection('amhara', tid);
+        }
+      }
+    } catch (_) {
+      // Not JSON after all — fall through to the link patterns.
+    }
+  }
 
   // Wegagen: https://transinfo.wegagenbanksc.com.et:8183/?id=150TBAW2626221151113DAAT
   final wg = RegExp(
@@ -192,6 +225,34 @@ String? _fmtIsoAddis(String? iso) {
   String p(int n) => n.toString().padLeft(2, '0');
   return '${a.year.toString().padLeft(4, '0')}-${p(a.month)}-${p(a.day)} '
       '${p(a.hour)}:${p(a.minute)}';
+}
+
+/// Parses the engine's [parseCbeNewJson] outcome into a [ReceiptData].
+/// Returns null when the body did not yield a complete receipt. The CBE
+/// API's UTC timestamps are shown in Ethiopia wall time (UTC+3).
+ReceiptData? parseCbePage(Parsed parsed, String fallbackReference) {
+  if (!parsed.verified) return null;
+  final bank = bankByIdAll('cbe')!;
+  return ReceiptData(
+    verified: true,
+    bankCode: bank.id,
+    bankName: bank.name,
+    reference: parsed.reference ?? fallbackReference,
+    senderName: parsed.senderName,
+    senderAccount: parsed.senderAccount,
+    receiverName: parsed.receiverName,
+    receiverAccount: parsed.receiverAccount,
+    amount: parsed.amount,
+    currency: parsed.currency,
+    date: _fmtIsoAddis(parsed.date) ?? parsed.date,
+    branch: parsed.branch,
+    reason: parsed.reason,
+    transactionType: parsed.transactionType,
+    transactionStatus: parsed.transactionStatus,
+    invoiceNumber:
+        parsed.invoiceNumber ?? parsed.reference ?? fallbackReference,
+    note: parsed.note,
+  );
 }
 
 /// `yyMMddHHmm` (e.g. 2609060908) → `2026-09-06 09:08`; falls back to the
@@ -388,10 +449,17 @@ String? _amharaServiceRejection(String body) {
       'was made inside the ABa app and never got a web receipt.';
 }
 
-/// Verifies Wegagen / Amhara receipts — the controller routes inputs whose
-/// bankId passes [isExtraBank] here, everything else stays in the verbatim
-/// stylepos verifier. Failure shapes (not-found messages, tips, retries)
-/// mirror the engine's behaviour so the UI needs no special cases.
+/// CBE's Mb receipt API wants the mobile app's identity headers — the same
+/// pair the stylepos engine sends for its own CBE flow (verifier.dart).
+const Map<String, String> _cbeApiHeaders = {
+  'X-App-ID': 'd1292e42-7400-49de-a2d3-9731caa4c819',
+  'X-App-Version': '0a01980b-9859-1369-8198-59f403820000',
+};
+
+/// Verifies Wegagen / Amhara / Awash / CBE receipts — the controller routes
+/// inputs whose bankId passes [isExtraBank] here, everything else stays in
+/// the verbatim stylepos verifier. Failure shapes (not-found messages, tips,
+/// retries) mirror the engine's behaviour so the UI needs no special cases.
 Future<VerifyResult> verifyExtraBank(
   VerifyInput input, {
   ExtraHttpFn? httpFn,
@@ -439,6 +507,8 @@ Future<VerifyResult> verifyExtraBank(
     'wegagen' => Uri.parse(
         'https://transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/$reference'),
     'awash' => Uri.parse('https://awashpay.awashbank.com:8225/$reference'),
+    'cbe' => Uri.parse(
+        'https://Mb.cbe.com.et/api/v1/transactions/public/transaction-detail/$reference'),
     _ => Uri.parse(
         'https://transaction.amharabank.com.et/${Uri.encodeQueryComponent(reference)}'),
   };
@@ -450,11 +520,22 @@ Future<VerifyResult> verifyExtraBank(
     'Accept': bankId == 'awash'
         ? 'text/html,application/xhtml+xml,application/json,*/*'
         : 'application/json',
+    if (bankId == 'cbe') ..._cbeApiHeaders,
   };
 
   for (var attempt = 0; attempt <= 2; attempt++) {
     try {
       var resp = await fetch(uri, headers);
+
+      // CBE's receipt API intermittently answers HTTP 400 “transaction not
+      // found …” for a perfectly valid token and then 200 on the very next
+      // call (observed live twice with the same request, Sep 2026 — a
+      // load-balancer warm-up). Retry the 400 like a 5xx; when it persists
+      // the token is genuinely unknown → honest not-found below.
+      if (bankId == 'cbe' && resp.statusCode == 400 && attempt < 2) {
+        await Future<void>.delayed(Duration(milliseconds: 800 << attempt));
+        continue;
+      }
 
       // Awash answers 403 for a token shape it does not recognise. Shared
       // links carry a LEADING DASH as part of the token (the engine's own
@@ -526,8 +607,40 @@ Future<VerifyResult> verifyExtraBank(
           sw.elapsedMilliseconds,
         );
       }
+      // CBE's persistent 400 is its way of saying "no such transaction" —
+      // the transient variant was already retried above.
+      if (bankId == 'cbe' && resp.statusCode == 400) {
+        return VerifyResult.failed(
+          VerifyFailure(
+            VerifyErrorKind.notFound,
+            'No receipt found for this code at ${bank.name}.',
+            tips: const [
+              'Double-check every character of the code under the QR.',
+              'Ask the sender to re-share the receipt link from the CBE app.',
+            ],
+          ),
+          sw.elapsedMilliseconds,
+        );
+      }
       if (resp.statusCode == 200) {
         final body = utf8.decode(resp.bodyBytes, allowMalformed: true);
+        if (bankId == 'cbe') {
+          final receipt = parseCbePage(parseCbeNewJson(body), reference);
+          if (receipt == null) {
+            return VerifyResult.failed(
+              VerifyFailure(
+                VerifyErrorKind.notFound,
+                'No receipt found for “$reference” at ${bank.name}.',
+                tips: const [
+                  'Double-check every character of the code under the QR.',
+                  'Ask the sender to re-share the receipt from the CBE app.',
+                ],
+              ),
+              sw.elapsedMilliseconds,
+            );
+          }
+          return VerifyResult.receipt(receipt, sw.elapsedMilliseconds);
+        }
         if (bankId == 'wegagen') {
           final receipt = parseWegagenReceiptJson(body);
           if (receipt == null) {

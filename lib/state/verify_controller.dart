@@ -25,9 +25,10 @@ class VerifyController extends ChangeNotifier {
   final Future<VerifyResult> Function(VerifyInput input) _verifyFn;
   final Future<VerifyResult> Function(VerifyInput input) _extraVerifyFn;
 
-  /// Link detection across the verbatim stylepos catalog AND the app-side
-  /// extra banks (Wegagen, Amhara) — extra patterns first, hosts never
-  /// overlap.
+  /// Input detection across the verbatim stylepos catalog AND the app-side
+  /// extra banks (Wegagen, Amhara, Awash) — extra patterns first, hosts
+  /// never overlap. Works on bare links, links embedded in SMS-style prose
+  /// (the Wegagen receipt QR) and the Amhara QR's bare JSON payload.
   UrlDetection? _detect(String input) =>
       detectExtraBankFromUrl(input) ?? detectBankFromUrl(input);
 
@@ -99,24 +100,24 @@ class VerifyController extends ChangeNotifier {
     scannedQr = null;
     forcedBankId = null;
     rawScannedReference = null;
-    if (looksLikeUrl(value)) {
-      final detected = _detect(value);
-      final info = detected == null ? null : bankByIdAll(detected.bank);
-      detectedBank = info;
-      if (detected != null && info != null) {
-        // Store the extracted token (like applyScan does) so the verifier
-        // gets a clean reference — the field keeps showing the pasted link
-        // until the next sync, but the verification itself uses the token.
-        // Regression guard: handing the FULL URL to the extra-bank
-        // verifier used to make every pasted Wegagen/Amhara/Awash link
-        // fail against the bank API.
-        reference = detected.reference;
-        if (detected.account != null) {
-          accountNumber = detected.account!;
-        }
+    // Detect on ANY text: a bare link, a link embedded in SMS prose, or the
+    // Amhara QR's bare JSON payload. Not gated on looksLikeUrl — the
+    // Wegagen receipt QR carries prose, and missing its embedded link used
+    // to leave the bank undetected with a paragraph in the field.
+    final detected = _detect(value);
+    final info = detected == null ? null : bankByIdAll(detected.bank);
+    detectedBank = info;
+    if (detected != null && info != null) {
+      // Store the extracted token (like applyScan does) so the verifier
+      // gets a clean reference — the field keeps showing the pasted text
+      // until the next sync, but the verification itself uses the token.
+      // Regression guard: handing the FULL URL to the extra-bank
+      // verifier used to make every pasted Wegagen/Amhara/Awash link
+      // fail against the bank API.
+      reference = detected.reference;
+      if (detected.account != null) {
+        accountNumber = detected.account!;
       }
-    } else {
-      detectedBank = null;
     }
     // Editing inputs clears a finished (failed) attempt.
     if (status == VerifyStatus.done && result != null && !result!.ok) {
@@ -139,8 +140,9 @@ class VerifyController extends ChangeNotifier {
   void selectBank(BankInfo? bank) {
     manualBank = bank;
     if (bank == null) {
-      // Back to auto: re-detect from the current input.
-      final detected = looksLikeUrl(reference) ? _detect(reference) : null;
+      // Back to auto: re-detect from the current input — any text shape the
+      // detectors understand, not just links.
+      final detected = _detect(reference);
       final info = detected == null ? null : bankByIdAll(detected.bank);
       detectedBank = info;
       if (detected != null && info != null) reference = detected.reference;
@@ -150,8 +152,12 @@ class VerifyController extends ChangeNotifier {
 
   /// Applies a scanned QR payload (or any raw scanned text).
   ///
-  /// Resolution mirrors the stylepos verifier's own input rules:
-  ///   * receipt links auto-detect the bank and extract the reference,
+  /// Resolution mirrors the stylepos verifier's own input rules, extended
+  /// with the extra banks' text shapes:
+  ///   * receipt links — bare, or embedded in SMS-style prose (the Wegagen
+  ///     receipt QR) — auto-detect the bank and extract the reference,
+  ///   * the Amhara web receipt's QR is a BARE JSON payload
+  ///     (`{"transactionId":"FT…",…}`) and detects the same way,
   ///   * BOA slip QRs are flagged for offline decryption by the verifier,
   ///   * Telebirr SuperApp QRs are decoded to the invoice number here,
   ///   * anything else is kept as a plain reference for the user to pair
@@ -165,24 +171,26 @@ class VerifyController extends ChangeNotifier {
     forcedBankId = null;
     rawScannedReference = null;
 
-    if (looksLikeUrl(raw)) {
-      final detected = _detect(raw);
-      if (detected != null) {
-        if (detected.bank == 'cbe-legacy') {
-          // Keep the verifier's dedicated retired-endpoint guidance.
-          forcedBankId = detected.bank;
-          reference = detected.reference;
-          accountNumber = detected.account ?? '';
-          detectedBank = null;
-          notifyListeners();
-          return;
-        }
-        detectedBank = bankByIdAll(detected.bank);
+    // Receipt markers auto-detect the bank — on any text shape, not just
+    // inputs that start with http://.
+    final detected = _detect(raw);
+    if (detected != null) {
+      if (detected.bank == 'cbe-legacy') {
+        // Keep the verifier's dedicated retired-endpoint guidance.
+        forcedBankId = detected.bank;
         reference = detected.reference;
         accountNumber = detected.account ?? '';
+        detectedBank = null;
         notifyListeners();
         return;
       }
+      detectedBank = bankByIdAll(detected.bank);
+      reference = detected.reference;
+      accountNumber = detected.account ?? '';
+      notifyListeners();
+      return;
+    }
+    if (looksLikeUrl(raw)) {
       // Unknown link — the verifier explains it after a bank pick.
       reference = raw;
       detectedBank = null;
@@ -274,8 +282,9 @@ class VerifyController extends ChangeNotifier {
 
     VerifyResult res;
     try {
-      // App-side extra banks (Wegagen, Amhara) route to their own verifier;
-      // everything else goes through the verbatim stylepos verifier.
+      // App-side extra banks (Wegagen, Amhara, Awash, CBE) route to their
+      // own verifier; everything else goes through the verbatim stylepos
+      // verifier.
       final fn = isExtraBank(bankId) ? _extraVerifyFn : _verifyFn;
       res = await fn(VerifyInput(
         bankId: bankId,

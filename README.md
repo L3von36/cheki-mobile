@@ -89,12 +89,20 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Everything on a receipt auto-detects the bank — not just bare links.**
+  The Wegagen receipt QR carries SMS-style prose with the link inside, and
+  the Amhara web receipt's QR is a bare JSON payload
+  (`{"transactionId":"FT…","creditAccountNo":"…"}`) — scanning either
+  fills in the right bank and reference automatically.
 - **Pasted share links work everywhere**: whether the sender shares a bare
   link or the whole SMS text, the app extracts the reference before calling
   the bank — pasting a full link into the reference field always verifies.
 - **Awash tokens keep their leading dash** (`awashpay.awashbank.com:8225/-…`):
   the dash is part of the token and the bank answers 403 without it. A
   dash-less typed token is retried with the dash automatically.
+- **CBE's receipt API intermittently answers HTTP 400** for a valid token
+  and 200 on the next call (observed live) — the app retries those and only
+  then reports the receipt as not found.
 - Amhara Bank does not publish web receipts for some in-app (MB) transfers —
   the app explains that honestly instead of blaming the connection.
 - CBE's **legacy `FT` + last-8-digits** PDF system was decommissioned by CBE —
