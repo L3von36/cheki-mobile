@@ -19,9 +19,17 @@ eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
 fetches the official record **directly from the bank's public endpoint on your
 device** and tells you if the payment is genuine.
 
-No signup. No API key. No fees. No middleman server.
+No signup. No API key. No middleman server. Your first 5 checks are free.
 
 ## Features
+
+- **5 free checks, then Mahtem Pro** — every install verifies 5 receipts
+  for free. After that a one-time in-app activation unlocks unlimited
+  checks (150 ETB/month): pay via Telebirr, send your device code + receipt
+  on Telegram, paste the activation code back. Codes are Ed25519-signed,
+  bound to the device that paid and carry their own expiry — fully offline
+  verification, no server needed (`lib/core/licensing/`, owner-side code
+  generator in `tool/make_license.dart`).
 
 - **Proven stylepos verification engine** — the app talks to each bank's
   public receipt endpoint straight from your phone, using the same verifier

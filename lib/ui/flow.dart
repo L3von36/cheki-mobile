@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 
 import '../core/receipt_verify/models.dart';
 import '../core/verify_history.dart';
+import '../state/license_controller.dart';
 import '../state/verify_controller.dart';
+import 'screens/paywall_screen.dart';
 import 'screens/result_screen.dart';
 import 'screens/scan_screen.dart';
 import 'widgets/bank_picker_sheet.dart';
@@ -28,8 +30,33 @@ Future<void> openScanner(BuildContext context) async {
 
 /// Runs the pending verification and, on ANY completed check (verified or
 /// failed), slides in the result screen — users always get feedback.
+///
+/// Licensing gate: every verification path funnels through here. Trials
+/// (or an active license) are consumed before the check runs, and an
+/// exhausted trial opens the paywall first — activation resumes the check
+/// the user was trying to run.
 Future<void> runVerificationFlow(BuildContext context) async {
   final controller = context.read<VerifyController>();
+
+  // ── licensing gate ────────────────────────────────────────────────────
+  final license = context.read<LicenseController>();
+  await license.ensureLoaded();
+  if (!context.mounted) return;
+  if (!license.canVerifyNow) {
+    final activated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const PaywallScreen()),
+    );
+    if (activated != true || !context.mounted) return;
+    final resumed = context.read<LicenseController>();
+    if (!resumed.canVerifyNow) return;
+    // Count the attempt BEFORE the check — attempts are charged, not
+    // successes. Skipped when the form cannot run (no bank / no reference)
+    // so dead taps never burn a free check.
+    if (controller.canVerify) await resumed.consumeAttempt();
+  } else if (controller.canVerify) {
+    await license.consumeAttempt();
+  }
+
   unawaited(HapticFeedback.mediumImpact());
   final result = await controller.verify();
   if (result == null) {

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/verify_history.dart';
 import 'state/app_tab.dart';
+import 'state/license_controller.dart';
 import 'state/verify_controller.dart';
 import 'theme/mahtem_theme.dart';
 import 'ui/shell.dart';
@@ -19,6 +20,8 @@ class MahtemApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VerifyController()),
         ChangeNotifierProvider(create: (_) => VerifyHistory()),
         ChangeNotifierProvider(create: (_) => AppTab()),
+        // Licensing loads in the background — the paywall/gate awaits it.
+        ChangeNotifierProvider(create: (_) => LicenseController()..ensureLoaded()),
       ],
       child: MaterialApp(
         title: 'Mahtem',

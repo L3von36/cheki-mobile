@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/receipt_verify/models.dart';
+import '../../state/license_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../flow.dart';
+import '../screens/paywall_screen.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
 
@@ -229,20 +231,63 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: Center(
-            child: Text(
-              'Ethiopia · free',
-              style: TextStyle(
-                color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+        const Padding(
+          padding: EdgeInsets.only(right: 12),
+          child: Center(child: _LicenseChip()),
         ),
       ],
+    );
+  }
+}
+
+/// App-bar licensing chip: "PRO" when an active license exists, otherwise
+/// the free checks remaining. Tapping opens the paywall.
+class _LicenseChip extends StatelessWidget {
+  const _LicenseChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final license = context.watch<LicenseController>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final (label, bg, fg) = license.isEntitled
+        ? (
+            'PRO · ${license.daysLeft}d',
+            MahtemPalette.green,
+            Colors.white,
+          )
+        : (
+            license.trialsLeft > 0
+                ? '${license.trialsLeft} free left'
+                : 'Upgrade',
+            license.trialsLeft > 0
+                ? (isDark ? MahtemPalette.dCardAlt : MahtemPalette.amberSoft)
+                : MahtemPalette.amber,
+            license.trialsLeft > 0
+                ? (isDark ? MahtemPalette.dInk : MahtemPalette.lInk)
+                : Colors.white,
+          );
+
+    return Pressable(
+      onTap: () => Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const PaywallScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: fg,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
     );
   }
 }

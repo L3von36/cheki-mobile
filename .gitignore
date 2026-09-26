@@ -58,3 +58,6 @@ android/app/upload-keystore.jks
 
 # Platform
  ios/Pods/
+
+# Licensing — signing seed (NEVER commit; back it up offline)
+tool/license_secret.key
