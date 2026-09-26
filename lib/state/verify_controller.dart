@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/receipt_verify/parsers.dart';
 import '../core/receipt_verify/verifier.dart';
+import '../core/scan_input.dart';
 
 /// Lifecycle of a verification attempt.
 enum VerifyStatus { idle, verifying, done, error }
@@ -42,6 +43,14 @@ class VerifyController extends ChangeNotifier {
   /// show its dedicated guidance instead of a generic not-found.
   String? forcedBankId;
 
+  /// Untouched Telebirr invoice from the last scan, kept when the shown
+  /// reference had decoder junk stripped (`stripTrailingCeJunk`). When the
+  /// cleaned reference comes back not-found, [verify] retries once with
+  /// this raw value — in the rare case the removed letter was genuine,
+  /// the raw invoice still verifies instead of dead-ending the user.
+  /// Cleared as soon as the user edits the reference.
+  String? rawScannedReference;
+
   VerifyResult? result;
 
   /// Generation counter for verification runs. Stopping (or restarting)
@@ -78,6 +87,7 @@ class VerifyController extends ChangeNotifier {
     // The user took over the input — a previous scan no longer applies.
     scannedQr = null;
     forcedBankId = null;
+    rawScannedReference = null;
     if (looksLikeUrl(value)) {
       final detected = detectBankFromUrl(value);
       detectedBank = detected == null ? null : bankById(detected.bank);
@@ -130,6 +140,7 @@ class VerifyController extends ChangeNotifier {
     manualBank = null;
     scannedQr = null;
     forcedBankId = null;
+    rawScannedReference = null;
 
     if (looksLikeUrl(raw)) {
       final detected = detectBankFromUrl(raw);
@@ -167,11 +178,17 @@ class VerifyController extends ChangeNotifier {
       return;
     }
 
-    // Telebirr SuperApp QR — base64 → hex → invoice number.
+    // Telebirr SuperApp QR — base64 → hex → invoice number. Decoder junk
+    // ('c'/'e' read while the QR leaves the frame) lands INSIDE the decoded
+    // blob right after the invoice and gets swallowed by the invoice run,
+    // so the extracted reference ends with a bogus 'C' — strip it, and
+    // keep the untouched invoice for the raw-scan retry net in [verify].
     final invoice = extractTelebirrInvoiceFromQr(raw);
     if (invoice != null) {
       detectedBank = bankById('telebirr');
-      reference = invoice;
+      final cleaned = stripTrailingCeJunk(invoice);
+      rawScannedReference = cleaned == invoice ? null : invoice;
+      reference = cleaned;
       accountNumber = '';
       notifyListeners();
       return;
@@ -200,6 +217,7 @@ class VerifyController extends ChangeNotifier {
     detectedBank = null;
     scannedQr = null;
     forcedBankId = null;
+    rawScannedReference = null;
     notifyListeners();
   }
 
@@ -251,6 +269,36 @@ class VerifyController extends ChangeNotifier {
       );
     }
     if (run != _verifyRun) return null; // stopped while in flight
+
+    // Retry net for sanitized Telebirr scans: the shown reference had
+    // decoder junk stripped (`stripTrailingCeJunk`). When the bank answers
+    // a definitive not-found for it, retry once with the untouched invoice
+    // — if the removed letter was genuine, the raw value still verifies
+    // instead of dead-ending the user.
+    final rawInvoice = rawScannedReference;
+    if (!res.ok &&
+        res.failure?.kind == VerifyErrorKind.notFound &&
+        rawInvoice != null &&
+        rawInvoice.isNotEmpty &&
+        rawInvoice != reference.trim()) {
+      try {
+        final retry = await _verifyFn(VerifyInput(
+          bankId: bankId,
+          reference: rawInvoice,
+          account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
+          phone: phoneNumber.trim().isEmpty ? null : phoneNumber.trim(),
+        ));
+        if (run != _verifyRun) return null; // stopped during the retry
+        if (retry.ok) {
+          res = retry;
+          reference = rawInvoice; // show the value that actually verified
+          rawScannedReference = null;
+        }
+      } catch (_) {
+        // The retry is best-effort; keep the first result.
+      }
+    }
+
     result = res;
     status = VerifyStatus.done;
     notifyListeners();

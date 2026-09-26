@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/receipt_verify/verifier.dart';
@@ -226,6 +227,97 @@ void main() {
       c.applyScan('CHQ261Z4AB2C');
       c.setReference('CHQ261Z4AB2C');
       expect(c.scannedQr, isNull);
+    });
+  });
+
+  group('Telebirr scan — decoder junk-c strip + raw retry net', () {
+    // Builds a Telebirr SuperApp QR payload: latin1 text → hex → base64,
+    // the exact shape extractTelebirrInvoiceFromQr decodes.
+    String telebirrQr(String innerText) {
+      final blob = latin1.encode(innerText);
+      final hexStr =
+          blob.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      return base64Encode(utf8.encode(hexStr));
+    }
+
+    test('applyScan strips the junk-c the decoder appended inside the blob',
+        () {
+      final c = VerifyController();
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2c\x01\xffinvoice'));
+      expect(c.detectedBank?.id, 'telebirr');
+      expect(c.reference, 'CHQ261Z4AB2'); // trailing junk C gone
+      expect(c.rawScannedReference, 'CHQ261Z4AB2C'); // net keeps the raw
+      expect(c.canVerify, isTrue);
+    });
+
+    test('applyScan arms no net when nothing was stripped', () {
+      final c = VerifyController();
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2\x01\xffinvoice'));
+      expect(c.reference, 'CHQ261Z4AB2');
+      expect(c.rawScannedReference, isNull);
+    });
+
+    test('editing the reference disarms the retry net', () {
+      final c = VerifyController();
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2c\x01\xffinvoice'));
+      expect(c.rawScannedReference, isNotNull);
+      c.setReference('CHQ261Z4AB2');
+      expect(c.rawScannedReference, isNull);
+    });
+
+    test('verify retries with the raw invoice when the stripped ref is '
+        'not-found, and adopts it when it verifies', () async {
+      final inputs = <VerifyInput>[];
+      final c = VerifyController(
+        verifyFn: (input) async {
+          inputs.add(input);
+          if (input.reference == 'CHQ261Z4AB2') {
+            return _notFound('No receipt found.');
+          }
+          return _receiptOk(bank: 'telebirr');
+        },
+      );
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2c\x01\xffinvoice'));
+
+      final res = await c.verify();
+      expect(res!.ok, isTrue);
+      expect(inputs, hasLength(2));
+      expect(inputs[0].bankId, 'telebirr');
+      expect(inputs[0].reference, 'CHQ261Z4AB2'); // cleaned first
+      expect(inputs[1].reference, 'CHQ261Z4AB2C'); // raw retry
+      // The form shows the value that actually verified.
+      expect(c.reference, 'CHQ261Z4AB2C');
+      expect(c.status, VerifyStatus.done);
+    });
+
+    test('a clean scan never triggers the retry net', () async {
+      var calls = 0;
+      final c = VerifyController(
+        verifyFn: (input) async {
+          calls++;
+          return _notFound('No receipt found.');
+        },
+      );
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2\x01\xffinvoice'));
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(calls, 1);
+    });
+
+    test('a failed raw retry keeps the first not-found result', () async {
+      final inputs = <VerifyInput>[];
+      final c = VerifyController(
+        verifyFn: (input) async {
+          inputs.add(input);
+          return _notFound('No receipt found.');
+        },
+      );
+      c.applyScan(telebirrQr('\x02\x9f\x00CHQ261Z4AB2c\x01\xffinvoice'));
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(inputs, hasLength(2)); // retry happened but did not verify
+      expect(c.reference, 'CHQ261Z4AB2'); // cleaned value stays shown
     });
   });
 }

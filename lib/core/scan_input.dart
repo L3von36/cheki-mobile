@@ -5,6 +5,14 @@
 /// then handed over untouched — bank detection, BOA QR decryption and
 /// Telebirr invoice extraction are owned by the stylepos receipt verifier
 /// (`core/receipt_verify`), which knows every payload shape it supports.
+///
+/// One decoder quirk survives that hand-off: junk letters ('c' / 'e') that
+/// land INSIDE the decoded Telebirr blob, right after the invoice number,
+/// get uppercased and swallowed by the invoice's 8-12 character A-Z0-9
+/// run — so the extracted reference ends with a bogus 'C' no bank knows.
+/// [stripTrailingCeJunk] removes those (never below the invoice format's
+/// 8-character minimum); the controller's raw-scan retry net covers the
+/// rare invoice that legitimately ends in C/E.
 library;
 
 // ---------------------------------------------------------------------
@@ -98,4 +106,30 @@ class ScanStabilizer {
     _best = null;
     _agreements = 0;
   }
+}
+
+// ---------------------------------------------------------------------
+// stripTrailingCeJunk
+// ---------------------------------------------------------------------
+
+/// Strips decoder junk letters from an extracted Telebirr invoice number.
+///
+/// The camera sometimes appends a stray 'c' (or 'e') while the QR leaves
+/// the frame. On link payloads that junk sits at the very end and the
+/// stabilizer's shorter-read rule removes it — but Telebirr SuperApp
+/// receipt QRs are base64 blobs, and the junk lands INSIDE the decoded
+/// text right after the invoice number. The 8-12 character A-Z0-9 run
+/// then swallows the uppercased junk letter and the extracted reference
+/// ends with a bogus 'C' that no bank knows.
+///
+/// Trailing c/e runs are removed while at least 8 characters remain (the
+/// invoice format's minimum length). When a removed letter was genuine —
+/// invoices may legitimately end in C/E — the raw-scan retry net in
+/// VerifyController.verify re-verifies with the untouched value.
+String stripTrailingCeJunk(String invoice) {
+  var ref = invoice.trim();
+  while (ref.length > 8 && RegExp(r'[cCeE]$').hasMatch(ref)) {
+    ref = ref.substring(0, ref.length - 1);
+  }
+  return ref;
 }

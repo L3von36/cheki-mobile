@@ -65,4 +65,26 @@ void main() {
       expect(s.feed('DET8FJGUJ4'), 'DET8FJGUJ4');
     });
   });
+
+  group('stripTrailingCeJunk — Telebirr invoice decoder junk', () {
+    test('strips a decoder-appended trailing c', () {
+      expect(stripTrailingCeJunk('CHQ261Z4AB2C'), 'CHQ261Z4AB2');
+      expect(stripTrailingCeJunk('CHQ261Z4AB2c'), 'CHQ261Z4AB2');
+    });
+
+    test('strips trailing c/e runs', () {
+      expect(stripTrailingCeJunk('CHQ261Z4ABce'), 'CHQ261Z4AB');
+      expect(stripTrailingCeJunk('DET8FJGUJeE'), 'DET8FJGUJ');
+    });
+
+    test('never strips below the 8-char invoice minimum', () {
+      expect(stripTrailingCeJunk('CHQ261ZC'), 'CHQ261ZC'); // already 8
+      expect(stripTrailingCeJunk('CHQ261ZCC'), 'CHQ261ZC'); // 9 → 8
+    });
+
+    test('leaves references that do not end in c/e untouched', () {
+      expect(stripTrailingCeJunk('FT26140P01YB'), 'FT26140P01YB');
+      expect(stripTrailingCeJunk('CHQ261Z4AB2'), 'CHQ261Z4AB2');
+    });
+  });
 }

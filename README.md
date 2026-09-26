@@ -38,7 +38,10 @@ No signup. No API key. No fees. No middleman server.
   denied.
 - **Self-stabilizing scanner** — camera readings must agree before they
   are trusted, so decoder noise (a Telebirr `…BEI` scanned as `…BEIc`)
-  never reaches verification.
+  never reaches verification. Junk letters that land inside the decoded
+  Telebirr blob (a trailing `c`/`e` glued onto the invoice number) are
+  stripped too; if a removed letter was genuine, verification silently
+  retries with the untouched scan.
 - **Stoppable verification** — a red stop button appears next to VERIFY
   while a check is running; tapping it returns to the form immediately
   and discards the late result (no result screen, no history entry).
