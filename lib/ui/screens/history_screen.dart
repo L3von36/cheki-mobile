@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/receipt_verify/models.dart';
+import '../../core/receipt_verify/extra_banks.dart';
 import '../../core/verify_history.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
@@ -232,7 +232,7 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bank = bankById(entry.bankId);
+    final bank = bankByIdAll(entry.bankId);
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,

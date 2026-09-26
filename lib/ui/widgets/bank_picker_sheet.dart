@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/receipt_verify/models.dart';
+import '../../core/receipt_verify/extra_banks.dart';
 import '../../theme/mahtem_theme.dart';
 import 'bank_avatar.dart';
 
@@ -46,7 +46,7 @@ class BankPickerSheet extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 16),
-                itemCount: kVerifyBanks.length + 1,
+                itemCount: kAllVerifyBanks.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _Tile(
@@ -69,7 +69,7 @@ class BankPickerSheet extends StatelessWidget {
                       onTap: () => Navigator.of(context).pop(null),
                     );
                   }
-                  final bank = kVerifyBanks[index - 1];
+                  final bank = kAllVerifyBanks[index - 1];
                   return _Tile(
                     leading: BankAvatar(bank: bank, size: 36, radius: 18),
                     title: bank.name,

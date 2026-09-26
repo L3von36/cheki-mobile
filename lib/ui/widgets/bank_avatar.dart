@@ -14,6 +14,8 @@ const Map<String, int> _kBankColors = {
   'cbebirr': 0xFF9C27B0,
   'siinqee': 0xFF7B1FA2,
   'ebirr': 0xFF00897B,
+  'wegagen': 0xFF673AB7,
+  'amhara': 0xFF8D6E00,
   'cbe-legacy': 0xFF502878,
 };
 

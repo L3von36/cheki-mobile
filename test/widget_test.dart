@@ -1,4 +1,5 @@
 import 'package:mahtem/app.dart';
+import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:flutter/material.dart';
@@ -54,7 +55,7 @@ void main() {
   });
 
   test('every catalog bank exposes hint text and initials', () {
-    for (final bank in kVerifyBanks) {
+    for (final bank in kAllVerifyBanks) {
       expect(bank.referenceHint, isNotEmpty, reason: bank.id);
       expect(bank.helper, isNotEmpty, reason: bank.id);
       expect(bank.initials, isNotEmpty, reason: bank.id);

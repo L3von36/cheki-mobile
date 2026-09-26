@@ -1,11 +1,11 @@
 name: mahtem
 description: >-
   Mahtem (ማህተም — "stamp/seal") for Android — free Ethiopian bank receipt
-  verification. Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen,
-  CBE Birr, Siinqee and eBirr payment receipts in seconds. First 5 checks
-  free, then activate Mahtem Pro.
+  verification. Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Wegagen,
+  Amhara, Zemen, CBE Birr, Siinqee and eBirr payment receipts in seconds.
+  First 5 checks free, then activate Mahtem Pro.
 publish_to: "none"
-version: 1.4.10+15
+version: 1.5.0+16
 
 environment:
   sdk: ">=3.9.0 <4.0.0"

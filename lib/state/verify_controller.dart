@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/receipt_verify/models.dart';
 import '../core/receipt_verify/parsers.dart';
+import '../core/receipt_verify/extra_banks.dart';
 import '../core/receipt_verify/verifier.dart';
 import '../core/scan_input.dart';
 
@@ -15,10 +16,20 @@ enum VerifyStatus { idle, verifying, done, error }
 /// (`core/receipt_verify`) — this controller only builds a [VerifyInput],
 /// runs it and holds the [VerifyResult].
 class VerifyController extends ChangeNotifier {
-  VerifyController({Future<VerifyResult> Function(VerifyInput)? verifyFn})
-      : _verifyFn = verifyFn ?? ReceiptVerifier.I.verify;
+  VerifyController({
+    Future<VerifyResult> Function(VerifyInput)? verifyFn,
+    Future<VerifyResult> Function(VerifyInput)? extraVerifyFn,
+  })  : _verifyFn = verifyFn ?? ReceiptVerifier.I.verify,
+        _extraVerifyFn = extraVerifyFn ?? verifyExtraBank;
 
   final Future<VerifyResult> Function(VerifyInput input) _verifyFn;
+  final Future<VerifyResult> Function(VerifyInput input) _extraVerifyFn;
+
+  /// Link detection across the verbatim stylepos catalog AND the app-side
+  /// extra banks (Wegagen, Amhara) — extra patterns first, hosts never
+  /// overlap.
+  UrlDetection? _detect(String input) =>
+      detectExtraBankFromUrl(input) ?? detectBankFromUrl(input);
 
   // ------------------------------------------------------------------ state
   VerifyStatus status = VerifyStatus.idle;
@@ -89,8 +100,8 @@ class VerifyController extends ChangeNotifier {
     forcedBankId = null;
     rawScannedReference = null;
     if (looksLikeUrl(value)) {
-      final detected = detectBankFromUrl(value);
-      detectedBank = detected == null ? null : bankById(detected.bank);
+      final detected = _detect(value);
+      detectedBank = detected == null ? null : bankByIdAll(detected.bank);
       if (detected != null && detected.account != null) {
         accountNumber = detected.account!;
       }
@@ -119,8 +130,8 @@ class VerifyController extends ChangeNotifier {
     manualBank = bank;
     if (bank == null) {
       // Back to auto: re-detect from the current input.
-      final detected = looksLikeUrl(reference) ? detectBankFromUrl(reference) : null;
-      detectedBank = detected == null ? null : bankById(detected.bank);
+      final detected = looksLikeUrl(reference) ? _detect(reference) : null;
+      detectedBank = detected == null ? null : bankByIdAll(detected.bank);
     }
     notifyListeners();
   }
@@ -143,7 +154,7 @@ class VerifyController extends ChangeNotifier {
     rawScannedReference = null;
 
     if (looksLikeUrl(raw)) {
-      final detected = detectBankFromUrl(raw);
+      final detected = _detect(raw);
       if (detected != null) {
         if (detected.bank == 'cbe-legacy') {
           // Keep the verifier's dedicated retired-endpoint guidance.
@@ -154,7 +165,7 @@ class VerifyController extends ChangeNotifier {
           notifyListeners();
           return;
         }
-        detectedBank = bankById(detected.bank);
+        detectedBank = bankByIdAll(detected.bank);
         reference = detected.reference;
         accountNumber = detected.account ?? '';
         notifyListeners();
@@ -251,7 +262,10 @@ class VerifyController extends ChangeNotifier {
 
     VerifyResult res;
     try {
-      res = await _verifyFn(VerifyInput(
+      // App-side extra banks (Wegagen, Amhara) route to their own verifier;
+      // everything else goes through the verbatim stylepos verifier.
+      final fn = isExtraBank(bankId) ? _extraVerifyFn : _verifyFn;
+      res = await fn(VerifyInput(
         bankId: bankId,
         reference: reference.trim(),
         account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
@@ -282,9 +296,10 @@ class VerifyController extends ChangeNotifier {
         rawInvoice.isNotEmpty &&
         rawInvoice != reference.trim()) {
       try {
-        final retry = await _verifyFn(VerifyInput(
-          bankId: bankId,
-          reference: rawInvoice,
+        final retry = await (isExtraBank(bankId) ? _extraVerifyFn : _verifyFn)(
+          VerifyInput(
+            bankId: bankId,
+            reference: rawInvoice,
           account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
           phone: phoneNumber.trim().isEmpty ? null : phoneNumber.trim(),
         ));

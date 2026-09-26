@@ -14,8 +14,8 @@ and stamped as genuine. That's exactly what the app does.
 [![CI](https://img.shields.io/github/actions/workflow/status/L3von36/cheki-mobile/ci.yml?branch=main&label=CI&style=flat&logo=github)](https://github.com/L3von36/cheki-mobile/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ddb6a.svg)](LICENSE)
 
-Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Zemen, CBE Birr, Siinqee and
-eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
+Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Wegagen, Amhara, Zemen,
+CBE Birr, Siinqee and eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
 fetches the official record **directly from the bank's public endpoint on your
 device** and tells you if the payment is genuine.
 
@@ -85,6 +85,8 @@ the URL, fetches with retries, and parses the response:
 | Zemen | `share.zemenbank.com/rt/{ref}/pdf` | PDF (text-extracted on device) |
 | CBE Birr | `cbepay1.cbe.com.et/aureceipt?TID={ref}&PH={phone}` | HTML |
 | Siinqee / eBirr | `receipt.ebirr.com/{tenant}/{token}` | HTML |
+| Wegagen | `transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/{shareId}` | JSON |
+| Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
 - CBE's **legacy `FT` + last-8-digits** PDF system was decommissioned by CBE —
