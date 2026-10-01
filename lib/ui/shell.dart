@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/verify_history.dart';
+import '../state/locale_controller.dart';
 import '../theme/mahtem_theme.dart';
 import 'flow.dart';
 import 'screens/history_screen.dart';
@@ -22,15 +23,13 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     final history = context.watch<VerifyHistory>().entries.length;
+    final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [
-          HomeScreen(),
-          HistoryScreen(),
-        ],
+        children: const [HomeScreen(), HistoryScreen()],
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -50,7 +49,7 @@ class _ShellScreenState extends State<ShellScreen> {
                 _Tab(
                   icon: Icons.receipt_long_outlined,
                   activeIcon: Icons.receipt_long_rounded,
-                  label: 'Verify',
+                  label: strings.verifyTab,
                   active: _index == 0,
                   onTap: () => setState(() => _index = 0),
                   isDark: isDark,
@@ -59,7 +58,7 @@ class _ShellScreenState extends State<ShellScreen> {
                 _Tab(
                   icon: Icons.history_rounded,
                   activeIcon: Icons.history_rounded,
-                  label: history > 0 ? 'History ($history)' : 'History',
+                  label: strings.historyTab(history),
                   active: _index == 1,
                   onTap: () => setState(() => _index = 1),
                   isDark: isDark,
@@ -95,8 +94,8 @@ class _Tab extends StatelessWidget {
     final color = active
         ? MahtemPalette.green
         : isDark
-            ? MahtemPalette.dInkDim
-            : MahtemPalette.lInkDim;
+        ? MahtemPalette.dInkDim
+        : MahtemPalette.lInkDim;
     return Expanded(
       child: InkResponse(
         onTap: onTap,
@@ -146,8 +145,11 @@ class _ScanButton extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.qr_code_scanner_rounded,
-              color: Colors.white, size: 24),
+          child: const Icon(
+            Icons.qr_code_scanner_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
         ),
       ),
     );

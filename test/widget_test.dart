@@ -1,24 +1,57 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/app.dart';
+import 'package:mahtem/core/auth/account_store.dart';
+import 'package:mahtem/core/auth/password_hasher.dart';
 import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/verify_history.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:mahtem/state/auth_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> bootToHome(WidgetTester tester) async {
+/// An auth controller wired to in-memory storage with a fast hasher, so
+/// widget tests never touch platform secure storage.
+AuthController makeAuth() => AuthController(
+  store: MemoryAccountStore(),
+  hasher: PasswordHasher(iterations: 1000),
+);
+
+/// Seeds a signed-in session so the gate opens straight into the shell.
+Future<AuthController> seededAuth() async {
+  final auth = makeAuth();
+  await auth.signUp(
+    displayName: 'Test User',
+    identifier: '0911223344',
+    password: 'secret1',
+  );
+  return auth;
+}
+
+Future<void> bootToHome(WidgetTester tester, {AuthController? auth}) async {
   SharedPreferences.setMockInitialValues({});
-  await tester.pumpWidget(const MahtemApp());
-  // The app boots straight into the shell — no splash. There is an ambient
-  // pulsing/glow animation in places, so pump fixed durations instead of
-  // pumpAndSettle.
+  await tester.pumpWidget(MahtemApp(auth: auth));
+  // The auth gate loads accounts (in-memory → one frame), then boots into
+  // the shell — no splash. There is an ambient pulsing/glow animation in
+  // places, so pump fixed durations instead of pumpAndSettle.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
-  testWidgets('boots straight into the minimal verify form', (tester) async {
-    await bootToHome(tester);
+  testWidgets('a fresh device lands on the create-account screen', (
+    tester,
+  ) async {
+    await bootToHome(tester, auth: makeAuth());
+
+    expect(find.text('Create your account'), findsOneWidget);
+    expect(find.text('CREATE ACCOUNT'), findsOneWidget);
+    expect(find.text('Already have an account?'), findsOneWidget);
+  });
+
+  testWidgets('boots straight into the minimal verify form when signed in', (
+    tester,
+  ) async {
+    await bootToHome(tester, auth: await seededAuth());
 
     // Slim brand header + the three core controls.
     expect(find.text('Mahtem'), findsOneWidget);
@@ -32,9 +65,10 @@ void main() {
     expect(find.text('Settings'), findsNothing);
   });
 
-  testWidgets('a typed plain reference needs a bank pick before verifying',
-      (tester) async {
-    await bootToHome(tester);
+  testWidgets('a typed plain reference needs a bank pick before verifying', (
+    tester,
+  ) async {
+    await bootToHome(tester, auth: await seededAuth());
 
     // The verify button is inert before a bank + reference are present.
     // (Raw references carry no bank information — stylepos rule.)
@@ -46,7 +80,7 @@ void main() {
   });
 
   testWidgets('history tab shows the empty state', (tester) async {
-    await bootToHome(tester);
+    await bootToHome(tester, auth: await seededAuth());
 
     await tester.tap(find.text('History'));
     await tester.pump(const Duration(milliseconds: 300));

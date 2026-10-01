@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/localization/app_strings.dart';
 import '../../core/receipt_verify/models.dart';
 import '../../state/license_controller.dart';
+import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../flow.dart';
 import '../screens/paywall_screen.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
+import '../widgets/settings_sheet.dart';
 
 /// Verify tab — deliberately minimal:
 ///   bank selector → reference → (account / phone when required) → VERIFY.
@@ -53,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
+    final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -65,10 +69,12 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
             _Field(
               controller: _referenceCtrl,
-              label: controller.effectiveBank?.referenceLabel ??
-                  'Reference number or receipt link',
-              hint: controller.effectiveBank?.referenceHint ??
-                  'Paste a receipt link or type the number',
+              label:
+                  controller.effectiveBank?.referenceLabel ??
+                  strings.referenceLabel,
+              hint:
+                  controller.effectiveBank?.referenceHint ??
+                  strings.referenceHint,
               icon: Icons.tag_rounded,
               onChanged: (v) {
                 if (_syncing) return;
@@ -81,9 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (text == null || text.isEmpty) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           behavior: SnackBarBehavior.floating,
-                          content: Text('Clipboard is empty.'),
+                          content: Text(strings.clipboardEmpty),
                         ),
                       );
                     }
@@ -98,18 +104,16 @@ class _HomeScreenState extends State<HomeScreen> {
             if (controller.effectiveBank?.helper case final helper?)
               _Hint(helper)
             else
-              const _Hint(
-                'Pick the bank or wallet that issued the receipt — '
-                'receipt links and QR scans pick it automatically.',
-              ),
+              _Hint(strings.pickBankHint),
             if (controller.effectiveBank != null &&
                 controller.effectiveBank!.accountDigits > 0) ...[
               const SizedBox(height: 10),
               _Field(
                 controller: _accountCtrl,
                 label: controller.effectiveBank!.accountLabel,
-                hint:
-                    'Last ${controller.effectiveBank!.accountDigits} digits only',
+                hint: strings.lastDigitsOnly(
+                  controller.effectiveBank!.accountDigits,
+                ),
                 icon: Icons.account_balance_wallet_outlined,
                 keyboardType: TextInputType.number,
                 onChanged: (v) {
@@ -122,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 10),
               _Field(
                 controller: _phoneCtrl,
-                label: 'Phone number on the wallet',
+                label: strings.phoneOnWallet,
                 hint: '09xxxxxxxx',
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
@@ -132,7 +136,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
             ],
-            if (controller.detectedBank != null && controller.manualBank == null)
+            if (controller.detectedBank != null &&
+                controller.manualBank == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: _DetectedChip(bank: controller.detectedBank!),
@@ -140,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: _verifyButton(controller, isDark)),
+                Expanded(child: _verifyButton(controller, isDark, strings)),
                 if (controller.isVerifying) ...[
                   const SizedBox(width: 10),
                   const _StopButton(),
@@ -157,11 +162,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// The main VERIFY button. While a check is running it keeps the active
   /// gradient and shows a spinner — the [_StopButton] beside it aborts.
-  Widget _verifyButton(VerifyController controller, bool isDark) {
+  Widget _verifyButton(
+    VerifyController controller,
+    bool isDark,
+    AppStrings strings,
+  ) {
     final active = controller.canVerify || controller.isVerifying;
     return Pressable(
-      onTap:
-          controller.canVerify ? () => runVerificationFlow(context) : null,
+      onTap: controller.canVerify ? () => runVerificationFlow(context) : null,
       child: Container(
         height: 50,
         decoration: BoxDecoration(
@@ -184,13 +192,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             : Text(
-                'VERIFY RECEIPT',
+                strings.verifyReceiptButton,
                 style: TextStyle(
                   color: controller.canVerify
                       ? Colors.white
                       : (isDark
-                          ? MahtemPalette.dInkFaint
-                          : MahtemPalette.lInkFaint),
+                            ? MahtemPalette.dInkFaint
+                            : MahtemPalette.lInkFaint),
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
@@ -215,8 +223,11 @@ class _HomeScreenState extends State<HomeScreen> {
               gradient: LinearGradient(colors: MahtemPalette.buttonGradient),
               borderRadius: BorderRadius.all(Radius.circular(8)),
             ),
-            child: const Icon(Icons.receipt_long_rounded,
-                color: Colors.white, size: 15),
+            child: const Icon(
+              Icons.receipt_long_rounded,
+              color: Colors.white,
+              size: 15,
+            ),
           ),
           const SizedBox(width: 8),
           Text(
@@ -232,10 +243,45 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       actions: [
         const Padding(
-          padding: EdgeInsets.only(right: 12),
+          padding: EdgeInsets.only(right: 4),
           child: Center(child: _LicenseChip()),
         ),
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Center(child: _SettingsButton(isDark: isDark)),
+        ),
       ],
+    );
+  }
+}
+
+/// App-bar settings entry — opens the settings sheet (account, theme,
+/// language).
+class _SettingsButton extends StatelessWidget {
+  final bool isDark;
+
+  const _SettingsButton({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: () => openSettingsSheet(context),
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: isDark ? MahtemPalette.dCard : Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
+          ),
+        ),
+        child: Icon(
+          Icons.settings_outlined,
+          color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+          size: 17,
+        ),
+      ),
     );
   }
 }
@@ -248,18 +294,19 @@ class _LicenseChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final license = context.watch<LicenseController>();
+    final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final (label, bg, fg) = license.isEntitled
         ? (
-            'PRO · ${license.daysLeft}d',
+            strings.proDaysLeft(license.daysLeft),
             MahtemPalette.green,
             Colors.white,
           )
         : (
             license.trialsLeft > 0
-                ? '${license.trialsLeft} free left'
-                : 'Upgrade',
+                ? strings.freeChecksLeft(license.trialsLeft)
+                : strings.upgrade,
             license.trialsLeft > 0
                 ? (isDark ? MahtemPalette.dCardAlt : MahtemPalette.amberSoft)
                 : MahtemPalette.amber,
@@ -269,9 +316,9 @@ class _LicenseChip extends StatelessWidget {
           );
 
     return Pressable(
-      onTap: () => Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => const PaywallScreen()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push<bool>(MaterialPageRoute(builder: (_) => const PaywallScreen())),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
@@ -303,7 +350,7 @@ class _StopButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
-      message: 'Stop verifying',
+      message: context.watch<LocaleController>().strings.stopVerifying,
       child: Pressable(
         onTap: () => context.read<VerifyController>().stopVerify(),
         child: Container(
@@ -335,6 +382,7 @@ class _BankSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bank = controller.effectiveBank;
+    final strings = context.watch<LocaleController>().strings;
 
     return Pressable(
       onTap: () => pickBankManually(context),
@@ -371,8 +419,9 @@ class _BankSelector extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color:
-                            isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+                        color: isDark
+                            ? MahtemPalette.dInkDim
+                            : MahtemPalette.lInkDim,
                         fontSize: 10.5,
                       ),
                     ),
@@ -387,13 +436,16 @@ class _BankSelector extends StatelessWidget {
                   color: MahtemPalette.blueSoft,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: MahtemPalette.blue, size: 16),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: MahtemPalette.blue,
+                  size: 16,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Auto-detect bank',
+                  strings.autoDetectBank,
                   style: TextStyle(
                     color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                     fontSize: 12.5,
@@ -402,9 +454,11 @@ class _BankSelector extends StatelessWidget {
                 ),
               ),
             ],
-            Icon(Icons.expand_more_rounded,
-                color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
-                size: 20),
+            Icon(
+              Icons.expand_more_rounded,
+              color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+              size: 20,
+            ),
           ],
         ),
       ),
@@ -467,25 +521,33 @@ class _Field extends StatelessWidget {
               color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
               fontSize: 12,
             ),
-            prefixIcon: Icon(icon,
-                size: 18,
-                color:
-                    isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim),
-            prefixIconConstraints:
-                const BoxConstraints(minWidth: 40, minHeight: 40),
+            prefixIcon: Icon(
+              icon,
+              size: 18,
+              color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 40,
+            ),
             suffixIcon: trailing,
             isDense: true,
             filled: true,
             fillColor: fill,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: MahtemPalette.green, width: 1.6),
+              borderSide: const BorderSide(
+                color: MahtemPalette.green,
+                width: 1.6,
+              ),
             ),
           ),
         ),
@@ -502,10 +564,13 @@ class _PasteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Paste',
+      tooltip: context.watch<LocaleController>().strings.pasteTooltip,
       onPressed: onPaste,
-      icon: const Icon(Icons.content_paste_rounded,
-          size: 17, color: MahtemPalette.green),
+      icon: const Icon(
+        Icons.content_paste_rounded,
+        size: 17,
+        color: MahtemPalette.green,
+      ),
     );
   }
 }
@@ -526,12 +591,17 @@ class _DetectedChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_rounded,
-              color: MahtemPalette.greenDeep, size: 13),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: MahtemPalette.greenDeep,
+            size: 13,
+          ),
           const SizedBox(width: 5),
           Flexible(
             child: Text(
-              'Detected: ${bank.shortName}',
+              context.watch<LocaleController>().strings.detected(
+                bank.shortName,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -558,8 +628,11 @@ class _Hint extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, left: 4),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded,
-              color: MahtemPalette.blue, size: 13),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: MahtemPalette.blue,
+            size: 13,
+          ),
           const SizedBox(width: 5),
           Expanded(
             child: Text(
@@ -586,6 +659,7 @@ class _ScanAltButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final strings = context.watch<LocaleController>().strings;
     return Pressable(
       onTap: onTap,
       child: Container(
@@ -601,11 +675,14 @@ class _ScanAltButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.qr_code_scanner_rounded,
-                color: MahtemPalette.green, size: 18),
+            const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: MahtemPalette.green,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Text(
-              'Scan the QR code instead',
+              strings.scanQrInstead,
               style: TextStyle(
                 color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
                 fontSize: 12,
