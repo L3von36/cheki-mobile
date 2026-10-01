@@ -1,7 +1,9 @@
 part of 'app_strings.dart';
 
 /// Amharic (አማርኛ) catalog — polite plural forms throughout, matching
-/// Ethiopian app conventions.
+/// Ethiopian app conventions. Phrasing is idiomatic Amharic the way
+/// people actually say it (everyday loanwords like ሊንክ / ኮፒ / ስካን
+/// included) — never a word-for-word rendering of the English source.
 final class AmharicStrings extends AppStrings {
   const AmharicStrings();
 
@@ -19,15 +21,15 @@ final class AmharicStrings extends AppStrings {
   // ---------------------------------------------------------------- home
 
   @override
-  String get referenceLabel => 'የደረሰኝ ቁጥር ወይም ትስስር';
+  String get referenceLabel => 'የደረሰኝ ቁጥር ወይም ሊንክ';
 
   @override
-  String get referenceHint => 'የደረሰኝ ትስስር ይለጥፉ ወይም ቁጥሩን ይጻፉ';
+  String get referenceHint => 'የደረሰኙን ሊንክ ይለጥፉ ወይም ቁጥሩን ይጻፉ';
 
   @override
   String get pickBankHint =>
-      'ደረሰኙን ያዘጋጀውን ባንክ ወይም ዋሌት ይምረጡ — '
-      'ትስስርና QR ቅኝቶች በራስ-ሰር ይለዩታል።';
+      'ደረሰኙ የወጣበትን ባንክ ወይም ዋሌት ይምረጡ — '
+      'በሊንክና በQR ስካን ባንኩ በራስ-ሰር ይታወቃል።';
 
   @override
   String get phoneOnWallet => 'የዋሌቱ ስልክ ቁጥር';
@@ -36,31 +38,31 @@ final class AmharicStrings extends AppStrings {
   String lastDigitsOnly(int digits) => 'የመጨረሻ $digits አሃዞች ብቻ';
 
   @override
-  String get clipboardEmpty => 'የቅጂ ሰሌዳው ባዶ ነው።';
+  String get clipboardEmpty => 'ኮፒ የተደረገ ነገር የለም።';
 
   @override
   String get verifyReceiptButton => 'ደረሰኙን አረጋግጡ';
 
   @override
-  String get stopVerifying => 'ማረጋገጥ አቁም';
+  String get stopVerifying => 'ማረጋገጡን ያቁሙ';
 
   @override
-  String get autoDetectBank => 'ባንክ በራስ-ሰር ይለያል';
+  String get autoDetectBank => 'ባንክ በራስ-ሰር ይታወቃል';
 
   @override
-  String detected(String bankName) => 'ተለይቷል፦ $bankName';
+  String detected(String bankName) => 'ተገኝቷል፦ $bankName';
 
   @override
   String get pasteTooltip => 'ለጥፍ';
 
   @override
-  String get scanQrInstead => 'የQR ኮዱን ይቃኙ';
+  String get scanQrInstead => 'የQR ኮዱን ይስካኑ';
 
   @override
-  String freeChecksLeft(int count) => '$count ነጻ ይቀራሉ';
+  String freeChecksLeft(int count) => '$count ነጻ ቀርተዋል';
 
   @override
-  String get upgrade => 'ደረጃ አሳድግ';
+  String get upgrade => 'አባል ይሁኑ';
 
   @override
   String proDaysLeft(int days) => 'PRO · $days ቀን';
@@ -71,13 +73,13 @@ final class AmharicStrings extends AppStrings {
   String get welcomeBack => 'እንኳን ደህና መጡ';
 
   @override
-  String get signInSubtitle => 'ደረሰኞችን ለመቀጠል ይግቡ';
+  String get signInSubtitle => 'ደረሰኞችዎን ማረጋገጥን ለመቀጠል ይግቡ';
 
   @override
   String get createAccountTitle => 'መለያዎን ይክፈቱ';
 
   @override
-  String get createAccountSubtitle => 'በሁለት ደቂቃ ውስጥ — ለዚህ መሣሪያ ብቻ';
+  String get createAccountSubtitle => 'በሁለት ደቂቃ ውስጥ ይፈጠራል — ለዚህ መሣሪያ ብቻ።';
 
   @override
   String get fullName => 'ሙሉ ስም';
@@ -95,7 +97,7 @@ final class AmharicStrings extends AppStrings {
   String get passwordLabel => 'የይለፍ ቃል';
 
   @override
-  String get passwordHint => 'ቢያንስ 6 ፊደላት';
+  String get passwordHint => 'ቢያንስ 6 ቁምፊዎች';
 
   @override
   String get confirmPasswordLabel => 'የይለፍ ቃል ያረጋግጡ';
@@ -122,12 +124,12 @@ final class AmharicStrings extends AppStrings {
   String get forgotPassword => 'የይለፍ ቃል ረስተዋል?';
 
   @override
-  String get resetAccountsTitle => 'መለያዎችን እንደገና ይጀምሩ?';
+  String get resetAccountsTitle => 'መለያዎችን ዳግም ይጀምሩ?';
 
   @override
   String get resetAccountsBody =>
-      'በዚህ መሣሪያ ላይ ያሉ መለያዎች ሁሉ ይሰረዛሉ፤ አዲስ መለያ ይከፍታሉ። '
-      'የማረጋገጫ ታሪክዎና የPro እቅድዎ አይነኩም።';
+      'በዚህ መሣሪያ ላይ ያሉት መለያዎች ሁሉ ይሰረዛሉ፤ ከዚያም አዲስ መለያ ይከፍታሉ። '
+      'የማረጋገጫ ታሪክዎም ሆነ የPro እቅድዎ አይነኩም።';
 
   @override
   String get resetAccountsConfirm => 'አጥፋ';
@@ -148,12 +150,12 @@ final class AmharicStrings extends AppStrings {
   String get signingIn => 'በመግባት ላይ…';
 
   @override
-  String get creatingAccount => 'በመክፈት ላይ…';
+  String get creatingAccount => 'መለያ በመክፈት ላይ…';
 
   @override
   String get authPrivacyNote =>
-      'መለያዎ በዚህ መሣሪያ ላይ ብቻ ይቀመጣል — ተመስጥሮ ወደ ውጭ አይላክም። '
-      'የማረጋገጫ ታሪክዎ የግል ነው።';
+      'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ብቻ ይቀመጣል — ወደ ውጭ በጭራሽ አይላክም። '
+      'የማረጋገጫ ታሪክዎ የግል ይቆያል።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -161,16 +163,17 @@ final class AmharicStrings extends AppStrings {
     AuthError.invalidIdentifier =>
       'ትክክለኛ የኢትዮጵያ ስልክ ቁጥር (09xxxxxxxx) ወይም ኢሜይል ያስገቡ።',
     AuthError.invalidEmail => 'ኢሜይሉ ትክክል አይመስልም።',
-    AuthError.invalidPassword => 'የይለፍ ቃል ቢያንስ 6 ፊደላት መሆን አለበት።',
+    AuthError.invalidPassword => 'የይለፍ ቃል ቢያንስ 6 ቁምፊዎች መሆን አለበት።',
     AuthError.passwordMismatch => 'የይለፍ ቃሎቹ አይመሳሰሉም።',
-    AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል መለያ ቀድሞ አለ — ይግቡ።',
-    AuthError.accountNotFound => 'በዚህ ስልክ/ኢሜይል መለያ አልተገኘም — መጀመሪያ ይክፈቱ።',
-    AuthError.wrongPassword => 'የይለፍ ቃሉ ስህተት ነው። እንደገና ይሞክሩ።',
+    AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል መለያ ቀድሞ አለ — እባክዎ ይግቡ።',
+    AuthError.accountNotFound =>
+      'በዚህ ስልክ/ኢሜይል መለያ አልተገኘም — መጀመሪያ መለያ ይክፈቱ።',
+    AuthError.wrongPassword => 'የይለፍ ቃሉ ተሳስቷል። እንደገና ይሞክሩ።',
     AuthError.storageFailed => 'መለያውን ማስቀመጥ አልተቻለም። እንደገና ይሞክሩ።',
   };
 
   @override
-  String get genericAuthError => 'ችግር አጋጥሟል። እንደገና ይሞክሩ።';
+  String get genericAuthError => 'ችግር አጋጥሟል። እባክዎ እንደገና ይሞክሩ።';
 
   // ---------------------------------------------------------------- settings
 
@@ -181,7 +184,7 @@ final class AmharicStrings extends AppStrings {
   String get accountSection => 'መለያ';
 
   @override
-  String get signedInAs => 'የገቡት እንደ';
+  String get signedInAs => 'የገቡበት መለያ';
 
   @override
   String get appearanceSection => 'ገጽታ';
@@ -206,7 +209,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get signOutConfirmBody =>
-      'ለመመለስ የይለፍ ቃልዎን መጠቀም ይችላሉ — መለያዎ በዚህ መሣሪያ ላይ ይቆያል።';
+      'መልሰው ሲገቡ የይለፍ ቃልዎን ይጠቀማሉ — መለያዎ በዚህ መሣሪያ ላይ ሆኖ ይቆያል።';
 
   @override
   String get versionLabel => 'ስሪት';
@@ -215,7 +218,7 @@ final class AmharicStrings extends AppStrings {
   String get deviceCodeLabel => 'የመሣሪያ ኮድ';
 
   @override
-  String get copiedToClipboard => 'ተቀድቷል።';
+  String get copiedToClipboard => 'ኮፒ ተደርጓል።';
 
   @override
   String get close => 'ዝጋ';
