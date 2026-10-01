@@ -19,9 +19,31 @@ CBE Birr, Siinqee and eBirr payment receipts in seconds. Point your phone at a r
 fetches the official record **directly from the bank's public endpoint on your
 device** and tells you if the payment is genuine.
 
-No signup. No API key. No middleman server. Your first 5 checks are free.
+No API key. No middleman server. Accounts live on your device (encrypted) —
+your first 5 checks are free.
 
 ## Features
+
+- **Device-local accounts** — create an account (Ethiopian phone number or
+  email) and sign in; the session survives restarts. Passwords are
+  PBKDF2-hashed and everything lives in Android-Keystore-encrypted secure
+  storage — no server, nothing leaves the device. Forgot the password?
+  Reset accounts from the sign-in screen (verification history and Pro
+  plans are untouched). `lib/core/auth/` + `lib/state/auth_controller.dart`.
+
+- **English / አማርኛ language switcher** — the whole core flow (verify form,
+  auth screens, tabs, settings) is translated; switching is instant and
+  persisted. Amharic mode renders with Noto Sans Ethiopic. Catalogs live in
+  `lib/core/localization/` — the abstract `AppStrings` base makes a missing
+  translation a compile error, so the two languages can never drift.
+
+- **Light / dark / system theme switcher** — pick a mode in the settings
+  sheet (gear icon on the home screen); the choice persists across
+  restarts. System mode follows the OS as before.
+
+- **Settings sheet** — account header with sign-out, appearance switcher,
+  language switcher, app version and the device code (tap to copy) for
+  activation codes.
 
 - **5 free checks, then Mahtem Pro** — every install verifies 5 receipts
   for free. After that an in-app subscription unlocks unlimited checks
@@ -136,7 +158,7 @@ Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/rele
 ```bash
 flutter pub get
 flutter analyze   # must be clean
-flutter test      # 64 tests
+flutter test      # 193 tests
 flutter build apk --release
 ```
 

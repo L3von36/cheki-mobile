@@ -42,18 +42,30 @@ abstract final class MahtemPalette {
   ];
 
   /// Blue gradient used by the home hero card.
-  static const List<Color> heroGradient = [Color(0xFF2E6BE6), Color(0xFF5590F2)];
+  static const List<Color> heroGradient = [
+    Color(0xFF2E6BE6),
+    Color(0xFF5590F2),
+  ];
 
   /// Green gradient for primary buttons.
-  static const List<Color> buttonGradient = [Color(0xFF2CB168), Color(0xFF1E9455)];
+  static const List<Color> buttonGradient = [
+    Color(0xFF2CB168),
+    Color(0xFF1E9455),
+  ];
 }
 
 /// Builds the light and dark [ThemeData] for the app.
 abstract final class MahtemTheme {
-  static ThemeData dark() => _build(Brightness.dark);
-  static ThemeData light() => _build(Brightness.light);
+  /// [ethiopicFont] swaps Inter for Noto Sans Ethiopic — Inter has no
+  /// Ge'ez (ግዕዝ) glyphs, so Amharic mode needs the Ethiopic face for
+  /// everything, not just body text.
+  static ThemeData dark({bool ethiopicFont = false}) =>
+      _build(Brightness.dark, ethiopicFont: ethiopicFont);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData light({bool ethiopicFont = false}) =>
+      _build(Brightness.light, ethiopicFont: ethiopicFont);
+
+  static ThemeData _build(Brightness brightness, {bool ethiopicFont = false}) {
     final isDark = brightness == Brightness.dark;
     final colorScheme = isDark
         ? ColorScheme.dark(
@@ -81,28 +93,63 @@ abstract final class MahtemTheme {
     final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
     final card = isDark ? MahtemPalette.dCard : MahtemPalette.lCard;
 
-    final baseText = GoogleFonts.interTextTheme(
-      ThemeData(brightness: brightness).textTheme,
-    ).apply(bodyColor: ink, displayColor: ink);
+    final baseText =
+        (ethiopicFont
+                ? GoogleFonts.notoSansEthiopicTextTheme(
+                    ThemeData(brightness: brightness).textTheme,
+                  )
+                : GoogleFonts.interTextTheme(
+                    ThemeData(brightness: brightness).textTheme,
+                  ))
+            .apply(bodyColor: ink, displayColor: ink);
+
+    // Same face for the one-off text styles below so no Amharic string
+    // ever renders in a font missing its glyphs.
+    TextStyle uiTextStyle({
+      Color? color,
+      double? fontSize,
+      FontWeight? fontWeight,
+      double letterSpacing = 0,
+    }) => (ethiopicFont ? GoogleFonts.notoSansEthiopic() : GoogleFonts.inter())
+        .copyWith(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          letterSpacing: letterSpacing,
+        );
 
     // Compact type scale — deliberately one notch smaller than Material
     // defaults so the UI feels dense, calm and pro.
     final textTheme = baseText.copyWith(
-      headlineLarge: baseText.headlineLarge
-          ?.copyWith(fontSize: 23, fontWeight: FontWeight.w800, height: 1.15),
-      headlineMedium: baseText.headlineMedium
-          ?.copyWith(fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
-      titleLarge:
-          baseText.titleLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w800),
-      titleMedium:
-          baseText.titleMedium?.copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
-      titleSmall:
-          baseText.titleSmall?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+      headlineLarge: baseText.headlineLarge?.copyWith(
+        fontSize: 23,
+        fontWeight: FontWeight.w800,
+        height: 1.15,
+      ),
+      headlineMedium: baseText.headlineMedium?.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+        height: 1.15,
+      ),
+      titleLarge: baseText.titleLarge?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+      ),
+      titleMedium: baseText.titleMedium?.copyWith(
+        fontSize: 13.5,
+        fontWeight: FontWeight.w700,
+      ),
+      titleSmall: baseText.titleSmall?.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
       bodyLarge: baseText.bodyLarge?.copyWith(fontSize: 13, height: 1.5),
       bodyMedium: baseText.bodyMedium?.copyWith(fontSize: 12, height: 1.5),
       bodySmall: baseText.bodySmall?.copyWith(fontSize: 10.5, height: 1.45),
-      labelLarge:
-          baseText.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+      labelLarge: baseText.labelLarge?.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
       labelMedium: baseText.labelMedium?.copyWith(fontSize: 10.5),
       labelSmall: baseText.labelSmall?.copyWith(fontSize: 9.5),
     );
@@ -127,8 +174,10 @@ abstract final class MahtemTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: card,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(13),
           borderSide: BorderSide(color: border),
@@ -162,7 +211,7 @@ abstract final class MahtemTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? MahtemPalette.dCardAlt : MahtemPalette.navy,
-        contentTextStyle: GoogleFonts.inter(
+        contentTextStyle: uiTextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w500,
           fontSize: 12.5,
@@ -176,7 +225,7 @@ abstract final class MahtemTheme {
         elevation: 0,
         centerTitle: true,
         iconTheme: IconThemeData(color: ink, size: 21),
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: uiTextStyle(
           color: ink,
           fontSize: 15,
           fontWeight: FontWeight.w700,
@@ -199,7 +248,7 @@ abstract final class MahtemTheme {
         elevation: 0,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return GoogleFonts.inter(
+          return uiTextStyle(
             fontSize: 10.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             color: selected ? MahtemPalette.green : MahtemPalette.lInkFaint,
@@ -253,9 +302,9 @@ TextStyle monoStyle({
 
 /// Soft card shadow used across the light theme.
 List<BoxShadow> cardShadow({Color color = const Color(0xFF1C2B5E)}) => [
-      BoxShadow(
-        color: color.withValues(alpha: 0.06),
-        blurRadius: 18,
-        offset: const Offset(0, 6),
-      ),
-    ];
+  BoxShadow(
+    color: color.withValues(alpha: 0.06),
+    blurRadius: 18,
+    offset: const Offset(0, 6),
+  ),
+];

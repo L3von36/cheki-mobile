@@ -1,0 +1,306 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+
+import '../core/auth/account.dart';
+import '../core/auth/account_store.dart';
+import '../core/auth/password_hasher.dart';
+
+/// Why a sign-up / sign-in attempt was refused. The UI maps these to
+/// localized messages; the controller stays language-free.
+enum AuthError {
+  invalidName,
+  invalidIdentifier,
+  invalidEmail,
+  invalidPassword,
+  passwordMismatch,
+  alreadyExists,
+  accountNotFound,
+  wrongPassword,
+  storageFailed,
+}
+
+/// Result of a sign-up / sign-in attempt.
+sealed class AuthResult {
+  const AuthResult();
+}
+
+class AuthSuccess extends AuthResult {
+  const AuthSuccess(this.account);
+  final AccountRecord account;
+}
+
+class AuthFailure extends AuthResult {
+  const AuthFailure(this.error);
+  final AuthError error;
+}
+
+/// Central account state for Mahtem's device-local accounts: sign-up,
+/// sign-in, sign-out and the persisted session. Exposed app-wide via
+/// `provider`.
+///
+/// Accounts are stored ON-DEVICE only (Android Keystore-encrypted secure
+/// storage) — passwords are PBKDF2-hashed and nothing is ever sent to a
+/// server. The [AccountKeyValue] store is injectable so a hosted backend
+/// can be swapped in later without touching the UI.
+///
+/// Gating model: when a valid session exists the app boots straight into
+/// the shell; otherwise the auth gate shows sign-in (or create-account on
+/// a fresh install with no accounts).
+class AuthController extends ChangeNotifier {
+  AuthController({
+    AccountKeyValue? store,
+    PasswordHasher? hasher,
+    DateTime Function()? now,
+  }) : _store = store ?? SecureAccountStore(),
+       _hasher = hasher ?? PasswordHasher(),
+       _now = now ?? (() => DateTime.now().toUtc());
+
+  final AccountKeyValue _store;
+  final PasswordHasher _hasher;
+  final DateTime Function() _now;
+
+  static const String _kAccountsKey = 'accounts_v1';
+  static const String _kSessionKey = 'session_v1';
+
+  static const int _minNameLength = 2;
+  static const int _minPasswordLength = 6;
+  static const int _maxAccounts = 8;
+
+  bool _loaded = false;
+  bool _loading = false;
+  bool _busy = false;
+  List<AccountRecord> _accounts = <AccountRecord>[];
+  String? _sessionId;
+
+  // ---------------------------------------------------------------- accessors
+
+  bool get isLoaded => _loaded;
+
+  /// True while a sign-up / sign-in / reset request is in flight — the
+  /// buttons show a spinner and ignore extra taps.
+  bool get isBusy => _busy;
+
+  /// All accounts registered on this device.
+  List<AccountRecord> get accounts => List.unmodifiable(_accounts);
+
+  /// True when at least one account exists on this device.
+  bool get hasAccounts => _accounts.isNotEmpty;
+
+  /// The signed-in account, or null when signed out / session invalid.
+  AccountRecord? get currentAccount {
+    final id = _sessionId;
+    if (id == null) return null;
+    for (final account in _accounts) {
+      if (account.id == id) return account;
+    }
+    return null;
+  }
+
+  bool get isSignedIn => currentAccount != null;
+
+  // ---------------------------------------------------------------- lifecycle
+
+  /// Loads persisted accounts and the session. Idempotent and
+  /// concurrency-safe; the auth gate awaits this before deciding which
+  /// screen to show.
+  Future<void> ensureLoaded() async {
+    if (_loaded || _loading) return;
+    _loading = true;
+    try {
+      await _loadAccounts();
+      await _loadSession();
+      _loaded = true;
+      notifyListeners();
+    } finally {
+      _loading = false;
+    }
+  }
+
+  Future<void> _loadAccounts() async {
+    _accounts = <AccountRecord>[];
+    try {
+      final raw = await _store.read(_kAccountsKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      _accounts = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(AccountRecord.tryFromJson)
+          .whereType<AccountRecord>()
+          .toList();
+    } catch (_) {
+      _accounts = <AccountRecord>[];
+    }
+  }
+
+  Future<void> _loadSession() async {
+    _sessionId = null;
+    try {
+      final raw = await _store.read(_kSessionKey);
+      if (raw == null || raw.isEmpty) return;
+      final map = jsonDecode(raw);
+      if (map is! Map<String, dynamic>) return;
+      final id = map['accountId'];
+      if (id is String && _accounts.any((a) => a.id == id)) {
+        _sessionId = id;
+      }
+    } catch (_) {
+      _sessionId = null;
+    }
+  }
+
+  // ---------------------------------------------------------------- mutation
+
+  /// Creates an account and signs in. The first account on the device
+  /// becomes the session immediately.
+  Future<AuthResult> signUp({
+    required String displayName,
+    required String identifier,
+    required String password,
+  }) async {
+    return _guard(() async {
+      final name = displayName.trim();
+      if (name.length < _minNameLength || name.length > 60) {
+        return const AuthFailure(AuthError.invalidName);
+      }
+      final validation = validateAccountIdentifier(identifier);
+      if (validation is! AccountIdValid) {
+        // Sealed hierarchy: not valid ⇒ AccountIdInvalid.
+        final issue = (validation as AccountIdInvalid).issue;
+        return AuthFailure(switch (issue) {
+          AccountIdIssue.empty ||
+          AccountIdIssue.invalidPhone => AuthError.invalidIdentifier,
+          AccountIdIssue.invalidEmail => AuthError.invalidEmail,
+        });
+      }
+      if (password.length < _minPasswordLength) {
+        return const AuthFailure(AuthError.invalidPassword);
+      }
+      final id = validation.normalized;
+      if (_accounts.any((a) => a.id == id)) {
+        return const AuthFailure(AuthError.alreadyExists);
+      }
+
+      final hash = await _hasher.hash(password);
+      final account = AccountRecord(
+        id: id,
+        identifier: identifier.trim(),
+        displayName: name,
+        passwordHash: hash.encode(),
+        createdAtUtc: _now(),
+      );
+      _accounts.add(account);
+      if (!await _persistAccounts()) {
+        _accounts.remove(account);
+        return const AuthFailure(AuthError.storageFailed);
+      }
+      await _storeSession(account.id);
+      _sessionId = account.id;
+      notifyListeners();
+      return AuthSuccess(account);
+    });
+  }
+
+  /// Signs in with the identifier + password. The identifier is
+  /// normalized the same way sign-up normalized it, so `0911223344`,
+  /// `+251911223344` and `251911223344` all find the same account.
+  Future<AuthResult> signIn({
+    required String identifier,
+    required String password,
+  }) async {
+    return _guard(() async {
+      final validation = validateAccountIdentifier(identifier);
+      if (validation is! AccountIdValid) {
+        return const AuthFailure(AuthError.accountNotFound);
+      }
+      final id = validation.normalized;
+      AccountRecord? account;
+      for (final a in _accounts) {
+        if (a.id == id) account = a;
+      }
+      if (account == null) {
+        return const AuthFailure(AuthError.accountNotFound);
+      }
+      final ok = await _hasher.verifyEncoded(password, account.passwordHash);
+      if (!ok) return const AuthFailure(AuthError.wrongPassword);
+      await _storeSession(account.id);
+      _sessionId = account.id;
+      notifyListeners();
+      return AuthSuccess(account);
+    });
+  }
+
+  /// Clears the session — accounts stay on the device.
+  Future<void> signOut() async {
+    _sessionId = null;
+    try {
+      await _store.delete(_kSessionKey);
+    } catch (_) {
+      // Session could not be cleared from storage; the in-memory sign-out
+      // still applies for this run.
+    }
+    notifyListeners();
+  }
+
+  /// "Forgot password" escape hatch: wipes every account (and the
+  /// session) from THIS device only, returning the app to the
+  /// create-account state. Verification history and licensing are
+  /// untouched — they live under different storage keys.
+  Future<void> resetAccounts() async {
+    _busy = true;
+    notifyListeners();
+    try {
+      _accounts = <AccountRecord>[];
+      _sessionId = null;
+      try {
+        await _store.delete(_kAccountsKey);
+        await _store.delete(_kSessionKey);
+      } catch (_) {
+        // Storage wipe failed — in-memory reset still applies.
+      }
+      notifyListeners();
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------------------------------------------------------- internals
+
+  /// Runs a mutation while flagging [isBusy], so the UI can show spinners.
+  Future<T> _guard<T>(Future<T> Function() action) async {
+    _busy = true;
+    notifyListeners();
+    try {
+      return await action();
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> _persistAccounts() async {
+    try {
+      final list = _accounts.take(_maxAccounts).map((a) => a.toJson()).toList();
+      await _store.write(_kAccountsKey, jsonEncode(list));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _storeSession(String accountId) async {
+    try {
+      await _store.write(
+        _kSessionKey,
+        jsonEncode(<String, dynamic>{
+          'accountId': accountId,
+          'sinceMs': _now().millisecondsSinceEpoch,
+        }),
+      );
+    } catch (_) {
+      // Session persistence failed — sign-in still holds for this run.
+    }
+  }
+}
