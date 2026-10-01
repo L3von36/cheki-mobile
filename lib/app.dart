@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/auth/account_store.dart';
 import 'core/auth/password_hasher.dart';
+import 'core/localization/am_material_localizations.dart';
 import 'core/localization/app_strings.dart';
 import 'core/verify_history.dart';
 import 'state/app_tab.dart';
@@ -74,6 +75,14 @@ class MahtemApp extends StatelessWidget {
         builder: (context, theme, locale, _) => MaterialApp(
           title: 'Mahtem',
           debugShowCheckedModeBanner: false,
+          // Flutter has no built-in `am` MaterialLocalizations — this
+          // delegate ships the Amharic system strings (copy/paste menus,
+          // tooltips) so Amharic mode boots clean, without the "locale am
+          // is not supported" warning.
+          localizationsDelegates: const [
+            MahtemLocalizationsDelegate(),
+            MahtemCupertinoLocalizationsDelegate(),
+          ],
           locale: locale.materialLocale,
           supportedLocales: kSupportedLocales,
           theme: MahtemTheme.light(ethiopicFont: locale.isAmharic),

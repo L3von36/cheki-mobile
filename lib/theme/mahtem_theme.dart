@@ -56,9 +56,17 @@ abstract final class MahtemPalette {
 
 /// Builds the light and dark [ThemeData] for the app.
 abstract final class MahtemTheme {
-  /// [ethiopicFont] swaps Inter for Noto Sans Ethiopic — Inter has no
-  /// Ge'ez (ግዕዝ) glyphs, so Amharic mode needs the Ethiopic face for
-  /// everything, not just body text.
+  /// Font family used in Amharic mode. Noto Sans Ethiopic ships bundled
+  /// with the app (pubspec fonts) — no runtime download, works offline.
+  /// Inter has no Ge'ez (ግዕዝ) glyphs, so Amharic mode needs the Ethiopic
+  /// face for everything, not just body text.
+  static const String ethiopicFamily = 'Noto Sans Ethiopic';
+
+  /// Ethiopic glyphs carry tall diacritics and stacked marks — the tight
+  /// Latin line heights (1.15) clip them. One notch of extra air in
+  /// Amharic mode keeps every headline fully visible.
+  static double _headingHeight(bool ethiopic) => ethiopic ? 1.3 : 1.15;
+
   static ThemeData dark({bool ethiopicFont = false}) =>
       _build(Brightness.dark, ethiopicFont: ethiopicFont);
 
@@ -93,15 +101,15 @@ abstract final class MahtemTheme {
     final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
     final card = isDark ? MahtemPalette.dCard : MahtemPalette.lCard;
 
-    final baseText =
-        (ethiopicFont
-                ? GoogleFonts.notoSansEthiopicTextTheme(
-                    ThemeData(brightness: brightness).textTheme,
-                  )
-                : GoogleFonts.interTextTheme(
-                    ThemeData(brightness: brightness).textTheme,
-                  ))
-            .apply(bodyColor: ink, displayColor: ink);
+    final baseText = ethiopicFont
+        ? ThemeData(brightness: brightness).textTheme.apply(
+            fontFamily: ethiopicFamily,
+            bodyColor: ink,
+            displayColor: ink,
+          )
+        : GoogleFonts.interTextTheme(
+            ThemeData(brightness: brightness).textTheme,
+          ).apply(bodyColor: ink, displayColor: ink);
 
     // Same face for the one-off text styles below so no Amharic string
     // ever renders in a font missing its glyphs.
@@ -110,30 +118,32 @@ abstract final class MahtemTheme {
       double? fontSize,
       FontWeight? fontWeight,
       double letterSpacing = 0,
-    }) => (ethiopicFont ? GoogleFonts.notoSansEthiopic() : GoogleFonts.inter())
-        .copyWith(
-          color: color,
-          fontSize: fontSize,
-          fontWeight: fontWeight,
-          letterSpacing: letterSpacing,
-        );
+    }) => TextStyle(
+      fontFamily: ethiopicFont ? ethiopicFamily : 'Inter',
+      color: color,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      letterSpacing: letterSpacing,
+    );
 
     // Compact type scale — deliberately one notch smaller than Material
     // defaults so the UI feels dense, calm and pro.
+    final headingH = _headingHeight(ethiopicFont);
     final textTheme = baseText.copyWith(
       headlineLarge: baseText.headlineLarge?.copyWith(
         fontSize: 23,
         fontWeight: FontWeight.w800,
-        height: 1.15,
+        height: headingH,
       ),
       headlineMedium: baseText.headlineMedium?.copyWith(
         fontSize: 20,
         fontWeight: FontWeight.w800,
-        height: 1.15,
+        height: headingH,
       ),
       titleLarge: baseText.titleLarge?.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w800,
+        height: headingH,
       ),
       titleMedium: baseText.titleMedium?.copyWith(
         fontSize: 13.5,
@@ -194,12 +204,15 @@ abstract final class MahtemTheme {
           borderRadius: BorderRadius.circular(13),
           borderSide: BorderSide(color: colorScheme.error, width: 1.3),
         ),
-        hintStyle: TextStyle(
+        // InputDecorator does NOT merge these with the ambient text theme
+        // — without the explicit family, Amharic hints render in a font
+        // with no Ge'ez glyphs (the "ugly UI" bug).
+        hintStyle: uiTextStyle(
           color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
-          fontWeight: FontWeight.w400,
           fontSize: 13,
         ),
-        helperStyle: TextStyle(color: dim, fontSize: 10.5),
+        helperStyle: uiTextStyle(color: dim, fontSize: 10.5),
+        errorStyle: uiTextStyle(color: colorScheme.error, fontSize: 10.5),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: card,
@@ -233,12 +246,14 @@ abstract final class MahtemTheme {
       ),
       listTileTheme: ListTileThemeData(
         iconColor: dim,
-        titleTextStyle: TextStyle(
+        // ListTile REPLACES the ambient style with these — keep the
+        // resolved family so Amharic titles never lose their glyphs.
+        titleTextStyle: uiTextStyle(
           color: ink,
           fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
-        subtitleTextStyle: TextStyle(color: dim, fontSize: 10.5),
+        subtitleTextStyle: uiTextStyle(color: dim, fontSize: 10.5),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: card,
@@ -274,7 +289,7 @@ abstract final class MahtemTheme {
         backgroundColor: card,
         side: BorderSide(color: border),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        labelStyle: TextStyle(
+        labelStyle: uiTextStyle(
           color: ink,
           fontSize: 11.5,
           fontWeight: FontWeight.w600,

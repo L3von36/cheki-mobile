@@ -47,21 +47,31 @@ class SettingsSheet extends StatelessWidget {
             _SectionLabel(strings.appearanceSection),
             const SizedBox(height: 8),
             SegmentedButton<ThemeMode>(
+              // Compact segments so the three Amharic labels + icons fit
+              // even on 320dp phones — the default padding overflows and
+              // paints yellow/black stripes (the "ugly UI" bug).
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 9),
+                ),
+              ),
               segments: [
                 ButtonSegment(
                   value: ThemeMode.system,
                   icon: const Icon(Icons.brightness_auto_rounded, size: 17),
-                  label: Text(strings.themeSystem),
+                  label: _SegmentLabel(strings.themeSystem),
                 ),
                 ButtonSegment(
                   value: ThemeMode.light,
                   icon: const Icon(Icons.light_mode_outlined, size: 17),
-                  label: Text(strings.themeLight),
+                  label: _SegmentLabel(strings.themeLight),
                 ),
                 ButtonSegment(
                   value: ThemeMode.dark,
                   icon: const Icon(Icons.dark_mode_outlined, size: 17),
-                  label: Text(strings.themeDark),
+                  label: _SegmentLabel(strings.themeDark),
                 ),
               ],
               selected: {theme.mode},
@@ -73,9 +83,16 @@ class SettingsSheet extends StatelessWidget {
             _SectionLabel(strings.languageSection),
             const SizedBox(height: 8),
             SegmentedButton<AppLocale>(
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 9),
+                ),
+              ),
               segments: [
                 for (final l in AppLocale.values)
-                  ButtonSegment(value: l, label: Text(l.label)),
+                  ButtonSegment(value: l, label: _SegmentLabel(l.label)),
               ],
               selected: {locale.locale},
               onSelectionChanged: (selection) =>
@@ -132,6 +149,26 @@ class SettingsSheet extends StatelessWidget {
       await auth.signOut();
       // The auth gate swaps to the sign-in screen on its own.
     }
+  }
+}
+
+/// Single-line, never-wrapping segment label — the last-resort ellipsis
+/// keeps a long localized label from painting overflow stripes inside a
+/// segment; the compact segment style makes ellipsis unreachable in
+/// practice on real screens.
+class _SegmentLabel extends StatelessWidget {
+  final String text;
+
+  const _SegmentLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }
 
@@ -206,13 +243,17 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAmharic = context.watch<LocaleController>().isAmharic;
+    // Ethiopic script has no case and wide glyphs — heavy tracking and
+    // uppercase transforms only make it look stretched and broken.
+    final label = isAmharic ? text : text.toUpperCase();
     return Text(
-      text.toUpperCase(),
+      label,
       style: TextStyle(
         color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
         fontSize: 10,
         fontWeight: FontWeight.w800,
-        letterSpacing: 1.1,
+        letterSpacing: isAmharic ? 0.3 : 1.1,
       ),
     );
   }

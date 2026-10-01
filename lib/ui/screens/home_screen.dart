@@ -168,6 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
     AppStrings strings,
   ) {
     final active = controller.canVerify || controller.isVerifying;
+    final isAmharic = context.watch<LocaleController>().isAmharic;
     return Pressable(
       onTap: controller.canVerify ? () => runVerificationFlow(context) : null,
       child: Container(
@@ -201,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             : MahtemPalette.lInkFaint),
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
+                  letterSpacing: isAmharic ? 0.2 : 0.8,
                 ),
               ),
       ),
@@ -230,13 +231,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            'Mahtem',
-            style: TextStyle(
-              color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
+          Flexible(
+            child: Text(
+              'Mahtem',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],
@@ -320,6 +325,7 @@ class _LicenseChip extends StatelessWidget {
         context,
       ).push<bool>(MaterialPageRoute(builder: (_) => const PaywallScreen())),
       child: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: bg,
@@ -327,6 +333,8 @@ class _LicenseChip extends StatelessWidget {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: fg,
             fontSize: 11,
@@ -517,10 +525,7 @@ class _Field extends StatelessWidget {
           ),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(
-              color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
-              fontSize: 12,
-            ),
+            // Hint font comes from the theme (family-aware in Amharic).
             prefixIcon: Icon(
               icon,
               size: 18,
@@ -681,12 +686,18 @@ class _ScanAltButton extends StatelessWidget {
               size: 18,
             ),
             const SizedBox(width: 8),
-            Text(
-              strings.scanQrInstead,
-              style: TextStyle(
-                color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+            // Flexible: the label wraps instead of overflowing on very
+            // narrow screens.
+            Flexible(
+              child: Text(
+                strings.scanQrInstead,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],

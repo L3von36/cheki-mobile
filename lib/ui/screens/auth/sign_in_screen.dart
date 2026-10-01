@@ -22,7 +22,22 @@ class _SignInScreenState extends State<SignInScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // Same rebuild-on-keystroke wiring as the create-account screen —
+    // otherwise the sign-in button never enables while typing.
+    _identifierCtrl.addListener(_onFormChanged);
+    _passwordCtrl.addListener(_onFormChanged);
+  }
+
+  void _onFormChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _identifierCtrl.removeListener(_onFormChanged);
+    _passwordCtrl.removeListener(_onFormChanged);
     _identifierCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -150,9 +165,14 @@ class _SignInScreenState extends State<SignInScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        strings.noAccountPrompt,
-                        style: TextStyle(color: inkDim, fontSize: 12),
+                      // Flexible: long localized prompts wrap instead of
+                      // painting overflow stripes on narrow phones.
+                      Flexible(
+                        child: Text(
+                          strings.noAccountPrompt,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: inkDim, fontSize: 12),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(

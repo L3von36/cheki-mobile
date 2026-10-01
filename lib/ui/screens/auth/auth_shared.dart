@@ -92,6 +92,9 @@ class AuthSubmitButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Ethiopic has no case — heavy tracking is a Latin-only device and
+    // makes Amharic labels look spread out and messy.
+    final isAmharic = context.watch<LocaleController>().isAmharic;
     final enabled = onTap != null && !busy;
     final disabledFill = isDark
         ? MahtemPalette.dCardAlt
@@ -136,7 +139,7 @@ class AuthSubmitButton extends StatelessWidget {
                             : MahtemPalette.lInkFaint),
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
+                  letterSpacing: isAmharic ? 0.2 : 0.8,
                 ),
               ),
       ),
@@ -289,10 +292,7 @@ class _AuthFieldState extends State<AuthField> {
           decoration: InputDecoration(
             hintText: widget.hint,
             errorText: widget.errorText,
-            hintStyle: TextStyle(
-              color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
-              fontSize: 12,
-            ),
+            // Hint font comes from the theme (family-aware in Amharic).
             prefixIcon: Icon(
               widget.icon,
               size: 18,

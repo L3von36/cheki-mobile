@@ -5,7 +5,7 @@ description: >-
   Amhara, Zemen, CBE Birr, Siinqee and eBirr payment receipts in seconds.
   First 5 checks free, then activate Mahtem Pro.
 publish_to: "none"
-version: 1.6.0+18
+version: 1.6.1+19
 
 environment:
   sdk: ">=3.9.0 <4.0.0"
@@ -40,6 +40,22 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Noto Sans Ethiopic ships WITH the app — Amharic mode must never depend
+  # on a runtime google_fonts download (offline devices got fallback tofu).
+  fonts:
+    - family: Noto Sans Ethiopic
+      fonts:
+        - asset: assets/fonts/NotoSansEthiopic-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansEthiopic-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansEthiopic-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansEthiopic-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/NotoSansEthiopic-ExtraBold.ttf
+          weight: 800
 
 flutter_launcher_icons:
   image_path: "assets/icon/mahtem_icon.png"

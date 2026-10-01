@@ -25,7 +25,26 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // TextField manages its own editing state — the screen never rebuilds
+    // while typing unless we listen. Without this the submit button stays
+    // disabled forever even with a complete form (the "button won't tap"
+    // bug): _formComplete is only re-evaluated on rebuild.
+    for (final c in [_nameCtrl, _identifierCtrl, _passwordCtrl, _confirmCtrl]) {
+      c.addListener(_onFormChanged);
+    }
+  }
+
+  void _onFormChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    for (final c in [_nameCtrl, _identifierCtrl, _passwordCtrl, _confirmCtrl]) {
+      c.removeListener(_onFormChanged);
+    }
     _nameCtrl.dispose();
     _identifierCtrl.dispose();
     _passwordCtrl.dispose();
@@ -130,9 +149,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        strings.haveAccountPrompt,
-                        style: TextStyle(color: inkDim, fontSize: 12),
+                      // Flexible: long localized prompts wrap instead of
+                      // painting overflow stripes on narrow phones.
+                      Flexible(
+                        child: Text(
+                          strings.haveAccountPrompt,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: inkDim, fontSize: 12),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(
