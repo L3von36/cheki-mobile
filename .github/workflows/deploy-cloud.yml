@@ -60,7 +60,8 @@ jobs:
           set -euo pipefail
           sleep 5
           for i in 1 2 3; do
-            if curl -fsS https://mahtem-api.mahtem.workers.dev/v1/health | tee health.json | grep -q '"ok":true'; then
+            if curl -fsS -H "X-Mahtem-Client: ci-deploy" https://mahtem-api.mahtem.workers.dev/v1/health \
+              | tee health.json | grep -q '"ok":true'; then
               echo "Live health check passed:"
               cat health.json
               exit 0
