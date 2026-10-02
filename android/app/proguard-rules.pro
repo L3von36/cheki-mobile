@@ -18,3 +18,14 @@
 # use). The library is not bundled, and these paths never execute — tell
 # R8 to ignore them (found by running a release build with R8 enabled).
 -dontwarn com.google.android.play.core.**
+
+# google_mlkit_text_recognition bundles ONLY the Latin model; the other
+# scripts' option builders (Chinese / Devanagari / Japanese / Korean) are
+# compileOnly dependencies its Kotlin initializer still references. Mahtem
+# requests TextRecognitionScript.latin exclusively (index 0), so those
+# classes never load at runtime — the references are expected to dangle.
+# Found by running a release build with R8 enabled.
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**
