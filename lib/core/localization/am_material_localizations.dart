@@ -63,16 +63,44 @@ class _OmMaterialLocalizations extends DefaultMaterialLocalizations {
   String get closeButtonTooltip => 'Cufi';
 }
 
-/// Same idea for Cupertino localizations — nothing Amharic-specific to
+/// Same idea for Tigrinya (ti) — Ge’ez script, same Ethiopic font as
+/// Amharic; only the labels need overriding.
+class _TiMaterialLocalizations extends DefaultMaterialLocalizations {
+  const _TiMaterialLocalizations();
+
+  // ── text-selection toolbar (the strings users actually see) ─────────
+  @override
+  String get copyButtonLabel => 'ኮፒ ግበሩ';
+  @override
+  String get cutButtonLabel => 'ቕረጹ';
+  @override
+  String get pasteButtonLabel => 'ኣቐምጡ';
+  @override
+  String get selectAllButtonLabel => 'ኩሉ ምረጹ';
+  @override
+  String get lookUpButtonLabel => 'ምድላይ';
+  @override
+  String get searchWebButtonLabel => 'ኣብ ኢንተርኔት ምድላይ';
+  @override
+  String get shareButtonLabel => 'ኣካፍሉ';
+
+  // ── common tooltips ─────────────────────────────────────────────────
+  @override
+  String get backButtonTooltip => 'ተመለሱ';
+  @override
+  String get closeButtonTooltip => 'ዕጉቡ';
+}
+
+/// Same idea for Cupertino localizations — nothing language-specific to
 /// override (no cupertino surfaces in Mahtem), but claiming support for
-/// `am` keeps the localization warning out of every boot.
+/// am / om / ti keeps the localization warning out of every boot.
 class MahtemCupertinoLocalizationsDelegate
     extends LocalizationsDelegate<CupertinoLocalizations> {
   const MahtemCupertinoLocalizationsDelegate();
 
   @override
   bool isSupported(Locale locale) =>
-      const {'en', 'am', 'om'}.contains(locale.languageCode);
+      const {'en', 'am', 'om', 'ti'}.contains(locale.languageCode);
 
   @override
   Future<CupertinoLocalizations> load(Locale locale) async =>
@@ -90,13 +118,14 @@ class MahtemLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      const {'en', 'am', 'om'}.contains(locale.languageCode);
+      const {'en', 'am', 'om', 'ti'}.contains(locale.languageCode);
 
   @override
   Future<MaterialLocalizations> load(Locale locale) async =>
       switch (locale.languageCode) {
         'am' => const _AmMaterialLocalizations(),
         'om' => const _OmMaterialLocalizations(),
+        'ti' => const _TiMaterialLocalizations(),
         _ => const DefaultMaterialLocalizations(),
       };
 

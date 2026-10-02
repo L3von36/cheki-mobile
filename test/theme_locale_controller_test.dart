@@ -63,6 +63,21 @@ void main() {
     expect(controller.locale, AppLocale.english);
   });
 
+  test('Tigrinya persists and uses the Ethiopic script flag', () async {
+    SharedPreferences.setMockInitialValues({'mahtem.locale': 'ti'});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = LocaleController(prefs: prefs)..ensureLoaded();
+
+    expect(controller.locale, AppLocale.tigrinya);
+    expect(controller.usesEthiopicScript, isTrue);
+    expect(controller.materialLocale, const Locale('ti'));
+    expect(controller.strings.welcomeBack, 'ብደሓን ተመሊስኩም');
+
+    // Oromo stays Latin-script: the flag is Ethiopic-only.
+    await controller.setLocale(AppLocale.oromo);
+    expect(controller.usesEthiopicScript, isFalse);
+  });
+
   test('controllers without prefs still work (in-memory only)', () async {
     final theme = ThemeController()..ensureLoaded();
     await theme.setMode(ThemeMode.light);

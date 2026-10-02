@@ -45,6 +45,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   final createLabel = switch (localeCode) {
     'am' => 'መለያ ይክፈቱ',
     'om' => 'Herrega uumaa',
+    'ti' => 'ሕሳብ ክፉቱ',
     _ => 'CREATE ACCOUNT',
   };
   await tester.ensureVisible(find.text(createLabel));
@@ -74,11 +75,18 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
     expect(find.text('Dukkaa'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Afaan Oromoo'), findsOneWidget);
+  } else if (localeCode == 'ti') {
+    expect(find.text('ስርዓት'), findsOneWidget);
+    expect(find.text('ብርሃን'), findsOneWidget);
+    expect(find.text('ጽልማት'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('ትግርኛ'), findsOneWidget);
   } else {
     expect(find.text('APPEARANCE'), findsOneWidget);
     expect(find.text('System'), findsOneWidget);
     expect(find.text('አማርኛ'), findsOneWidget);
     expect(find.text('Afaan Oromoo'), findsOneWidget);
+    expect(find.text('ትግርኛ'), findsOneWidget);
   }
 
   // Switch theme light → dark → light while the sheet is open: the
@@ -86,11 +94,13 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   final lightLabel = find.text(switch (localeCode) {
     'am' => 'ብርሃናማ',
     'om' => 'Ifa',
+    'ti' => 'ብርሃን',
     _ => 'Light',
   });
   final darkLabel = find.text(switch (localeCode) {
     'am' => 'ጨለማ',
     'om' => 'Dukkaa',
+    'ti' => 'ጽልማት',
     _ => 'Dark',
   });
   await tester.tap(lightLabel);
@@ -104,6 +114,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   final signOutLabel = find.text(switch (localeCode) {
     'am' => 'ይውጡ',
     'om' => "Ba'aa",
+    'ti' => 'ውጻኡ',
     _ => 'Sign out',
   });
   await tester.ensureVisible(signOutLabel);
@@ -123,6 +134,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   final signInLabel = switch (localeCode) {
     'am' => 'ግቡ',
     'om' => "Galmaa'aa",
+    'ti' => 'ኣቱዎ',
     _ => 'SIGN IN',
   };
   await tester.ensureVisible(find.text(signInLabel));
@@ -138,6 +150,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   final historyLabel = find.text(switch (localeCode) {
     'am' => 'ታሪክ',
     'om' => 'Seenaa',
+    'ti' => 'ታሪኽ',
     _ => 'History',
   });
   await tester.tap(historyLabel.first);
@@ -180,12 +193,23 @@ void main() {
   );
 
   testWidgets(
-    'Afaan Oromoo walk, 320x600 — 3-language switcher must not overflow',
+    'Afaan Oromoo walk, 320x600 — 4-language switcher must not overflow',
     (tester) async {
       tester.view.physicalSize = const Size(320, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await _walk(tester, 'om');
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  testWidgets(
+    'Tigrinya walk, 320x600 — Ethiopic labels + 4-language switcher',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await _walk(tester, 'ti');
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

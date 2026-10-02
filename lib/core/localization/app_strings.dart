@@ -1,7 +1,9 @@
-/// App-wide strings for English, Amharic (አማርኛ) and Afaan Oromoo.
+/// App-wide strings for English, Amharic (አማርኛ), Afaan Oromoo and
+/// Tigrinya (ትግርኛ).
 ///
 /// Design: [AppStrings] is an abstract catalog; [EnglishStrings],
-/// [AmharicStrings] and [OromoStrings] must implement EVERY getter, so
+/// [AmharicStrings], [OromoStrings] and [TigrinyaStrings] must implement
+/// EVERY getter, so
 /// adding a string without translating it is a compile error —
 /// translations can never silently drift. Look strings up through the [LocaleController]:
 ///
@@ -30,12 +32,14 @@ export '../receipt_verify/models.dart' show VerifyErrorKind;
 part 'english_strings.dart';
 part 'amharic_strings.dart';
 part 'oromo_strings.dart';
+part 'tigrinya_strings.dart';
 
 /// Languages Mahtem ships with.
 enum AppLocale {
   english('en'),
   amharic('am'),
-  oromo('om');
+  oromo('om'),
+  tigrinya('ti');
 
   const AppLocale(this.code);
 
@@ -50,11 +54,13 @@ enum AppLocale {
     AppLocale.english => 'English',
     AppLocale.amharic => 'አማርኛ',
     AppLocale.oromo => 'Afaan Oromoo',
+    AppLocale.tigrinya => 'ትግርኛ',
   };
 
   static AppLocale fromCode(String? code) => switch (code) {
     'am' => AppLocale.amharic,
     'om' => AppLocale.oromo,
+    'ti' => AppLocale.tigrinya,
     _ => AppLocale.english,
   };
 }
@@ -64,6 +70,7 @@ const List<Locale> kSupportedLocales = <Locale>[
   Locale('en'),
   Locale('am'),
   Locale('om'),
+  Locale('ti'),
 ];
 
 abstract base class AppStrings {
@@ -72,6 +79,7 @@ abstract base class AppStrings {
   factory AppStrings.of(AppLocale locale) => switch (locale) {
     AppLocale.amharic => const AmharicStrings(),
     AppLocale.oromo => const OromoStrings(),
+    AppLocale.tigrinya => const TigrinyaStrings(),
     AppLocale.english => const EnglishStrings(),
   };
 

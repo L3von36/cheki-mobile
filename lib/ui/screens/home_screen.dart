@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
     AppStrings strings,
   ) {
     final active = controller.canVerify || controller.isVerifying;
-    final isAmharic = context.watch<LocaleController>().isAmharic;
+    final ethiopic = context.watch<LocaleController>().usesEthiopicScript;
     return Pressable(
       onTap: controller.canVerify ? () => runVerificationFlow(context) : null,
       child: Container(
@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             : MahtemPalette.lInkFaint),
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: isAmharic ? 0.2 : 0.8,
+                  letterSpacing: ethiopic ? 0.2 : 0.8,
                 ),
               ),
       ),

@@ -22,8 +22,8 @@ Future<void> openSettingsSheet(BuildContext context) {
 }
 
 /// Settings: device account (sign out), appearance (system / light /
-/// dark) and language (English / አማርኛ / Afaan Oromoo) — plus version
-/// and the device code users quote when buying an activation code.
+/// dark) and language (English / አማርኛ / Afaan Oromoo / ትግርኛ) — plus
+/// version and the device code users quote when buying an activation code.
 class SettingsSheet extends StatelessWidget {
   const SettingsSheet({super.key});
 
@@ -82,22 +82,28 @@ class SettingsSheet extends StatelessWidget {
             const SizedBox(height: 18),
             _SectionLabel(strings.languageSection),
             const SizedBox(height: 8),
-            SegmentedButton<AppLocale>(
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 9),
+            // Four language segments no longer fit a 320dp sheet at full
+            // size — scale the whole switcher down only when it's tight
+            // (never overflows, unchanged look on regular phones).
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SegmentedButton<AppLocale>(
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 9),
+                  ),
                 ),
+                segments: [
+                  for (final l in AppLocale.values)
+                    ButtonSegment(value: l, label: _SegmentLabel(l.label)),
+                ],
+                selected: {locale.locale},
+                onSelectionChanged: (selection) =>
+                    context.read<LocaleController>().setLocale(selection.first),
+                showSelectedIcon: false,
               ),
-              segments: [
-                for (final l in AppLocale.values)
-                  ButtonSegment(value: l, label: _SegmentLabel(l.label)),
-              ],
-              selected: {locale.locale},
-              onSelectionChanged: (selection) =>
-                  context.read<LocaleController>().setLocale(selection.first),
-              showSelectedIcon: false,
             ),
             const SizedBox(height: 18),
             _SignOutTile(
@@ -243,17 +249,17 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAmharic = context.watch<LocaleController>().isAmharic;
+    final ethiopic = context.watch<LocaleController>().usesEthiopicScript;
     // Ethiopic script has no case and wide glyphs — heavy tracking and
     // uppercase transforms only make it look stretched and broken.
-    final label = isAmharic ? text : text.toUpperCase();
+    final label = ethiopic ? text : text.toUpperCase();
     return Text(
       label,
       style: TextStyle(
         color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
         fontSize: 10,
         fontWeight: FontWeight.w800,
-        letterSpacing: isAmharic ? 0.3 : 1.1,
+        letterSpacing: ethiopic ? 0.3 : 1.1,
       ),
     );
   }

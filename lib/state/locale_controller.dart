@@ -3,10 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/localization/app_strings.dart';
 
-/// App-wide language state: English, Amharic (አማርኛ) or Afaan Oromoo,
-/// persisted in [SharedPreferences] and exposed through `provider`. Screens read
-/// localized strings from [strings] — switch the language and every
-/// listening screen rebuilds in the new language.
+/// App-wide language state: English, Amharic (አማርኛ), Afaan Oromoo or
+/// Tigrinya (ትግርኛ), persisted in [SharedPreferences] and exposed through
+/// `provider`. Screens read localized strings from [strings] — switch the
+/// language and every listening screen rebuilds in the new language.
 class LocaleController extends ChangeNotifier {
   LocaleController({SharedPreferences? prefs}) : _prefs = prefs;
 
@@ -19,6 +19,12 @@ class LocaleController extends ChangeNotifier {
   AppLocale get locale => _locale;
 
   bool get isAmharic => _locale == AppLocale.amharic;
+
+  /// True for locales written in the Ethiopic (Ge'ez) script — Amharic
+  /// and Tigrinya. Drives the Ethiopic font and the tighter letter
+  /// spacing Ethiopic needs (heavy Latin tracking spreads the glyphs).
+  bool get usesEthiopicScript =>
+      _locale == AppLocale.amharic || _locale == AppLocale.tigrinya;
 
   /// The string catalog for the current language.
   AppStrings get strings => AppStrings.of(_locale);
