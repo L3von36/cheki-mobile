@@ -662,4 +662,13 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String get exportTooltip => 'Share history';
+
+  @override
+  String get cbeNeedsCodeTitle => 'CBE needs the receipt code';
+
+  @override
+  String get cbeNeedsCodeBody =>
+      'The FT number printed on the slip is CBE-internal — the bank only '
+      'verifies the code inside a shared receipt link or QR. Paste the '
+      'receipt link or scan the QR shown in the CBE app instead.';
 }

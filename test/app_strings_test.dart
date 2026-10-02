@@ -179,6 +179,12 @@ void main() {
           reason: '${locale.code} refScanTypeInstead');
       expect(s.refScanNoNumberFound, isNotEmpty,
           reason: '${locale.code} refScanNoNumberFound');
+
+      // v1.10.1: CBE printed-number gate.
+      expect(s.cbeNeedsCodeTitle, isNotEmpty,
+          reason: '${locale.code} cbeNeedsCodeTitle');
+      expect(s.cbeNeedsCodeBody, isNotEmpty,
+          reason: '${locale.code} cbeNeedsCodeBody');
     }
   });
 
@@ -212,6 +218,8 @@ void main() {
     expect(_hasEthiopic(s.groupToday), isTrue);
     expect(_hasEthiopic(s.refScanTitle), isTrue);
     expect(_hasEthiopic(s.refScanNoNumberFound), isTrue);
+    expect(_hasEthiopic(s.cbeNeedsCodeTitle), isTrue);
+    expect(_hasEthiopic(s.cbeNeedsCodeBody), isTrue);
     expect(s.undo, 'መልስ');
     expect(s.locale, AppLocale.amharic);
   });
@@ -241,6 +249,7 @@ void main() {
     expect(_hasEthiopic(s.refScanTitle), isFalse);
     expect(s.groupToday, 'Har\u2019aa');
     expect(s.scanNumberAction, 'Lakkoofsa iskaanii godhaa');
+    expect(s.cbeNeedsCodeTitle, 'CBE-n koodii risiitii barbaada');
     expect(s.locale, AppLocale.oromo);
   });
 
@@ -266,6 +275,7 @@ void main() {
     expect(_hasEthiopic(s.refScanTitle), isTrue);
     expect(s.groupYesterday, 'ትማሊ');
     expect(s.scanNumberAction, 'ቍጽሪ ስካኑ');
+    expect(s.cbeNeedsCodeTitle, 'ሲቢኤ ኮድ ሰርተፊኬት ይደሊ');
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');
     expect(s.verifyTab, 'ምርግጋጽ');

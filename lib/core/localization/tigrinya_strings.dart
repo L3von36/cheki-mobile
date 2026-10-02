@@ -754,4 +754,13 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get exportTooltip => 'ታሪኽ ኣካፍሉ';
+
+  @override
+  String get cbeNeedsCodeTitle => 'ሲቢኤ ኮድ ሰርተፊኬት ይደሊ';
+
+  @override
+  String get cbeNeedsCodeBody =>
+      'ቍጽሪ FT ኣብ ተሓቂ ዘሎ ናይ ውሽጢ ሲቢኤ እዩ — ባንኪ ዝረጋግጾ እቲ ኣብ ተሰፊሩ ሊንክ '
+      'ሰርተፊኬት ወይ ኣብ QR ዝርከብ ኮድ ጥራይ እዩ። እቲ ሊንክ ኣብጽሖ ወይ ኣብ ኣፕሊኬሽን '
+      'ሲቢኤ ዝርከብ QR ስካን ግበር።';
 }

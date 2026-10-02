@@ -746,4 +746,14 @@ final class OromoStrings extends AppStrings {
 
   @override
   String get exportTooltip => 'Seenaa qoodi';
+
+  @override
+  String get cbeNeedsCodeTitle => 'CBE-n koodii risiitii barbaada';
+
+  @override
+  String get cbeNeedsCodeBody =>
+      'Lakkoofsi FT risiitii irratti barreeffame kan keessaa CBE ti — '
+      'baŋkichi mirkaneessuuf koodii asxaa risiitii wal qoodame ykn QR '
+      'keessaa jiru qofa fudhata. Maaloo liinkii risiitii qabaa ykn QR '
+      'appii CBE keessaa mul\u2019atu iskaanii godhi.';
 }

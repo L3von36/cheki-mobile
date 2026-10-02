@@ -622,6 +622,36 @@ Future<VerifyResult> verifyExtraBank(
           sw.elapsedMilliseconds,
         );
       }
+      // CBE answers HTTP 500 "Security Alert: Invalid or tampered legacy
+      // token!" for anything that is not one of its cryptographically valid
+      // receipt codes — including the FT number PRINTED on a slip (verified
+      // live Oct 2026 with real shared codes: valid ones answer 200, the
+      // printed FT reference always lands here). This is the bank's
+      // anti-enumeration design, not a transient fault — retrying cannot
+      // help, so explain what CBE actually accepts instead of blaming the
+      // network.
+      if (bankId == 'cbe' && resp.statusCode == 500) {
+        final errBody =
+            utf8.decode(resp.bodyBytes, allowMalformed: true);
+        if (errBody.contains('Security Alert') ||
+            errBody.contains('legacy token')) {
+          return VerifyResult.failed(
+            VerifyFailure(
+              VerifyErrorKind.notFound,
+              'CBE only verifies the receipt code inside a shared receipt '
+                  'link or QR — the FT number printed on the slip cannot be '
+                  'checked here.',
+              tips: const [
+                'Ask the sender to share the receipt link from the CBE app '
+                    '(or show its QR), then scan or paste that.',
+                'If a code was pasted, make sure nothing was cut off — it '
+                    'must match the shared link exactly.',
+              ],
+            ),
+            sw.elapsedMilliseconds,
+          );
+        }
+      }
       if (resp.statusCode == 200) {
         final body = utf8.decode(resp.bodyBytes, allowMalformed: true);
         if (bankId == 'cbe') {

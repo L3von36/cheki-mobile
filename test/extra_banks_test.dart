@@ -541,6 +541,48 @@ void main() {
       expect(calls, 3); // retried like a 5xx before giving up
     });
 
+    test('the 500 security-alert answer maps to honest CBE guidance',
+        () async {
+      // Observed live (Oct 2026): anything that is not one of CBE's
+      // cryptographically valid receipt codes — including the FT number
+      // printed on a slip — is rejected with this exact body. Retrying
+      // cannot help; the user must use the shared link / QR code.
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'cbe', reference: 'FT2614977L8S'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return ExtraHttpResponse(
+              500,
+              utf8.encode(
+                  '{"type":"/problem-with-message","title":"Internal Server '
+                  'Error","status":500,"detail":"Security Alert: Invalid or '
+                  'tampered legacy token!","instance":"/api/v1/transactions/'
+                  'public/transaction-detail/FT2614977L8S"}'));
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message, contains('receipt code'));
+      expect(res.failure!.message, contains('FT number'));
+      expect(calls, 1); // definitive answer — never retried
+    });
+
+    test('an unrelated CBE 500 keeps the generic network failure', () async {
+      var calls = 0;
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'cbe', reference: 'fHCxyV4mg5pRIwEkJO'),
+        httpFn: (uri, headers) async {
+          calls++;
+          return ExtraHttpResponse(500, utf8.encode('boom'));
+        },
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.network);
+      expect(res.failure!.message, contains('unexpected response'));
+      expect(calls, 3); // retried like any other 5xx
+    });
+
     test('a 200 without a usable record maps to not-found', () async {
       final res = await verifyExtraBank(
         const VerifyInput(bankId: 'cbe', reference: 'v2-emptyrecord0000'),

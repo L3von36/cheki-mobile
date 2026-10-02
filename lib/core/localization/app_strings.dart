@@ -369,4 +369,12 @@ abstract base class AppStrings {
 
   /// App-bar action: share the whole history as CSV text.
   String get exportTooltip;
+
+  // --------------------------------------- CBE printed-number gate (v1.10.1)
+
+  /// Dialog shown instead of running a doomed check: CBE's receipt API only
+  /// accepts the code inside a shared receipt link / QR, so the FT number
+  /// read off the slip can never verify. (Acknowledged with [ok].)
+  String get cbeNeedsCodeTitle;
+  String get cbeNeedsCodeBody;
 }

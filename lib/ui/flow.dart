@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/verify_history.dart';
 import '../state/license_controller.dart';
+import '../state/locale_controller.dart';
 import '../state/verify_controller.dart';
 import 'screens/paywall_screen.dart';
 import 'screens/result_screen.dart';
@@ -28,6 +29,12 @@ Future<void> openScanner(BuildContext context) async {
   await runVerificationFlow(context);
 }
 
+/// The FT reference printed on a CBE slip. CBE's receipt API cryptographically
+/// validates its shared short codes and rejects this shape with a 500
+/// "Security Alert: Invalid or tampered legacy token!" — verified live, so a
+/// check against it can only fail (and still burn a licensed attempt).
+final RegExp _cbePrintedReference = RegExp(r'^FT[0-9A-Za-z]{5,}$');
+
 /// Runs the pending verification and, on ANY completed check (verified or
 /// failed), slides in the result screen — users always get feedback.
 ///
@@ -37,6 +44,31 @@ Future<void> openScanner(BuildContext context) async {
 /// the user was trying to run.
 Future<void> runVerificationFlow(BuildContext context) async {
   final controller = context.read<VerifyController>();
+
+  // ── CBE printed-number gate ───────────────────────────────────────────
+  // The number the camera scanner (or the slip's print) provides for CBE is
+  // the FT reference, and CBE's API cannot look it up — only the shared
+  // receipt code (link / QR) verifies. Explain BEFORE running so no
+  // attempt is spent on a guaranteed failure.
+  if (controller.effectiveBank?.id == 'cbe' &&
+      controller.scannedQr == null &&
+      _cbePrintedReference.hasMatch(controller.reference.trim())) {
+    final strings = context.read<LocaleController>().strings;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.cbeNeedsCodeTitle),
+        content: Text(strings.cbeNeedsCodeBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.ok),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
 
   // ── licensing gate ────────────────────────────────────────────────────
   final license = context.read<LicenseController>();

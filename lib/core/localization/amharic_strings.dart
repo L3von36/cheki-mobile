@@ -711,4 +711,13 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get exportTooltip => 'ታሪክ ያጋሩ';
+
+  @override
+  String get cbeNeedsCodeTitle => 'ሲቢኤ የደረሰኝ ኮድ ያስፈልገዋል';
+
+  @override
+  String get cbeNeedsCodeBody =>
+      'በደረሰኙ ላይ የሚታየው የFT ቁጥር የሲቢኤ ውስጣዊ ቁጥር ነው — ባንኩ የሚያረጋግጠው ከተሰራጨው '
+      'የደረሰኝ ሊንክ ወይም ከQR ውስጥ ያለውን ኮድ ብቻ ነው። እባክዎ ሊንኩን ይለጥፉ ወይም በሲቢኤ '
+      'መተግበሪያው ውስጥ የሚታየውን QR ይስካኑ።';
 }
