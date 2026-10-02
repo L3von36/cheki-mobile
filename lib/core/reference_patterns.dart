@@ -290,11 +290,14 @@ ReceiptExtraction? extractReceiptFromText(String text) {
 
   // 1) A receipt link anywhere in the text — first match wins. Only URLs
   //    a bank detector understands are adopted, so a random web link in
-  //    the message never hijacks the field.
+  //    the message never hijacks the field. The class stops at whitespace
+  //    and angle brackets; trailing sentence punctuation is stripped so a
+  //    link at the end of a sentence still detects.
   final urlMatch =
-      RegExp(r'https?://[^\s<>"''\)\],]+', caseSensitive: false).firstMatch(raw);
+      RegExp(r'https?://[^\s<>]+', caseSensitive: false).firstMatch(raw);
   if (urlMatch != null) {
-    final url = urlMatch.group(0)!;
+    final url =
+        urlMatch.group(0)!.replaceFirst(RegExp(r'[.,;:!?)\]]+$'), '');
     final known = detectExtraBankFromUrl(url) ?? detectBankFromUrl(url);
     if (known != null) return ReceiptExtraction(url, isUrl: true);
     if (looksLikeUrl(raw)) {
