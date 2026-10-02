@@ -134,6 +134,15 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Cloud backup — zero-knowledge history backup** (`v1.13.0`): Settings →
+  Cloud backup links your device account to your own hosted account
+  (Cloudflare Workers + KV) and merge-uploads the verification history as
+  one AES-256-GCM blob. Everything is encrypted on the phone first: the
+  server stores only an identifier hash, a password-derived auth key and
+  ciphertext it can never open — the raw password and the vault key never
+  leave the device. Restore on a new phone merges (never overwrites)
+  local history; turning backup off deletes the cloud copy. The app
+  stays fully local-first — backup is strictly opt-in.
 - **Global error safety net + "Report a problem"** (`v1.12.1`): unexpected
   framework and async errors no longer vanish or show Flutter's grey
   developer box. Every build keeps a small, local-only diagnostics trail
