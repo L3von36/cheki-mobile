@@ -697,4 +697,79 @@ final class EnglishStrings extends AppStrings {
   @override
   String get pasteExtractedToast =>
       'Receipt number found in the pasted text.';
+
+  @override
+  String get batchTitle => 'Batch check';
+
+  @override
+  String get batchIntro =>
+      'Paste many receipt links or references — one per line — and check '
+      'them all at once. Made for end-of-day till reconciliation.';
+
+  @override
+  String get batchInputHint =>
+      'One receipt link or reference per line…\n'
+      'https://mbreciept.cbe.com.et/…\n'
+      'CHQ261Z4AB2C\n'
+      'FT26140P01YB';
+
+  @override
+  String get batchBankLabel => 'Bank for plain references';
+
+  @override
+  String batchStart(int count) => count == 1
+      ? 'Check 1 receipt'
+      : 'Check $count receipts';
+
+  @override
+  String batchNeedMore(int have, int need) =>
+      'This batch needs $need checks — you have $have left. '
+      'Upgrade to keep going.';
+
+  @override
+  String batchNeedsPhone(String bank) =>
+      'Batch can’t check $bank here: every receipt needs its own payer '
+      'phone number.';
+
+  @override
+  String batchNeedsBank(int count) => count == 1
+      ? 'Pick the bank for the plain reference first'
+      : 'Pick the bank for the $count plain references first';
+
+  @override
+  String batchDuplicates(int count) =>
+      count == 1 ? '1 duplicate skipped' : '$count duplicates skipped';
+
+  @override
+  String batchProgress(int done, int total) =>
+      'Checking… $done of $total';
+
+  @override
+  String batchDoneCounts(int verified, int failed) =>
+      '✓ $verified verified · ✗ $failed not verified';
+
+  @override
+  String batchRemaining(int count) => count == 1
+      ? 'Check the remaining receipt'
+      : 'Check the remaining $count receipts';
+
+  @override
+  String get batchShareTooltip => 'Share results';
+
+  @override
+  String get batchEmpty =>
+      'Nothing to check yet — paste or type references above.';
+
+  @override
+  String get batchSkipDuplicate => 'Duplicate in this batch';
+
+  @override
+  String get batchSkipCbe =>
+      'CBE printed number — needs the receipt code';
+
+  @override
+  String get batchSkipUnknown => 'Link not recognized';
+
+  @override
+  String get batchSkipOverLimit => 'Over the 50-line batch limit';
 }

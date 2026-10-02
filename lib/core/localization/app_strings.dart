@@ -394,4 +394,62 @@ abstract base class AppStrings {
   /// Toast after a pasted SMS / chat message collapses to the receipt
   /// value it carries.
   String get pasteExtractedToast;
+
+  // ------------------------------------------------- batch check (v1.12.0)
+
+  /// Screen title of the batch checker.
+  String get batchTitle;
+
+  /// One-liner under the title explaining the paste-many flow.
+  String get batchIntro;
+
+  /// Hint inside the multiline batch input.
+  String get batchInputHint;
+
+  /// Chip label for choosing the bank that plain references belong to.
+  String get batchBankLabel;
+
+  /// Start button — [count] chargeable receipts.
+  String batchStart(int count);
+
+  /// Refused pre-flight: the batch needs [need] checks but only [have]
+  /// free ones remain.
+  String batchNeedMore(int have, int need);
+
+  /// Start disabled: each [bank] receipt needs its payer phone number,
+  /// which a batch cannot supply.
+  String batchNeedsPhone(String bank);
+
+  /// Start disabled: [count] plain references still need a batch bank.
+  String batchNeedsBank(int count);
+
+  /// Pre-flight note: [count] duplicate line(s) collapsed.
+  String batchDuplicates(int count);
+
+  /// Live progress while the batch runs.
+  String batchProgress(int done, int total);
+
+  /// Final counts after the batch finishes.
+  String batchDoneCounts(int verified, int failed);
+
+  /// Button to resume the rows left pending after a stop.
+  String batchRemaining(int count);
+
+  /// App-bar action: share the batch results as text.
+  String get batchShareTooltip;
+
+  /// Empty state under the input: nothing usable parsed yet.
+  String get batchEmpty;
+
+  /// Row skip reason — same line already appears earlier in the batch.
+  String get batchSkipDuplicate;
+
+  /// Row skip reason — CBE printed FT number, needs the receipt code.
+  String get batchSkipCbe;
+
+  /// Row skip reason — a link none of the detectors recognize.
+  String get batchSkipUnknown;
+
+  /// Row skip reason — past the [kBatchMaxLines] cap.
+  String get batchSkipOverLimit;
 }

@@ -205,6 +205,55 @@ void main() {
           reason: '${locale.code} duplicateReceiptNote embeds the stamp');
       expect(s.pasteExtractedToast, isNotEmpty,
           reason: '${locale.code} pasteExtractedToast');
+
+      // v1.12.0 batch-check catalog.
+      expect(s.batchTitle, isNotEmpty, reason: '${locale.code} batchTitle');
+      expect(s.batchIntro, isNotEmpty, reason: '${locale.code} batchIntro');
+      expect(s.batchInputHint, isNotEmpty,
+          reason: '${locale.code} batchInputHint');
+      expect(s.batchBankLabel, isNotEmpty,
+          reason: '${locale.code} batchBankLabel');
+      expect(s.batchStart(1), isNotEmpty,
+          reason: '${locale.code} batchStart(1)');
+      expect(s.batchStart(3), contains('3'),
+          reason: '${locale.code} batchStart embeds the count');
+      expect(s.batchNeedMore(2, 5), contains('5'),
+          reason: '${locale.code} batchNeedMore embeds the need');
+      expect(s.batchNeedMore(2, 5), contains('2'),
+          reason: '${locale.code} batchNeedMore embeds the have');
+      expect(s.batchNeedsPhone('CBE Birr'), contains('CBE Birr'),
+          reason: '${locale.code} batchNeedsPhone embeds the bank');
+      expect(s.batchNeedsBank(1), isNotEmpty,
+          reason: '${locale.code} batchNeedsBank(1)');
+      expect(s.batchNeedsBank(3), contains('3'),
+          reason: '${locale.code} batchNeedsBank embeds the count');
+      expect(s.batchDuplicates(1), isNotEmpty,
+          reason: '${locale.code} batchDuplicates(1)');
+      expect(s.batchDuplicates(4), contains('4'),
+          reason: '${locale.code} batchDuplicates embeds the count');
+      expect(s.batchProgress(2, 9), contains('2'),
+          reason: '${locale.code} batchProgress embeds done');
+      expect(s.batchProgress(2, 9), contains('9'),
+          reason: '${locale.code} batchProgress embeds total');
+      expect(s.batchDoneCounts(1, 2), contains('1'),
+          reason: '${locale.code} batchDoneCounts embeds verified');
+      expect(s.batchDoneCounts(1, 2), contains('2'),
+          reason: '${locale.code} batchDoneCounts embeds failed');
+      expect(s.batchRemaining(1), isNotEmpty,
+          reason: '${locale.code} batchRemaining(1)');
+      expect(s.batchRemaining(4), contains('4'),
+          reason: '${locale.code} batchRemaining embeds the count');
+      expect(s.batchShareTooltip, isNotEmpty,
+          reason: '${locale.code} batchShareTooltip');
+      expect(s.batchEmpty, isNotEmpty, reason: '${locale.code} batchEmpty');
+      expect(s.batchSkipDuplicate, isNotEmpty,
+          reason: '${locale.code} batchSkipDuplicate');
+      expect(s.batchSkipCbe, isNotEmpty,
+          reason: '${locale.code} batchSkipCbe');
+      expect(s.batchSkipUnknown, isNotEmpty,
+          reason: '${locale.code} batchSkipUnknown');
+      expect(s.batchSkipOverLimit, isNotEmpty,
+          reason: '${locale.code} batchSkipOverLimit');
     }
   });
 

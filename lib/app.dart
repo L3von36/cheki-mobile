@@ -10,6 +10,7 @@ import 'core/localization/app_strings.dart';
 import 'core/verify_history.dart';
 import 'state/app_tab.dart';
 import 'state/auth_controller.dart';
+import 'state/batch_controller.dart';
 import 'state/license_controller.dart';
 import 'state/locale_controller.dart';
 import 'state/theme_controller.dart';
@@ -50,6 +51,9 @@ class MahtemApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => VerifyController()),
+        // Batch checker owns its state — rows from the last paste, run
+        // results. Fresh instance per app boot (nothing persists).
+        ChangeNotifierProvider(create: (_) => BatchController()),
         ChangeNotifierProvider(create: (_) => VerifyHistory()),
         ChangeNotifierProvider(create: (_) => AppTab()),
         // Licensing loads in the background — the paywall/gate awaits it.

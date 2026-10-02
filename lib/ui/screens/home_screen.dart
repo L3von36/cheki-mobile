@@ -9,6 +9,7 @@ import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../flow.dart';
+import '../screens/batch_screen.dart';
 import '../screens/paywall_screen.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
@@ -239,6 +240,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Center(
+            child: _BatchButton(isDark: isDark),
+          ),
+        ),
         const Padding(
           padding: EdgeInsets.only(right: 4),
           child: Center(child: _LicenseChip()),
@@ -248,6 +255,29 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Center(child: _SettingsButton(isDark: isDark)),
         ),
       ],
+    );
+  }
+}
+
+/// App-bar batch entry — opens the multi-reference batch checker.
+class _BatchButton extends StatelessWidget {
+  final bool isDark;
+
+  const _BatchButton({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.watch<LocaleController>().strings;
+    return IconButton(
+      tooltip: strings.batchTitle,
+      onPressed: () => Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => const BatchScreen()),
+      ),
+      icon: Icon(
+        Icons.fact_check_outlined,
+        size: 21,
+        color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+      ),
     );
   }
 }

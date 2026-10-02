@@ -784,4 +784,84 @@ final class OromoStrings extends AppStrings {
   @override
   String get pasteExtractedToast =>
       'Lakkoofsi risitii barreeffamicha keessaa argameera.';
+
+  @override
+  String get batchTitle => 'Mirkaneessa baay\u2019ee';
+
+  @override
+  String get batchIntro =>
+      'Walitti qabi/linkii risitii hedduu maxxansi \u2014 tokko tokko '
+      'tarreeitti \u2014 waaloofnii miraakanu. Guyyaa xumura ganttii '
+      'herregaa qopheeffame dha.';
+
+  @override
+  String get batchInputHint =>
+      'Linkii risitii ykn lakkoofsii tokko tarree tokkootti\u2026\n'
+      'https://mbreciept.cbe.com.et/\u2026\n'
+      'CHQ261Z4AB2C\n'
+      'FT26140P01YB';
+
+  @override
+  String get batchBankLabel => 'Baankii lakkoofsii shallaggaa';
+
+  @override
+  String batchStart(int count) => count == 1
+      ? 'Risitii 1 mirkaneessi'
+      : 'Risitii $count mirkaneessi';
+
+  @override
+  String batchNeedMore(int have, int need) =>
+      'Kun ibsa $need barbaada \u2014 $have qofa si\u2019a dha. '
+      'Itti fufuuf jallatti darbi.';
+
+  @override
+  String batchNeedsPhone(String bank) =>
+      'Asitti $bank baay\u2019een mirkaneessuu hin danda\u2019amu: '
+      'risitiin tokkoon tokkoon lakkoofsi bilbilaa nama kaffaluu '
+      'ofii barbaada.';
+
+  @override
+  String batchNeedsBank(int count) => count == 1
+      ? 'Dursee baankii lakkoofsii shallaggaa filadhu'
+      : 'Dursee baankii lakkoofsota shallaggaa $count filadhu';
+
+  @override
+  String batchDuplicates(int count) => count == 1
+      ? 'Dublakii 1 dhaabame'
+      : 'Dublakii $count dhaabaman';
+
+  @override
+  String batchProgress(int done, int total) =>
+      'Mirkaneessitii\u2026 $done/$total';
+
+  @override
+  String batchDoneCounts(int verified, int failed) =>
+      '\u2713 $verified mirkaneeffame \u00b7 \u2717 $failed '
+      'hinnamirkaneeffamne';
+
+  @override
+  String batchRemaining(int count) => count == 1
+      ? 'Risitii hafa 1 mirkaneessi'
+      : 'Risitii hafa $count mirkaneessi';
+
+  @override
+  String get batchShareTooltip => 'Bu\u2019aa qoodi';
+
+  @override
+  String get batchEmpty =>
+      'Ammas mirkaneessuu hin jiru \u2014 ol lakkoofsii maxxansi ykn '
+      'barreesi.';
+
+  @override
+  String get batchSkipDuplicate => 'Ibsa kanaa keessatti dublakii';
+
+  @override
+  String get batchSkipCbe =>
+      'Lakkoofsi CBE maxxanfame \u2014 koodii risitii barbaada';
+
+  @override
+  String get batchSkipUnknown => 'Linkiin hin beekamne';
+
+  @override
+  String get batchSkipOverLimit => 'Daangaa tarree 50 caale';
 }

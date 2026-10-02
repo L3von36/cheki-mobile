@@ -788,4 +788,79 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get pasteExtractedToast => 'ቍጽሪ ሪሲት ካብቲ ጽሑፍ ተረኺቡ ኣሎ።';
+
+  @override
+  String get batchTitle => 'ብብዝአ ሓበን';
+
+  @override
+  String get batchIntro =>
+      'ብዙሓት ሊንክ ሪሲት ወይ ቍጽሪታት ኣእቱ — ሓደ ኣብ ሓደ መስመር — ኩሉ ሓበን '
+      'ተረጋግጹ። ንዛንታ መዝገብ ምዕላይ ተዳሎት እዩ።';
+
+  @override
+  String get batchInputHint =>
+      'ሓደ ሊንክ ሪሲት ወይ ቍጽሪ ኣብ ሓደ መስመር…\n'
+      'https://mbreciept.cbe.com.et/…\n'
+      'CHQ261Z4AB2C\n'
+      'FT26140P01YB';
+
+  @override
+  String get batchBankLabel => 'ባንክ ቍጽሪታት ልሙዳት';
+
+  @override
+  String batchStart(int count) => count == 1
+      ? 'ሓንቲ ሪሲት ሓበን'
+      : '$count ሪሲት ሓበን';
+
+  @override
+  String batchNeedMore(int have, int need) =>
+      'እዚ ጽምብቕ $need ሓበን ይደለዮ — $have ጥራይ ተሪኩ። ንምቕጻል '
+      'ደረጃ ኣቕርቡ።';
+
+  @override
+  String batchNeedsPhone(String bank) =>
+      'ኣብኡ $bank ብብዝአ ምሕባን ኣይክእልን እዩ፦ ነፍሲ ወከፍ ሪሲት ቍጽሪ '
+      'ተሌፎን ከፍላይ ይደለዮ።';
+
+  @override
+  String batchNeedsBank(int count) => count == 1
+      ? 'ቅድሚ ምርግጋጽ ንመሰረታዊ ቍጽሪ ባንክ ምርጽ'
+      : 'ቅድሚ ምርግጋጽ ን$count መሰረታዊ ቍጽሪታት ባንክ ምርጽ';
+
+  @override
+  String batchDuplicates(int count) => count == 1
+      ? 'ሓንቲ ተደጋጋሚ ተዓጺና'
+      : '$count ተደጋጋሚ ተዓጺተን';
+
+  @override
+  String batchProgress(int done, int total) =>
+      'ይሕበን ኣሎ… $done ካብ $total';
+
+  @override
+  String batchDoneCounts(int verified, int failed) =>
+      '✓ $verified ተረጋጊጹ · ✗ $failed ከይተረጋገጠ';
+
+  @override
+  String batchRemaining(int count) => count == 1
+      ? 'እቲ ተሪክ ሓንቲ ሪሲት ሓበን'
+      : 'እቲ ተሪክ $count ሪሲት ሓበን';
+
+  @override
+  String get batchShareTooltip => 'ውጽኢታት ኣካፍል';
+
+  @override
+  String get batchEmpty =>
+      'ሎሚ ዝሕበን የለን — ለዓላይ ቍጽሪታት ኣእቱ ወይ ጽሓፉ።';
+
+  @override
+  String get batchSkipDuplicate => 'ኣብዚ ጽምብቕ ተደጋጋሚ';
+
+  @override
+  String get batchSkipCbe => 'ተሓቲፉ ቍጽሪ ሲቢኤ — ኮድ ሪሲት ይደለዮ';
+
+  @override
+  String get batchSkipUnknown => 'ዘይተለዩት ሊንክ';
+
+  @override
+  String get batchSkipOverLimit => 'ካብ 50 መስመር ንላዕሊ እዩ';
 }

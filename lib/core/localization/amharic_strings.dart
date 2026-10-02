@@ -745,4 +745,78 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get pasteExtractedToast => 'የደረሰኝ ቁጥር ከጽሑፉ ውስጥ ተገኝቷል።';
+
+  @override
+  String get batchTitle => 'በብዛት ማረጋገጫ';
+
+  @override
+  String get batchIntro =>
+      'ብዙ የደረሰኝ ሊንኮችን ወይም ቁጥሮችን ይለጥፉ — አንድ በአንድ መስመር ላይ — አንድላይ '
+      'ይረጋግጡ። ለዕለታዊ የገበያ ሂሳብ ማስተካከያ የተዘጋጀ ነው።';
+
+  @override
+  String get batchInputHint =>
+      'አንድ የደረሰኝ ሊንክ ወይም ቁጥር በአንድ መስመር…\n'
+      'https://mbreciept.cbe.com.et/…\n'
+      'CHQ261Z4AB2C\n'
+      'FT26140P01YB';
+
+  @override
+  String get batchBankLabel => 'የተለመዱ ቁጥሮች ባንክ';
+
+  @override
+  String batchStart(int count) => count == 1
+      ? '1 ደረሰኝ ይረጋግጡ'
+      : '$count ደረሰኞችን ይረጋግጡ';
+
+  @override
+  String batchNeedMore(int have, int need) =>
+      'ይህ ቡድን $need ማረጋገጫዎችን ይፈልጋል — $have ብቻ ቀርተዋል። '
+      'ለመቀጠል ደረጃ ያሳልፉ።';
+
+  @override
+  String batchNeedsPhone(String bank) =>
+      'በብዛት $bank ማረጋገጥ አይቻልም፦ እያንዳንዱ ደረሰኝ የራሱ የመላኪያ ስልክ ቁጥር '
+      'ይፈልጋል።';
+
+  @override
+  String batchNeedsBank(int count) => count == 1
+      ? 'መጀመሪያ ለመሰረታዊው ቁጥር ባንክ ይምረጡ'
+      : 'መጀመሪያ ለ$count መሰረታዊ ቁጥሮች ባንክ ይምረጡ';
+
+  @override
+  String batchDuplicates(int count) =>
+      count == 1 ? '1 ተደጋጋሚ ተዝሏል' : '$count ተደጋጋሚዎች ተዝለዋል';
+
+  @override
+  String batchProgress(int done, int total) =>
+      'በመረጋገጥ ላይ… $done ከ$total';
+
+  @override
+  String batchDoneCounts(int verified, int failed) =>
+      '✓ $verified ተረጋግጠዋል · ✗ $failed አልተረጋገጠም';
+
+  @override
+  String batchRemaining(int count) => count == 1
+      ? 'ቀሪውን 1 ደረሰኝ ይረጋግጡ'
+      : 'ቀሪዎቹን $count ደረሰኞች ይረጋግጡ';
+
+  @override
+  String get batchShareTooltip => 'ውጤቶችን ያጋሩ';
+
+  @override
+  String get batchEmpty =>
+      'እስካሁን ምንም የሚረጋገጥ የለም — ከላይ ቁጥሮችን ይለጥፉ ወይም ይጻፉ።';
+
+  @override
+  String get batchSkipDuplicate => 'በዚህ ቡድን ውስጥ ተደጋጋሚ';
+
+  @override
+  String get batchSkipCbe => 'የሲቢኤ የታተመ ቁጥር — የደረሰኝ ኮድ ያስፈልገዋል';
+
+  @override
+  String get batchSkipUnknown => 'ሊንኩ አልታወቀም';
+
+  @override
+  String get batchSkipOverLimit => 'ከ50 መስመር በላይ ነው';
 }

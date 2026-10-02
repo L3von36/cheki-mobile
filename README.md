@@ -134,6 +134,15 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Batch check — verify a whole day's receipts at once** (`v1.12.0`): the
+  new checklist icon on the Verify tab opens a batch screen. Paste many
+  receipt links or references — one per line — and Mahtem checks them
+  sequentially on-device, one attempt per row, with a live progress bar,
+  per-row results (amount or failure reason), a shareable results summary
+  and the same local anti-fraud advisories as single checks. Duplicates
+  collapse, CBE printed numbers are skipped with an explanation, unknown
+  links are never charged, and a stopped batch offers a "check the
+  remaining" resume.
 - **Everything on a receipt auto-detects the bank — not just bare links.**
   The Wegagen receipt QR carries SMS-style prose with the link inside, and
   the Amhara web receipt's QR is a bare JSON payload

@@ -13,6 +13,7 @@ const Map<String, int> _kBankColors = {
   'zemen': 0xFF2F5D8C,
   'cbebirr': 0xFF9C27B0,
   'siinqee': 0xFF7B1FA2,
+  'coopay': 0xFF17845C,
   'ebirr': 0xFF00897B,
   'wegagen': 0xFF673AB7,
   'amhara': 0xFF8D6E00,
