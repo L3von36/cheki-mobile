@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0C0D10</color>
+    <!-- Native launch splash background — brand deep navy, matches the
+         adaptive icon tile (#020e35) so launcher -> splash -> app is seamless. -->
+    <color name="mahtem_launch_bg">#020E35</color>
 </resources>

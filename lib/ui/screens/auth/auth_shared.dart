@@ -26,18 +26,10 @@ class AuthHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
+            Image.asset(
+              'assets/icon/brand_seal.png',
               width: 46,
               height: 46,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: MahtemPalette.splashGradient),
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              child: const Icon(
-                Icons.receipt_long_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
             ),
             const SizedBox(width: 10),
             Text(

@@ -47,18 +47,10 @@ class _GateSplash extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: MahtemPalette.splashGradient),
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-              ),
-              child: const Icon(
-                Icons.receipt_long_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
+            Image.asset(
+              'assets/icon/brand_seal.png',
+              width: 64,
+              height: 64,
             ),
             const SizedBox(height: 22),
             SizedBox(

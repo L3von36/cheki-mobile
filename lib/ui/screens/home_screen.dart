@@ -217,18 +217,10 @@ class _HomeScreenState extends State<HomeScreen> {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
+          Image.asset(
+            'assets/icon/brand_seal.png',
             width: 26,
             height: 26,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: MahtemPalette.buttonGradient),
-              borderRadius: BorderRadius.all(Radius.circular(8)),
-            ),
-            child: const Icon(
-              Icons.receipt_long_rounded,
-              color: Colors.white,
-              size: 15,
-            ),
           ),
           const SizedBox(width: 8),
           Flexible(

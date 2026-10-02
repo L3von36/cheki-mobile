@@ -5,7 +5,7 @@ description: >-
   Amhara, Zemen, CBE Birr, Siinqee and eBirr payment receipts in seconds.
   First 5 checks free, then activate Mahtem Pro.
 publish_to: "none"
-version: 1.6.4+22
+version: 1.6.5+23
 
 environment:
   sdk: ">=3.9.0 <4.0.0"
@@ -40,6 +40,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Brand seal (verified-stamp artwork) used by the gate splash, auth
+  # header and home app bar — bundled so branding never depends on the
+  # network.
+  assets:
+    - assets/icon/brand_seal.png
 
   # Noto Sans Ethiopic ships WITH the app — Amharic mode must never depend
   # on a runtime google_fonts download (offline devices got fallback tofu).
