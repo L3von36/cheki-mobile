@@ -226,11 +226,11 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
     final linesInFrame = <String>[];
     for (final block in result.blocks) {
       for (final line in block.lines) {
-        final box = line.boundingBox;
         // Viewfinder-only reading: a line whose center sits outside the
         // window is ignored even though OCR saw it — the window is what
-        // the user aimed at.
-        if (box == null || !mapper.containsCenterOf(viewfinder, box)) {
+        // the user aimed at. (boundingBox is non-null in this ML Kit
+        // version, so no null check here.)
+        if (!mapper.containsCenterOf(viewfinder, line.boundingBox)) {
           continue;
         }
         linesInFrame.add(line.text);

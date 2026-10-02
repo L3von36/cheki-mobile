@@ -160,7 +160,7 @@ String? duplicateAdvisory({
   final checked = DateTime.fromMillisecondsSinceEpoch(latest.verifiedAt);
   if (now.difference(checked).inMinutes.abs() < 2) return null;
 
-  final two = (int v) => v.toString().padLeft(2, '0');
+  String two(int v) => v.toString().padLeft(2, '0');
   final sameDay = now.year == checked.year &&
       now.month == checked.month &&
       now.day == checked.day;

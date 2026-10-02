@@ -177,7 +177,7 @@ final class OromoStrings extends AppStrings {
       'Jechi icciitii qubee 6 ykn caalaa ta\u2019uu qaba.',
     AuthError.passwordMismatch => 'Jechi icciitii lamaan wal hin simu.',
     AuthError.alreadyExists =>
-      "Herregni bilbila/imiyeelii kanaan duraanuu jira — maaloo "
+      'Herregni bilbila/imiyeelii kanaan duraanuu jira \u2014 maaloo '
           "galmaa'aa.",
     AuthError.accountNotFound =>
       'Bilbila/imiyeelii kanaan herregan hin argamne — dursa herrega '
