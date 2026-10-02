@@ -134,6 +134,13 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Global error safety net + "Report a problem"** (`v1.12.1`): unexpected
+  framework and async errors no longer vanish or show Flutter's grey
+  developer box. Every build keeps a small, local-only diagnostics trail
+  (last 30 problems, capped, never uploaded); release builds show a calm
+  localized error card instead of a crash box. Settings → Report a problem
+  opens the trail so a user who saw something break can read it and copy
+  the details into a bug report.
 - **Batch check — verify a whole day's receipts at once** (`v1.12.0`): the
   new checklist icon on the Verify tab opens a batch screen. Paste many
   receipt links or references — one per line — and Mahtem checks them
