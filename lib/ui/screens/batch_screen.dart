@@ -538,12 +538,7 @@ class _BottomBar extends StatelessWidget {
     final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
     final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
 
-    final needsBank = controller.hasRows &&
-        controller.rows.any((r) =>
-            !r.isSkippedNow &&
-            r.status == BatchRowStatus.pending &&
-            r.bankId == null &&
-            r.scannedQr == null);
+    final needsBank = _countNeedingBank(controller) > 0;
     final phoneBlocked = bank?.requiresPhone == true;
     final canStart = controller.hasRows &&
         !controller.isRunning &&
@@ -630,6 +625,14 @@ class _BottomBar extends StatelessWidget {
     );
   }
 
+  int _countNeedingBank(BatchController controller) => controller.rows
+      .where((r) =>
+          !r.isSkippedNow &&
+          r.status == BatchRowStatus.pending &&
+          r.bankId == null &&
+          r.scannedQr == null)
+      .length;
+
   String _statusLine(
     BatchController controller,
     AppStrings strings,
@@ -649,14 +652,9 @@ class _BottomBar extends StatelessWidget {
       );
     }
     final parts = <String>[];
-    if (needsBank) {
-      parts.add(strings.batchNeedsBank(controller.rows
-          .where((r) =>
-              !r.isSkippedNow &&
-              r.status == BatchRowStatus.pending &&
-              r.bankId == null &&
-              r.scannedQr == null)
-          .length));
+    final needingBank = _countNeedingBank(controller);
+    if (needingBank > 0) {
+      parts.add(strings.batchNeedsBank(needingBank));
     }
     if (controller.skippedCount > 0) {
       parts.add(strings.batchDuplicates(controller.skippedCount));

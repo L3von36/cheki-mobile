@@ -94,7 +94,6 @@ void main() {
   test('a failed row keeps the batch going', () async {
     final controller = _controller(
       verifyFn: (input) async => _fail(input.reference),
-      attempts: {},
     );
     controller.load(parseBatchLines('CHQ261Z4AB2C\nCHQ261Z4AB3D'));
     final history = await _history();
@@ -253,7 +252,7 @@ void main() {
     expect(rows[0].bankId, 'dashen');
     expect(rows[1].bankId, 'cbe'); // untouched
     expect(rows[2].bankId, 'telebirr'); // untouched
-    expect(rows[3].isSkipped, isTrue); // untouched
+    expect(rows[3].isSkippedNow, isTrue); // untouched
     expect(controller.pendingCount, 3);
   });
 

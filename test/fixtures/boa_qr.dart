@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
 
+import 'package:mahtem/core/receipt_verify/parsers.dart' show pbkdf2Sha1;
+
 /// Test fixture: encrypts a BOA slip QR payload exactly the way BOA's
 /// web app does (AES-256-CBC, PBKDF2-SHA1 key from a static passphrase,
 /// static salt and IV) so the offline decryptor round-trips in tests.
