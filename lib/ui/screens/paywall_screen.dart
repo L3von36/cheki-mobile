@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../../core/licensing/license.dart';
 import '../../core/licensing/paywall_config.dart';
 import '../../core/licensing/receipt_activation.dart';
-import '../../core/localization/app_strings.dart';
 import '../../state/license_controller.dart';
 import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';

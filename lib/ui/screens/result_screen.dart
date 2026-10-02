@@ -87,7 +87,7 @@ class ResultScreen extends StatelessWidget {
                 if (!verified && (failure?.tips.isNotEmpty ?? false)) ...[
                   const SizedBox(height: 14),
                   _TipsCard(
-                    tips: s.failureTips(failure!.kind, failure!.tips),
+                    tips: s.failureTips(failure!.kind, failure.tips),
                   ),
                 ],
                 const SizedBox(height: 22),

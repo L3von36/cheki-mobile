@@ -8,7 +8,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/scan_input.dart';
-import '../../core/localization/app_strings.dart';
 import '../../state/locale_controller.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within

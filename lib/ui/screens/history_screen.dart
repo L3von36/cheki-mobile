@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/receipt_verify/extra_banks.dart';
 import '../../core/verify_history.dart';
-import '../../core/localization/app_strings.dart';
 import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
