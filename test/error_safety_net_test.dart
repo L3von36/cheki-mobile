@@ -1,4 +1,4 @@
-import 'dart:ui' show InstanceCallback;
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/foundation.dart' show FlutterExceptionHandler;
 import 'package:flutter/material.dart';
@@ -114,7 +114,7 @@ void main() {
   group('installErrorSafetyNet', () {
     late DiagnosticsLog log;
     FlutterExceptionHandler? originalFlutterOnError;
-    InstanceCallback? originalDispatcherOnError;
+    bool Function(Object, StackTrace)? originalDispatcherOnError;
 
     setUp(() {
       log = DiagnosticsLog();
@@ -162,7 +162,7 @@ void main() {
     });
 
     test('reset() restores the previous handlers', () {
-      final sentinel = (FlutterErrorDetails details) {};
+      void sentinel(FlutterErrorDetails details) {}
       FlutterError.onError = sentinel;
       final reset = installErrorSafetyNet(log: log);
       reset();

@@ -27,7 +27,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// SharedPreferences key holding the persisted diagnostics trail
@@ -71,9 +70,8 @@ class DiagnosticEntry {
 /// Every write is fire-and-forget: persistence failures are swallowed —
 /// a diagnostics log must never cause the very crash it is recording.
 class DiagnosticsLog {
-  DiagnosticsLog({SharedPreferences? prefs, int capacity = kDiagnosticsCapacity})
-      : _prefs = prefs,
-        capacity = capacity;
+  DiagnosticsLog({SharedPreferences? prefs, this.capacity = kDiagnosticsCapacity})
+      : _prefs = prefs;
 
   static final DiagnosticsLog I = DiagnosticsLog();
 
@@ -139,9 +137,9 @@ class DiagnosticsLog {
   /// Multi-line human-readable dump for the Settings "copy" button.
   String copyText() {
     if (_entries.isEmpty) {
-      return 'Mahtem ${_versionLabel}\nNo problems recorded.';
+      return 'Mahtem $_versionLabel\nNo problems recorded.';
     }
-    final buffer = StringBuffer('Mahtem ${_versionLabel} — '
+    final buffer = StringBuffer('Mahtem $_versionLabel — '
         '${_entries.length} '
         'recorded problem${_entries.length == 1 ? '' : 's'} (newest last)\n');
     for (final e in _entries) {
