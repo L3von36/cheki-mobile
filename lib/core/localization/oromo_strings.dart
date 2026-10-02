@@ -296,6 +296,20 @@ final class OromoStrings extends AppStrings {
   @override
   String get scanCameraUnavailable => 'Kaameeraan hin jiru';
 
+  @override
+  String get scanTypeAction => 'Lakkoofsa galchaa';
+
+  @override
+  String get typeSheetTitle =>
+      'Lakkoofsa kaffaltii ykn referensii barreessaa';
+
+  @override
+  String get typeSheetHint =>
+      'Fakkeenyaaf FT2614G2P01YB — ykn liinkii risiitii dabi';
+
+  @override
+  String get typeSheetRecent => 'Yaalii dhiyoo';
+
   // ---------------------------------------------------------------- result
 
   @override
@@ -451,6 +465,36 @@ final class OromoStrings extends AppStrings {
 
   @override
   String get noteLabel => 'Yaada';
+
+  @override
+  String get historySearchTooltip => 'Seenaa keessaa barbaadaa';
+
+  @override
+  String get historySearchHint =>
+      'Referensii, maqaa ykn baankii barbaadaa';
+
+  @override
+  String get filterAll => 'Hunda';
+
+  @override
+  String get filterVerified => 'Mirkaneffame';
+
+  @override
+  String get filterFailed => 'Hin mirkaneeffamne';
+
+  @override
+  String get noMatchesTitle => 'Kan hin argamne';
+
+  @override
+  String get noMatchesBody =>
+      'Yaaliin barbaacha ykn filannoo waliin walsimu hin jiru.';
+
+  @override
+  String get verifyAgain => 'Irra deebi\u2019anii mirkaneessaa';
+
+  @override
+  String get prefilledToast =>
+      'Odeeffannoon guutameera — ilaalaa fi mirkaneessaa.';
 
   // ---------------------------------------------------------------- paywall
 

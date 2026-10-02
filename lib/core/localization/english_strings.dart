@@ -279,6 +279,20 @@ final class EnglishStrings extends AppStrings {
   @override
   String get scanCameraUnavailable => 'Camera unavailable';
 
+  @override
+  String get scanTypeAction => 'Type number';
+
+  @override
+  String get typeSheetTitle =>
+      'Type the transaction or reference number';
+
+  @override
+  String get typeSheetHint =>
+      'e.g. FT2614G2P01YB — or paste a receipt link';
+
+  @override
+  String get typeSheetRecent => 'Recent checks';
+
   // ---------------------------------------------------------------- result
 
   @override
@@ -400,6 +414,35 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String get noteLabel => 'Note';
+
+  @override
+  String get historySearchTooltip => 'Search history';
+
+  @override
+  String get historySearchHint => 'Search reference, name or bank';
+
+  @override
+  String get filterAll => 'All';
+
+  @override
+  String get filterVerified => 'Verified';
+
+  @override
+  String get filterFailed => 'Not verified';
+
+  @override
+  String get noMatchesTitle => 'No matches';
+
+  @override
+  String get noMatchesBody =>
+      'No check matches your search or filter.';
+
+  @override
+  String get verifyAgain => 'Verify again';
+
+  @override
+  String get prefilledToast =>
+      'Details filled in — review and verify.';
 
   // ---------------------------------------------------------------- paywall
 

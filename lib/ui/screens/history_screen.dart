@@ -1,17 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/localization/app_strings.dart';
 import '../../core/receipt_verify/extra_banks.dart';
 import '../../core/verify_history.dart';
+import '../../state/app_tab.dart';
 import '../../state/locale_controller.dart';
+import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
+import '../widgets/pressable.dart';
 
-/// History — one flat list of past checks. Tap an entry to see its details;
-/// long-press to remove. No search bars, no filter chips.
-class HistoryScreen extends StatelessWidget {
+/// Status filter above the history list.
+enum _HistoryFilter { all, verified, failed }
+
+/// History — every past check, searchable and filterable (v1.7.0):
+///   * search by reference, name or bank,
+///   * status filter (all / verified / not verified),
+///   * tap an entry for details, long-press to remove,
+///   * "Verify again" prefill — jumps back to the Verify tab with the
+///     entry's bank + reference already filled in.
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  final _searchCtrl = TextEditingController();
+  bool _searchOpen = false;
+  _HistoryFilter _filter = _HistoryFilter.all;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(HistoryEntry entry, String query) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) return true;
+    bool hit(String? value) =>
+        value != null && value.toLowerCase().contains(needle);
+    return hit(entry.reference) ||
+        hit(entry.bankName) ||
+        hit(entry.title) ||
+        hit(entry.senderName) ||
+        hit(entry.receiverName);
+  }
+
+  List<HistoryEntry> _filtered(List<HistoryEntry> entries) {
+    return entries.where((entry) {
+      final statusOk = switch (_filter) {
+        _HistoryFilter.all => true,
+        _HistoryFilter.verified => entry.isVerified,
+        _HistoryFilter.failed => !entry.isVerified,
+      };
+      return statusOk && _matches(entry, _searchCtrl.text);
+    }).toList();
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _searchOpen = false;
+      _searchCtrl.clear();
+    });
+  }
+
+  /// "Verify again": prefill the form with this entry's bank + reference,
+  /// switch to the Verify tab and let the user run the check. No network
+  /// call fires here — the user stays in control (and no check burns).
+  void _verifyAgain(BuildContext context, HistoryEntry entry) {
+    final reference = entry.reference.trim();
+    if (reference.isEmpty) return;
+    // Capture everything the toast needs BEFORE the sheet pops — the
+    // sheet's context is defunct afterwards.
+    final strings = context.read<LocaleController>().strings;
+    final controller = context.read<VerifyController>();
+    controller.resetAll();
+    final bank = bankByIdAll(entry.bankId);
+    if (bank != null) controller.manualBank = bank;
+    controller.setReference(reference);
+    context.read<AppTab>().switchTo(0);
+    HapticFeedback.selectionClick();
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop(); // close the details sheet
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(strings.prefilledToast),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,9 +105,23 @@ class HistoryScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.historyTitle),
+        title: _searchOpen ? _buildSearchField(s, isDark) : Text(s.historyTitle),
         actions: [
           if (entries.isNotEmpty)
+            IconButton(
+              tooltip: _searchOpen
+                  ? s.cancel
+                  : s.historySearchTooltip,
+              icon: Icon(
+                _searchOpen
+                    ? Icons.close_rounded
+                    : Icons.search_rounded,
+                size: 21,
+              ),
+              onPressed: () =>
+                  _searchOpen ? _closeSearch() : setState(() => _searchOpen = true),
+            ),
+          if (entries.isNotEmpty && !_searchOpen)
             IconButton(
               tooltip: s.clearHistoryTooltip,
               icon: const Icon(Icons.delete_sweep_outlined, size: 20),
@@ -52,52 +149,91 @@ class HistoryScreen extends StatelessWidget {
         ],
       ),
       body: entries.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 44,
-                    color:
-                        isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    s.noChecksTitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isDark ? MahtemPalette.dInk : MahtemPalette.navy,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    s.noChecksBody,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark
-                          ? MahtemPalette.dInkDim
-                          : MahtemPalette.lInkDim,
-                    ),
-                  ),
-                ],
-              ),
+          ? _EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: s.noChecksTitle,
+              body: s.noChecksBody,
             )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              itemCount: entries.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final entry = entries[index];
-                return _EntryCard(
-                  entry: entry,
-                  onTap: () => _showDetails(context, entry),
-                  onLongPress: () => history.remove(entry.id),
-                );
-              },
+          : Column(
+              children: [
+                _FilterBar(
+                  filter: _filter,
+                  onSelected: (f) => setState(() => _filter = f),
+                ),
+                Expanded(
+                  child: Builder(builder: (context) {
+                    final visible = _filtered(entries);
+                    if (visible.isEmpty) {
+                      return _EmptyState(
+                        icon: Icons.search_off_rounded,
+                        title: s.noMatchesTitle,
+                        body: s.noMatchesBody,
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      itemCount: visible.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final entry = visible[index];
+                        return _EntryCard(
+                          entry: entry,
+                          onTap: () => _showDetails(context, entry),
+                          onLongPress: () => history.remove(entry.id),
+                        );
+                      },
+                    );
+                  }),
+                ),
+              ],
             ),
+    );
+  }
+
+  Widget _buildSearchField(AppStrings s, bool isDark) {
+    return TextField(
+      controller: _searchCtrl,
+      autofocus: true,
+      onChanged: (_) => setState(() {}),
+      style: TextStyle(
+        color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: InputDecoration(
+        hintText: s.historySearchHint,
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 18,
+          color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+        ),
+        suffixIcon: _searchCtrl.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded, size: 16),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() {});
+                },
+              ),
+        isDense: true,
+        filled: true,
+        fillColor: isDark ? MahtemPalette.dCard : Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: MahtemPalette.green, width: 1.4),
+        ),
+      ),
     );
   }
 
@@ -107,9 +243,10 @@ class HistoryScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -171,11 +308,168 @@ class HistoryScreen extends StatelessWidget {
                 ),
                 if ((entry.message ?? '').isNotEmpty)
                   _Detail(label: s.noteLabel, value: entry.message!),
+                if (entry.reference.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Pressable(
+                    onTap: () => _verifyAgain(context, entry),
+                    child: Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: MahtemPalette.buttonGradient,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.refresh_rounded,
+                            color: Colors.white,
+                            size: 17,
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            s.verifyAgain,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Status filter chips — All / Verified / Not verified.
+class _FilterBar extends StatelessWidget {
+  final _HistoryFilter filter;
+  final ValueChanged<_HistoryFilter> onSelected;
+
+  const _FilterBar({required this.filter, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget chip(_HistoryFilter value, String label, {IconData? icon}) {
+      final selected = filter == value;
+      return Pressable(
+        onTap: () => onSelected(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected
+                ? MahtemPalette.green
+                : (isDark ? MahtemPalette.dCard : Colors.white),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected
+                  ? MahtemPalette.green
+                  : (isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 13,
+                  color: selected ? Colors.white : MahtemPalette.green,
+                ),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected
+                      ? Colors.white
+                      : (isDark
+                          ? MahtemPalette.dInkDim
+                          : MahtemPalette.lInkDim),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          chip(_HistoryFilter.all, s.filterAll, icon: Icons.list_rounded),
+          chip(_HistoryFilter.verified, s.filterVerified,
+              icon: Icons.check_circle_rounded),
+          chip(_HistoryFilter.failed, s.filterFailed,
+              icon: Icons.cancel_rounded),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared empty state: no checks at all, or no matches for search/filter.
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 44,
+            color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

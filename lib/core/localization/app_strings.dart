@@ -177,6 +177,21 @@ abstract base class AppStrings {
   String get scanOpenSettings;
   String get scanCameraUnavailable;
 
+  // ---------------------------------------------------- manual entry (v1.7.0)
+
+  /// Label under the keyboard icon on the scan screen — the "no QR at
+  /// hand" path: type (or paste) the transaction / reference number.
+  String get scanTypeAction;
+
+  /// Title of the manual-entry sheet.
+  String get typeSheetTitle;
+
+  /// Hint inside the entry field — shows a realistic reference shape.
+  String get typeSheetHint;
+
+  /// Section header above the recent-reference chips.
+  String get typeSheetRecent;
+
   // ---------------------------------------------------------------- result
 
   String get resultTitle;
@@ -232,6 +247,23 @@ abstract base class AppStrings {
   String get notVerifiedLabel;
   String get checkedLabel;
   String get noteLabel;
+
+  // ------------------------------------------------- history search (v1.7.0)
+
+  String get historySearchTooltip;
+  String get historySearchHint;
+  String get filterAll;
+  String get filterVerified;
+  String get filterFailed;
+  String get noMatchesTitle;
+  String get noMatchesBody;
+
+  /// Button in a history entry's details sheet: prefill the verify form
+  /// with this entry's bank + reference and jump to the Verify tab.
+  String get verifyAgain;
+
+  /// Toast shown after the prefill.
+  String get prefilledToast;
 
   // ---------------------------------------------------------------- paywall
 

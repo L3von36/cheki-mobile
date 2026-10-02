@@ -113,6 +113,21 @@ void main() {
       expect(s.clearHistoryBody, isNotEmpty);
       expect(s.verifiedPaymentLabel, isNotEmpty);
       expect(s.checkedLabel, isNotEmpty);
+
+      // v1.7.0: manual reference entry + history search.
+      expect(s.scanTypeAction, isNotEmpty);
+      expect(s.typeSheetTitle, isNotEmpty);
+      expect(s.typeSheetHint, isNotEmpty);
+      expect(s.typeSheetRecent, isNotEmpty);
+      expect(s.historySearchTooltip, isNotEmpty);
+      expect(s.historySearchHint, isNotEmpty);
+      expect(s.filterAll, isNotEmpty);
+      expect(s.filterVerified, isNotEmpty);
+      expect(s.filterFailed, isNotEmpty);
+      expect(s.noMatchesTitle, isNotEmpty);
+      expect(s.noMatchesBody, isNotEmpty);
+      expect(s.verifyAgain, isNotEmpty);
+      expect(s.prefilledToast, isNotEmpty);
       expect(s.paywallTitle, isNotEmpty);
       expect(s.codeExpired('1 Jan 2026'), contains('1 Jan 2026'));
       expect(s.proActivatedToast('1 Feb 2026'), contains('1 Feb 2026'));
@@ -154,6 +169,10 @@ void main() {
       isTrue,
     );
     expect(_hasEthiopic(s.trialsGoneTitle), isTrue);
+    expect(_hasEthiopic(s.scanTypeAction), isTrue);
+    expect(_hasEthiopic(s.typeSheetTitle), isTrue);
+    expect(_hasEthiopic(s.verifyAgain), isTrue);
+    expect(_hasEthiopic(s.noMatchesBody), isTrue);
     expect(s.locale, AppLocale.amharic);
   });
 
@@ -174,6 +193,9 @@ void main() {
     expect(s.welcomeBack, "Baga nagaan deebi'tan");
     expect(s.verifyTab, 'Mirkaneessa');
     expect(s.historyTab(2), contains('Seenaa'));
+    expect(s.filterAll, 'Hunda');
+    expect(s.filterFailed, 'Hin mirkaneeffamne');
+    expect(s.verifyAgain, contains('mirkaneessaa'));
     expect(s.locale, AppLocale.oromo);
   });
 
@@ -190,11 +212,17 @@ void main() {
       isTrue,
     );
     expect(_hasEthiopic(s.trialsGoneTitle), isTrue);
+    expect(_hasEthiopic(s.scanTypeAction), isTrue);
+    expect(_hasEthiopic(s.typeSheetTitle), isTrue);
+    expect(_hasEthiopic(s.verifyAgain), isTrue);
+    expect(_hasEthiopic(s.noMatchesBody), isTrue);
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');
     expect(s.verifyTab, 'ምርግጋጽ');
     expect(s.historyTab(2), contains('ታሪኽ'));
     expect(s.passwordLabel, 'መሕለፊ ቃል');
+    expect(s.filterAll, 'ኩሉ');
+    expect(s.scanTypeAction, 'ቁጽሪ ጽሓፉ');
     expect(s.locale, AppLocale.tigrinya);
   });
 

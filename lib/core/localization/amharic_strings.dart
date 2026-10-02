@@ -276,6 +276,19 @@ final class AmharicStrings extends AppStrings {
   @override
   String get scanCameraUnavailable => 'ካሜራ አይገኝም';
 
+  @override
+  String get scanTypeAction => 'ቁጥር ይጻፉ';
+
+  @override
+  String get typeSheetTitle => 'የግብይት ወይም የማጣቀሻ ቁጥር ይጻፉ';
+
+  @override
+  String get typeSheetHint =>
+      'ለምሳሌ FT2614G2P01YB — ወይም የማረጋገጫ ሊንክ ይለጥፉ';
+
+  @override
+  String get typeSheetRecent => 'የቅርብ ጊዜ ፍተሻዎች';
+
   // ---------------------------------------------------------------- result
 
   @override
@@ -427,6 +440,35 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get noteLabel => 'ማስታወሻ';
+
+  @override
+  String get historySearchTooltip => 'ታሪክ ይፈልጉ';
+
+  @override
+  String get historySearchHint => 'በቁጥር፣ በስም ወይም በባንክ ይፈልጉ';
+
+  @override
+  String get filterAll => 'ሁሉም';
+
+  @override
+  String get filterVerified => 'የተረጋገጠ';
+
+  @override
+  String get filterFailed => 'ያልተረጋገጠ';
+
+  @override
+  String get noMatchesTitle => 'አልተገኘም';
+
+  @override
+  String get noMatchesBody =>
+      'ከፍለጋው ወይም ከማጣሪያው ጋር የሚስማማ ፍተሻ የለም።';
+
+  @override
+  String get verifyAgain => 'እንደገና ይረጋግጡ';
+
+  @override
+  String get prefilledToast =>
+      'መረጃው ተሞልቷል — ይመልከቱና ያረጋግጡ።';
 
   // ---------------------------------------------------------------- paywall
 

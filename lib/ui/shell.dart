@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/verify_history.dart';
+import '../state/app_tab.dart';
 import '../state/locale_controller.dart';
 import '../theme/mahtem_theme.dart';
 import 'flow.dart';
@@ -9,7 +10,9 @@ import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 
 /// App shell — two tabs (Verify / History) with a raised center scan button
-/// that opens the full-screen scanner. Nothing else competes for attention.
+/// that opens the full-screen scanner. Tab state lives in the [AppTab]
+/// provider so any screen (e.g. history's "Verify again") can drive the
+/// bottom navigation.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
 
@@ -18,17 +21,17 @@ class ShellScreen extends StatefulWidget {
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  int _index = 0;
-
   @override
   Widget build(BuildContext context) {
+    final tab = context.watch<AppTab>();
+    final index = tab.index;
     final history = context.watch<VerifyHistory>().entries.length;
     final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: IndexedStack(
-        index: _index,
+        index: index,
         children: const [HomeScreen(), HistoryScreen()],
       ),
       bottomNavigationBar: Container(
@@ -50,8 +53,8 @@ class _ShellScreenState extends State<ShellScreen> {
                   icon: Icons.receipt_long_outlined,
                   activeIcon: Icons.receipt_long_rounded,
                   label: strings.verifyTab,
-                  active: _index == 0,
-                  onTap: () => setState(() => _index = 0),
+                  active: index == 0,
+                  onTap: () => context.read<AppTab>().switchTo(0),
                   isDark: isDark,
                 ),
                 const _ScanButton(),
@@ -59,8 +62,8 @@ class _ShellScreenState extends State<ShellScreen> {
                   icon: Icons.history_rounded,
                   activeIcon: Icons.history_rounded,
                   label: strings.historyTab(history),
-                  active: _index == 1,
-                  onTap: () => setState(() => _index = 1),
+                  active: index == 1,
+                  onTap: () => context.read<AppTab>().switchTo(1),
                   isDark: isDark,
                 ),
               ],

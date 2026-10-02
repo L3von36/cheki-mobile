@@ -292,6 +292,19 @@ final class TigrinyaStrings extends AppStrings {
   @override
   String get scanCameraUnavailable => 'ካሜራ ኣይተረኽበን';
 
+  @override
+  String get scanTypeAction => 'ቁጽሪ ጽሓፉ';
+
+  @override
+  String get typeSheetTitle => 'ቁጽሪ ክፍሊት ወይ ሪፈረንስ ጽሓፉ';
+
+  @override
+  String get typeSheetHint =>
+      'ለምሳሌ FT2614G2P01YB — ወይ ሊንክ ሰርተፊኬት ኣቐምጡ';
+
+  @override
+  String get typeSheetRecent => 'ናይ ቅሩብ እዋን ፍተሻታት';
+
   // ---------------------------------------------------------------- result
 
   @override
@@ -453,6 +466,35 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get noteLabel => 'ሓበሬታ';
+
+  @override
+  String get historySearchTooltip => 'ኣብ ታሪኽ ሕፉስ';
+
+  @override
+  String get historySearchHint => 'ብቁጽሪ፣ ብስም ወይ ብባንክ ሕፉስ';
+
+  @override
+  String get filterAll => 'ኩሉ';
+
+  @override
+  String get filterVerified => 'ተረጋገጸ';
+
+  @override
+  String get filterFailed => 'ኣይተረጋገጸን';
+
+  @override
+  String get noMatchesTitle => 'ዝተረኸበ የሎን';
+
+  @override
+  String get noMatchesBody =>
+      'ምስ ሕፉስኩም ወይ ምስ ምርጫኹም ዝስማዓ ምርግጋጽ የሎን።';
+
+  @override
+  String get verifyAgain => 'ደጊምኩም ኣረጋግጹ';
+
+  @override
+  String get prefilledToast =>
+      'ሓበሬታታት ተመሊኡ — ፈትሹን ኣረጋግጡን።';
 
   // ---------------------------------------------------------------- paywall
 

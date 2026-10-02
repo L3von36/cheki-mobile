@@ -9,9 +9,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/scan_input.dart';
 import '../../state/locale_controller.dart';
+import '../widgets/reference_entry_sheet.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
-/// the frame" hint, green corner brackets, and Flash / Gallery buttons.
+/// the frame" hint, green corner brackets, and Flash / Gallery / Type-number
+/// buttons.
 ///
 /// Robust by design:
 ///   * explicit camera-permission flow (request, recover, open settings)
@@ -162,6 +164,18 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
+  /// Opens the manual entry sheet and treats the typed (or pasted) value
+  /// exactly like a scanned payload — so a broken, busy or denied camera
+  /// never blocks verification.
+  Future<void> _openReferenceEntry() async {
+    if (_handled) return;
+    final value = await showReferenceEntrySheet(context);
+    if (value == null || !mounted) return;
+    final text = value.trim();
+    if (text.isEmpty) return;
+    _tryAccept(text);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleController>().strings;
@@ -235,30 +249,47 @@ class _ScanScreenState extends State<ScanScreen>
             // Viewfinder.
             const _ViewfinderOverlay(pulse: true),
 
-          // Bottom action buttons: Flash + Gallery.
-          if (_cameraState == _CameraState.granted)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: MediaQuery.of(context).padding.bottom + 26,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _RoundAction(
-                    icon: _torchOn
-                        ? Icons.flashlight_on_rounded
-                        : Icons.flashlight_off_rounded,
-                    label: s.scanFlash,
-                    onTap: _toggleTorch,
+          // Bottom action buttons.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.of(context).padding.bottom + 26,
+            child: _cameraState == _CameraState.granted
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _RoundAction(
+                        icon: _torchOn
+                            ? Icons.flashlight_on_rounded
+                            : Icons.flashlight_off_rounded,
+                        label: s.scanFlash,
+                        onTap: _toggleTorch,
+                      ),
+                      _RoundAction(
+                        icon: Icons.photo_outlined,
+                        label: s.scanGallery,
+                        onTap: _pickFromGallery,
+                      ),
+                      _RoundAction(
+                        icon: Icons.keyboard_rounded,
+                        label: s.scanTypeAction,
+                        onTap: _openReferenceEntry,
+                      ),
+                    ],
+                  )
+                // Camera unavailable/denied: typing a reference is still
+                // possible — the screen must never dead-end.
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _RoundAction(
+                        icon: Icons.keyboard_rounded,
+                        label: s.scanTypeAction,
+                        onTap: _openReferenceEntry,
+                      ),
+                    ],
                   ),
-                  _RoundAction(
-                    icon: Icons.photo_outlined,
-                    label: s.scanGallery,
-                    onTap: _pickFromGallery,
-                  ),
-                ],
-              ),
-            ),
+          ),
         ],
       ),
     );
