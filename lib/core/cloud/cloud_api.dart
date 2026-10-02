@@ -140,6 +140,11 @@ class CloudApi {
       case 'not_found':
         return CloudApiError.notFound;
     }
+    // Status-code fallbacks — the error code can be missing when a proxy,
+    // CDN or gateway answers instead of the Worker itself.
+    if (status == 401) return CloudApiError.unauthorized;
+    if (status == 409) return CloudApiError.conflict;
+    if (status == 404) return CloudApiError.notFound;
     return status >= 500 || status == 0
         ? CloudApiError.server
         : CloudApiError.network;
