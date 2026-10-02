@@ -15,7 +15,7 @@ and stamped as genuine. That's exactly what the app does.
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ddb6a.svg)](LICENSE)
 
 Verify CBE, Telebirr, BOA, M-Pesa, Dashen, Awash, Wegagen, Amhara, Zemen,
-CBE Birr, Siinqee and eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
+CBE Birr, Siinqee, Coopay (Cooperative Bank of Oromia) and eBirr payment receipts in seconds. Point your phone at a receipt — Mahtem
 fetches the official record **directly from the bank's public endpoint on your
 device** and tells you if the payment is genuine.
 
@@ -127,7 +127,9 @@ the URL, fetches with retries, and parses the response:
 | Awash | `awashpay.awashbank.com:8225/-{shareToken}` | HTML (self-signed TLS handled) |
 | Zemen | `share.zemenbank.com/rt/{ref}/pdf` | PDF (text-extracted on device) |
 | CBE Birr | `cbepay1.cbe.com.et/aureceipt?TID={ref}&PH={phone}` | HTML |
-| Siinqee / eBirr | `receipt.ebirr.com/{tenant}/{token}` | HTML |
+| Siinqee | `siinqeebank.com/receipt/{ref}` (moved off `receipt.ebirr.com/siinqee`, old links re-routed) | HTML |
+| Coopay (Coop Bank of Oromia) | `receipt.ebirr.com/coopay/{token}` | HTML |
+| eBirr family | `receipt.ebirr.com/{tenant}/{token}` (nib, wegagen, ahadu, kaafimf…) | HTML |
 | Wegagen | `transinfo.wegagenbanksc.com.et:8011/sms_wega/txn/{shareId}` | JSON |
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
@@ -137,6 +139,23 @@ Notes:
   the Amhara web receipt's QR is a bare JSON payload
   (`{"transactionId":"FT…","creditAccountNo":"…"}`) — scanning either
   fills in the right bank and reference automatically.
+- **Pasted SMS / chat messages collapse to the receipt value** (`v1.11.0`):
+  paste a whole Telebirr SMS or a chat message into the number sheet and the
+  receipt link / reference is pulled out of the prose automatically — the SMS
+  itself is never trusted, the extracted value still verifies against the bank.
+- **OCR misread rescue** (`v1.11.0`): when the camera confuses easily-mixed
+  characters (O↔0, I↔1, L↔1, B↔8, S↔5, Z↔2), the scanner offers the
+  re-readings as extra candidate chips so one wrong glyph no longer turns a
+  genuine receipt into "not found".
+- **Local anti-fraud advisories** (`v1.11.0`): the result gains an advisory
+  note when the verified receipt is more than a day old (the replayed-receipt
+  scam) or when this exact bank + reference was already verified on this
+  device before (a receipt being walked around). Both are computed on-device
+  from the receipt's own date and the local history — nothing new leaves the
+  phone.
+- **Typed Telebirr numbers auto-select the bank** (`v1.11.0`): a bare
+  reference with a Telebirr invoice prefix (CHQ…, DET…, ADQ…) pre-selects
+  Telebirr instead of dead-ending in the manual picker.
 - **Pasted share links work everywhere**: whether the sender shares a bare
   link or the whole SMS text, the app extracts the reference before calling
   the bank — pasting a full link into the reference field always verifies.

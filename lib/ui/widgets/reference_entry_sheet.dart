@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/reference_patterns.dart';
 import '../../core/verify_history.dart';
 import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';
@@ -52,9 +53,22 @@ class _ReferenceEntrySheetState extends State<ReferenceEntrySheet> {
   }
 
   void _submit() {
-    final value = _ctrl.text.trim();
+    final value = _smartValue();
     if (value.isEmpty) return;
     Navigator.of(context).pop(value);
+  }
+
+  /// Runs the SMS/chat extraction over the field's current text: a whole
+  /// message pasted in one go collapses to the receipt link or reference
+  /// it carries. Returns the field text unchanged when nothing (better)
+  /// was found — the raw value stays usable for the bank picker.
+  String _smartValue() {
+    final raw = _ctrl.text.trim();
+    if (raw.isEmpty) return raw;
+    final hit = extractReceiptFromText(raw);
+    if (hit == null) return raw;
+    final value = hit.value.trim();
+    return value.isEmpty ? raw : value;
   }
 
   Future<void> _paste() async {
@@ -72,7 +86,29 @@ class _ReferenceEntrySheetState extends State<ReferenceEntrySheet> {
     }
     _ctrl.text = text;
     _ctrl.selection = TextSelection.collapsed(offset: text.length);
+    // Pasted an SMS body or chat message? Collapse it to the receipt
+    // value it carries and say so — one glance beats re-reading prose.
+    final hit = extractReceiptFromText(text);
+    var extracted = false;
+    if (hit != null) {
+      final value = hit.value.trim();
+      if (value.isNotEmpty && value != text) {
+        _ctrl.text = value;
+        _ctrl.selection = TextSelection.collapsed(offset: value.length);
+        extracted = true;
+      }
+    }
     setState(() {});
+    if (extracted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            context.read<LocaleController>().strings.pasteExtractedToast,
+          ),
+        ),
+      );
+    }
   }
 
   @override

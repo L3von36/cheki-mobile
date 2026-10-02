@@ -432,6 +432,7 @@ final class OromoStrings extends AppStrings {
               'yaalaa.',
         VerifyErrorKind.unsupported =>
           'Baankiin ykn gosi risiitii kun ammaatti hin deeggaramu.',
+        VerifyErrorKind.blocked => failureBlockedMessage(),
       };
 
   @override
@@ -456,6 +457,7 @@ final class OromoStrings extends AppStrings {
         VerifyErrorKind.unsupported => const [
           'Baankiiwwan deeggaraman fuula duraa irratti ilaalaa.',
         ],
+        VerifyErrorKind.blocked => failureBlockedTips(),
       };
 
   // ---------------------------------------------------------------- history
@@ -756,4 +758,32 @@ final class OromoStrings extends AppStrings {
       'baŋkichi mirkaneessuuf koodii asxaa risiitii wal qoodame ykn QR '
       'keessaa jiru qofa fudhata. Maaloo liinkii risiitii qabaa ykn QR '
       'appii CBE keessaa mul\u2019atu iskaanii godhi.';
+
+  @override
+  String failureBlockedMessage() =>
+      'Tajaajichi risitii Ba\u014bki Siinqee yeroo ammaa network kanaan of '
+      'eegaa jira.';
+
+  @override
+  List<String> failureBlockedTips() => const [
+        'Liinkii risiitichaa biraawzarrii keessan keessa bani.',
+        'Iskrinishootii risiitii kan nama ergaa irraa gaafadhaa.',
+      ];
+
+  @override
+  String staleReceiptNote(int days) => days == 1
+      ? 'Risitiin guyyaa tokko dura kan ta\u2019e dha. Ofiin mirkaneessaa '
+          'kan har\u2019aa gitanitti meeshaa kennaa.'
+      : 'Risitiin guyyaa $days dura kan ta\u2019e dha. Ofiin mirkaneessaa '
+          'kan har\u2019aa gitanitti meeshaa kennaa.';
+
+  @override
+  String duplicateReceiptNote(String when) =>
+      'Risitii kanaan duraan ($when) mirkaneessaa turuu keeti. Irrdeebiin '
+      'fayadamaan dhokataa beekamaa dha \u2014 kaffaltii haaraa ta\u2019e '
+      'isaa mirkaneessi.';
+
+  @override
+  String get pasteExtractedToast =>
+      'Lakkoofsi risitii barreeffamicha keessaa argameera.';
 }

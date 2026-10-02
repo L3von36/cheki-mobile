@@ -64,6 +64,25 @@ class ReceiptVerifier {
       }
       final parsed = _parse(plan, fetched);
       if (!parsed.verified) {
+        // Siinqee's own receipt host fronts an anti-bot interstitial for
+        // some networks ("One moment, please…" + a JS reload). Saying
+        // "receipt not found" would be a lie — the page is a gate, not an
+        // answer. Report it honestly so the user opens the link instead.
+        if (plan.bank.id == 'siinqee' &&
+            fetched.bodyText.contains('One moment, please')) {
+          return VerifyResult.failed(
+            const VerifyFailure(
+              VerifyErrorKind.blocked,
+              'Siinqee’s receipt service is blocking automated checks from '
+                  'this network right now.',
+              tips: [
+                'Open the receipt link in your browser and read it there.',
+                'Ask the sender for a screenshot of the receipt.',
+              ],
+            ),
+            sw.elapsedMilliseconds,
+          );
+        }
         return VerifyResult.failed(
           VerifyFailure(
             VerifyErrorKind.notFound,
@@ -265,13 +284,16 @@ class ReceiptVerifier {
         return Uri.parse(
             'https://cbepay1.cbe.com.et/aureceipt?TID=${Uri.encodeQueryComponent(reference)}&PH=${Uri.encodeQueryComponent(phone ?? '')}');
       case 'siinqee':
-        if (reference.startsWith('http')) return Uri.parse(reference);
-        if (reference.contains('/')) {
-          return Uri.parse('https://receipt.ebirr.com/$reference');
-        }
-        return Uri.parse('https://receipt.ebirr.com/siinqee/$reference');
+        return buildSiinqeeUri(reference);
+      case 'coopay':
+        return buildCoopayUri(reference);
       case 'ebirr':
         if (reference.startsWith('http')) return Uri.parse(reference);
+        // Old Siinqee share links ride the eBirr URL but the siinqee route
+        // is dead — send them to the bank's new host.
+        if (reference.toLowerCase().startsWith('siinqee/')) {
+          return buildSiinqeeUri(reference);
+        }
         return Uri.parse('https://receipt.ebirr.com/$reference');
     }
     throw StateError('unreachable');
@@ -398,6 +420,7 @@ class ReceiptVerifier {
       case 'cbebirr':
         return parseCbeBirrHtml(resp.bodyText);
       case 'siinqee':
+      case 'coopay':
       case 'ebirr':
         return parseEbirrHtml(resp.bodyText);
     }

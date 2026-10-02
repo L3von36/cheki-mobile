@@ -425,6 +425,7 @@ final class TigrinyaStrings extends AppStrings {
         VerifyErrorKind.unsupported =>
           'እዚ ባንክ ወይ ዓይነት ሰርተፊኬት ክሳብ ሕጂ '
               'ኣይድገፍን።',
+        VerifyErrorKind.blocked => failureBlockedMessage(),
       };
 
   @override
@@ -454,6 +455,7 @@ final class TigrinyaStrings extends AppStrings {
           'እቲ ኣፕሊኬሽን ዝድግፎም ባንኻት ኣብ ቅድሚቲ '
               'ገጽ ርኣዩ።',
         ],
+        VerifyErrorKind.blocked => failureBlockedTips(),
       };
 
   // ---------------------------------------------------------------- history
@@ -763,4 +765,29 @@ final class TigrinyaStrings extends AppStrings {
       'ቍጽሪ FT ኣብ ተሓቂ ዘሎ ናይ ውሽጢ ሲቢኤ እዩ — ባንኪ ዝረጋግጾ እቲ ኣብ ተሰፊሩ ሊንክ '
       'ሰርተፊኬት ወይ ኣብ QR ዝርከብ ኮድ ጥራይ እዩ። እቲ ሊንክ ኣብጽሖ ወይ ኣብ ኣፕሊኬሽን '
       'ሲቢኤ ዝርከብ QR ስካን ግበር።';
+
+  @override
+  String failureBlockedMessage() =>
+      'ኣገልግሎት ሪሲት ባንኪ ሲንቄ ሎሚ ብዚ ኔትወርክ ራሱ ይከላኸል ኣሎ።';
+
+  @override
+  List<String> failureBlockedTips() => const [
+        'እቲ ሊንክ ሪሲት ኣብ ብራውዘርኩም ኽፍትዎ።',
+        'ካብቲ ስዱስኪ ስክሪንሾት ሪሲት ሓተቱ።',
+      ];
+
+  @override
+  String staleReceiptNote(int days) => days == 1
+      ? 'እዚ ሪሲት ካብ ሓንቲ መዓልቲ ቀዲም እዩ። ምስ ዛንታ መዝገብኩም ተዛሚዱ ከምዝሰማማዕ '
+          'ስእለኹም ጥራይ ኣብዚ ሰዓት ኣብ ኣግሩ።'
+      : 'እዚ ሪሲት ካብ $days መዓልቲ ቀዲም እዩ። ምስ ዛንታ መዝገብኩም ተዛሚዱ ከምዝሰማማዕ '
+          'ስእለኹም ጥራይ ኣብዚ ሰዓት ኣብ ኣግሩ።';
+
+  @override
+  String duplicateReceiptNote(String when) =>
+      'እዚ ሪሲት ቅዲኡ ($when) ተረጋጊጹ ኣሎ። ደጊምኩም ምጥቃዕ ሓሶት እዩ — ሓድሽ '
+      'ክፍሊት ከምዝኾነ ኣረጋግጹ።';
+
+  @override
+  String get pasteExtractedToast => 'ቍጽሪ ሪሲት ካብቲ ጽሑፍ ተረኺቡ ኣሎ።';
 }

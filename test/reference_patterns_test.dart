@@ -198,4 +198,86 @@ Ref: CBE20250115AX
       expect(bestReferenceCandidate('no numbers here'), isNull);
     });
   });
+
+  group('ambiguityVariants (OCR misreads)', () {
+    test('swaps confusable characters both ways', () {
+      final variants = ambiguityVariants('LO0');
+      expect(variants, contains('100')); // L→1, O stays, 0 stays? L→1 only
+      expect(variants, contains('1O0')); // L→1
+      expect(variants, contains('LOO')); // 0→O
+    });
+
+    test('never includes the original value', () {
+      for (final v in ambiguityVariants('FT26140P01YB')) {
+        expect(v, isNot('FT26140P01YB'));
+      }
+    });
+
+    test('is capped and stable', () {
+      final variants = ambiguityVariants('O1B5Z2');
+      expect(variants.length, lessThanOrEqualTo(12));
+      expect(variants.toSet().length, variants.length);
+    });
+
+    test('empty when nothing is confusable or too much explodes', () {
+      expect(ambiguityVariants('AHKMQRTUWY'), isEmpty);
+      expect(ambiguityVariants('OOOOOOOOOO'), isEmpty);
+    });
+  });
+
+  group('extractReceiptFromText (SMS / chat paste)', () {
+    test('pulls a telebirr link out of a full SMS body', () {
+      const sms =
+          'Dear customer, you have paid 500.00 ETB. Receipt CHQ261Z4AB2C. '
+          'Details: https://transactioninfo.ethiotelecom.et/receipt/CHQ261Z4AB2C';
+      final hit = extractReceiptFromText(sms);
+      expect(hit, isNotNull);
+      expect(hit!.isUrl, isTrue);
+      expect(
+        hit.value,
+        'https://transactioninfo.ethiotelecom.et/receipt/CHQ261Z4AB2C',
+      );
+    });
+
+    test('pulls an FT reference from prose without a link', () {
+      final hit =
+          extractReceiptFromText('Payment done, ref FT26140P01YB, thanks');
+      expect(hit, isNotNull);
+      expect(hit!.isUrl, isFalse);
+      expect(hit.value, 'FT26140P01YB');
+    });
+
+    test('pulls a telebirr-shaped invoice from prose', () {
+      final hit = extractReceiptFromText('kaffaltii CHQ261Z4AB2C ta\u2019eera');
+      expect(hit!.value, 'CHQ261Z4AB2C');
+    });
+
+    test('falls back to a bare 12-digit number', () {
+      final hit = extractReceiptFromText('here is the number 123456789012 ok');
+      expect(hit!.value, '123456789012');
+    });
+
+    test('never adopts a phone number as the receipt', () {
+      expect(extractReceiptFromText('call me 0912345678'), isNull);
+    });
+
+    test('ignores random web links inside prose', () {
+      expect(
+        extractReceiptFromText(
+            'see https://example.com/some/page for the product'),
+        isNull,
+      );
+    });
+
+    test('a bare unknown link is handed over for the honest error', () {
+      final hit = extractReceiptFromText('https://unknown.example.com/r/xyz');
+      expect(hit!.isUrl, isTrue);
+      expect(hit.value, 'https://unknown.example.com/r/xyz');
+    });
+
+    test('an already-clean value returns itself unchanged', () {
+      final hit = extractReceiptFromText('FT26140P01YB');
+      expect(hit!.value, 'FT26140P01YB');
+    });
+  });
 }

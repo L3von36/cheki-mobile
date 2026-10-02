@@ -124,7 +124,21 @@ class VerifyController extends ChangeNotifier {
       status = VerifyStatus.idle;
       result = null;
     }
+    _maybeDetectTelebirrBare(value);
     notifyListeners();
+  }
+
+  /// Telebirr invoice numbers carry a distinctive service-code prefix
+  /// (CHQ…, DET…, ADQ…). When a bare typed number matches that shape and
+  /// nothing else detected the bank, pre-select Telebirr instead of
+  /// dead-ending in the manual picker — the user can still change it.
+  void _maybeDetectTelebirrBare(String value) {
+    if (manualBank != null || detectedBank != null) return;
+    final v = value.trim();
+    if (v.isEmpty || v.contains('/') || looksLikeUrl(v)) return;
+    if (looksLikeTelebirrReference(v)) {
+      detectedBank = bankById('telebirr');
+    }
   }
 
   void setAccount(String value) {
@@ -228,6 +242,46 @@ class VerifyController extends ChangeNotifier {
     // Plain reference — the user pairs it with a bank.
     reference = raw;
     detectedBank = null;
+    _maybeDetectTelebirrBare(raw);
+    notifyListeners();
+  }
+
+  /// Merges a local anti-fraud advisory (stale receipt / duplicate check)
+  /// into the current successful result's note before the result screen
+  /// shows. No-op when the latest result is not a successful receipt.
+  void applyAdvisoryNote(String advisory) {
+    final res = result;
+    final receipt = res?.receipt;
+    if (res == null || !res.ok || receipt == null) return;
+    final existing = receipt.note;
+    final merged = existing == null || existing.isEmpty
+        ? advisory
+        : '$existing · $advisory';
+    result = VerifyResult.receipt(
+      ReceiptData(
+        verified: receipt.verified,
+        bankCode: receipt.bankCode,
+        bankName: receipt.bankName,
+        reference: receipt.reference,
+        senderName: receipt.senderName,
+        senderAccount: receipt.senderAccount,
+        receiverName: receipt.receiverName,
+        receiverAccount: receipt.receiverAccount,
+        amount: receipt.amount,
+        currency: receipt.currency,
+        date: receipt.date,
+        branch: receipt.branch,
+        reason: receipt.reason,
+        transactionType: receipt.transactionType,
+        transactionStatus: receipt.transactionStatus,
+        invoiceNumber: receipt.invoiceNumber,
+        bankAccountNumber: receipt.bankAccountNumber,
+        bankAccountName: receipt.bankAccountName,
+        note: merged,
+        fromQr: receipt.fromQr,
+      ),
+      res.durationMs,
+    );
     notifyListeners();
   }
 

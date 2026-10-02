@@ -377,4 +377,24 @@ abstract base class AppStrings {
   /// read off the slip can never verify. (Acknowledged with [ok].)
   String get cbeNeedsCodeTitle;
   String get cbeNeedsCodeBody;
+
+  // --------------------------------------- competition-pass items (v1.11.0)
+
+  /// Localized failure message for [VerifyErrorKind.blocked]: the bank's
+  /// receipt service is refusing automated checks from this network
+  /// (anti-bot interstitial) — currently only Siinqee's own host.
+  String failureBlockedMessage();
+  List<String> failureBlockedTips();
+
+  /// Advisory appended to a verified receipt older than [days]: the
+  /// classic replayed-receipt scam is a real receipt presented late.
+  String staleReceiptNote(int days);
+
+  /// Advisory appended when this exact bank + reference already verified
+  /// here before — [when] is a compact timestamp of that earlier check.
+  String duplicateReceiptNote(String when);
+
+  /// Toast after a pasted SMS / chat message collapses to the receipt
+  /// value it carries.
+  String get pasteExtractedToast;
 }

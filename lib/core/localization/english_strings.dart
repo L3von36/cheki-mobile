@@ -399,11 +399,12 @@ final class EnglishStrings extends AppStrings {
   // ------------------------------------------------------- verify failures
 
   @override
-  String failureMessage(VerifyErrorKind kind, String fallback) => fallback;
+  String failureMessage(VerifyErrorKind kind, String fallback) =>
+      kind == VerifyErrorKind.blocked ? failureBlockedMessage() : fallback;
 
   @override
   List<String> failureTips(VerifyErrorKind kind, List<String> fallback) =>
-      fallback;
+      kind == VerifyErrorKind.blocked ? failureBlockedTips() : fallback;
 
   // ---------------------------------------------------------------- history
 
@@ -671,4 +672,31 @@ final class EnglishStrings extends AppStrings {
       'The FT number printed on the slip is CBE-internal — the bank only '
       'verifies the code inside a shared receipt link or QR. Paste the '
       'receipt link or scan the QR shown in the CBE app instead.';
+
+  @override
+  String failureBlockedMessage() =>
+      'Siinqee’s receipt service is blocking automated checks from this '
+      'network right now.';
+
+  @override
+  List<String> failureBlockedTips() => const [
+        'Open the receipt link in your browser and read it there.',
+        'Ask the sender for a screenshot of the receipt.',
+      ];
+
+  @override
+  String staleReceiptNote(int days) => days == 1
+      ? 'This receipt is 1 day old. Confirm it matches today’s sale before '
+          'handing over the goods.'
+      : 'This receipt is $days days old. Confirm it matches today’s sale '
+          'before handing over the goods.';
+
+  @override
+  String duplicateReceiptNote(String when) =>
+      'You verified this exact receipt before ($when). Reused receipts are '
+      'the most common scam — make sure this is a fresh payment.';
+
+  @override
+  String get pasteExtractedToast =>
+      'Receipt number found in the pasted text.';
 }

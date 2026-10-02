@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/fraud_advisories.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/verify_history.dart';
 import '../state/license_controller.dart';
@@ -103,6 +104,36 @@ Future<void> runVerificationFlow(BuildContext context) async {
   }
   if (!context.mounted) return;
 
+  // ── local anti-fraud advisories ─────────────────────────────────────
+  // Duplicate reference + stale receipt. Both are computed BEFORE the
+  // check is recorded so the lookup can never see the row it triggers,
+  // and both are strictly on-device (history never leaves the phone).
+  String? advisory;
+  if (result.ok) {
+    try {
+      final strings = context.read<LocaleController>().strings;
+      final history = context.read<VerifyHistory>();
+      final now = DateTime.now();
+      final receipt = result.receipt!;
+      advisory = duplicateAdvisory(
+        entries: history.entries,
+        bankId: controller.effectiveBank?.id ?? receipt.bankCode,
+        reference: receipt.reference.isNotEmpty
+            ? receipt.reference
+            : controller.reference.trim(),
+        now: now,
+        note: strings.duplicateReceiptNote,
+      );
+      advisory ??= freshnessAdvisory(
+        receiptDate: receipt.date,
+        now: now,
+        note: strings.staleReceiptNote,
+      );
+    } catch (_) {
+      advisory = null; // advisories must never block verification
+    }
+  }
+
   // Record the check in local history (verified AND failed).
   try {
     await context.read<VerifyHistory>().record(
@@ -117,6 +148,9 @@ Future<void> runVerificationFlow(BuildContext context) async {
         );
   } catch (_) {
     // History must never block verification.
+  }
+  if (advisory != null && context.mounted) {
+    context.read<VerifyController>().applyAdvisoryNote(advisory);
   }
 
   if (result.ok) unawaited(HapticFeedback.heavyImpact());

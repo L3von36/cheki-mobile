@@ -16,6 +16,9 @@
 /// Pure Dart — fully unit-tested without a device.
 library;
 
+import 'receipt_verify/extra_banks.dart';
+import 'receipt_verify/parsers.dart';
+
 /// One candidate reference read from OCR text.
 class ReferenceCandidate {
   /// The reference exactly as it should be verified (separators removed).
@@ -192,4 +195,139 @@ List<ReferenceCandidate> extractReferenceCandidates(
 String? bestReferenceCandidate(String text) {
   final candidates = extractReferenceCandidates(text);
   return candidates.isEmpty ? null : candidates.first.value;
+}
+
+// ---------------------------------------------------------------------------
+// OCR ambiguity variants (learned from 1RB/cheki's scanner)
+// ---------------------------------------------------------------------------
+
+/// Characters OCR routinely swaps in printed references. When the camera
+/// misreads one of these the bank answers "not found" for the wrong read
+/// even though the receipt is genuine — so the scanner offers every
+/// variant as an extra candidate chip and lets the bank decide.
+const Map<String, List<String>> _ocrConfusables = {
+  'O': ['0'],
+  '0': ['O'],
+  'I': ['1'],
+  '1': ['I'],
+  'L': ['1', 'I'],
+  'B': ['8'],
+  '8': ['B'],
+  'S': ['5'],
+  '5': ['S'],
+  'Z': ['2'],
+  '2': ['Z'],
+};
+
+/// Every plausible re-reading of [reference] with confusable characters
+/// swapped, excluding the original. Bounded: references with more than
+/// [maxAmbiguous] confusable positions explode combinatorially and the
+/// misread is unlikely to be the only problem anyway — those return an
+/// empty list. Results are capped at [max] and keep a stable order.
+List<String> ambiguityVariants(
+  String reference, {
+  int max = 12,
+  int maxAmbiguous = 6,
+}) {
+  final chars = reference.trim().toUpperCase().split('');
+  final positions = <int>[];
+  for (var i = 0; i < chars.length; i++) {
+    if (_ocrConfusables.containsKey(chars[i])) positions.add(i);
+  }
+  if (positions.isEmpty || positions.length > maxAmbiguous) return const [];
+
+  final out = <String>[];
+  void backtrack(int idx, List<String> acc) {
+    if (out.length >= max) return;
+    if (idx == chars.length) {
+      final value = acc.join();
+      if (value != chars.join() && !out.contains(value)) out.add(value);
+      return;
+    }
+    acc.add(chars[idx]);
+    backtrack(idx + 1, acc);
+    acc.removeLast();
+    for (final alt in _ocrConfusables[chars[idx]] ?? const <String>[]) {
+      if (out.length >= max) return;
+      acc.add(alt);
+      backtrack(idx + 1, acc);
+      acc.removeLast();
+    }
+  }
+
+  backtrack(0, <String>[]);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Smart extraction from messy pastes (SMS bodies, chat messages)
+// ---------------------------------------------------------------------------
+
+/// One receipt value found inside a longer paste.
+class ReceiptExtraction {
+  /// The clean value to verify with: a full receipt link (bank
+  /// auto-detects) or a bare reference (bank picker / auto-detect).
+  final String value;
+
+  /// True when [value] is a complete receipt URL.
+  final bool isUrl;
+
+  const ReceiptExtraction(this.value, {required this.isUrl});
+}
+
+/// Pulls the one thing that matters out of a pasted SMS or chat message:
+/// a receipt link (even embedded in prose), an FT fiscal reference, a
+/// Telebirr-shaped invoice number, or a bare RRN-style number. Returns
+/// null when the text is already a clean single value or holds nothing
+/// recognizable — the caller keeps the raw text in that case.
+///
+/// SMS text is never trusted as the source of truth (anyone can fabricate
+/// one); the extracted link/reference is verified against the bank like
+/// any other input.
+ReceiptExtraction? extractReceiptFromText(String text) {
+  final raw = text.trim();
+  if (raw.isEmpty) return null;
+
+  // 1) A receipt link anywhere in the text — first match wins. Only URLs
+  //    a bank detector understands are adopted, so a random web link in
+  //    the message never hijacks the field.
+  final urlMatch =
+      RegExp(r'https?://[^\s<>"''\)\],]+', caseSensitive: false).firstMatch(raw);
+  if (urlMatch != null) {
+    final url = urlMatch.group(0)!;
+    final known = detectExtraBankFromUrl(url) ?? detectBankFromUrl(url);
+    if (known != null) return ReceiptExtraction(url, isUrl: true);
+    if (looksLikeUrl(raw)) {
+      // The whole paste IS the link — hand it over so the verifier can
+      // explain which part it did not recognise.
+      return ReceiptExtraction(raw, isUrl: true);
+    }
+    return null;
+  }
+
+  // 2) FT fiscal reference — printed on CBE / Amhara / BOA slips.
+  final ft = RegExp(r'\bFT[0-9A-Z]{6,}\b', caseSensitive: false).firstMatch(raw);
+  if (ft != null) {
+    return ReceiptExtraction(ft.group(0)!.toUpperCase(), isUrl: false);
+  }
+
+  // 3) Telebirr-shaped invoice number (CHQ… / DET… / ADQ… etc.).
+  final telebirr = RegExp(
+    r'\b(?:CHQ|DET|DAB|DEL|ADQ|DEP|DF|CHG|CHA|CHB|CHC|CHD|CHE|CHF'
+    r'|DEB|DEC|DED|DEE|DEF|DEG|DEH|DEI|DEJ|DEK|DEM|DEN|DEO|DEQ|DER|DES'
+    r'|DEU|DEV|DEW|DEX|DEY|DEZ)[A-Z0-9]{5,9}\b',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (telebirr != null && telebirr.group(0)!.length >= 8) {
+    return ReceiptExtraction(telebirr.group(0)!.toUpperCase(), isUrl: false);
+  }
+
+  // 4) Bare RRN-style number, skipping Ethiopian mobile shapes.
+  for (final m in RegExp(r'\b\d{10,16}\b').allMatches(raw)) {
+    final value = m.group(0)!;
+    if (_phoneLike.hasMatch(value)) continue;
+    return ReceiptExtraction(value, isUrl: false);
+  }
+
+  return null;
 }

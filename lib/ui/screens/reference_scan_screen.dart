@@ -217,7 +217,7 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
         extractReferenceCandidates(result.text.replaceAll('\n', ' ')),
       );
     }
-    final ranked = dedupeAndRank(found);
+    final ranked = _rankedWithVariants(found);
 
     final top = ranked.isEmpty ? null : ranked.first.value.toUpperCase();
     if (top != null && top == _lastTop) {
@@ -234,6 +234,26 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
         ranked.first.rank <= autoAcceptMaxRank) {
       _accept(ranked.first.value);
     }
+  }
+
+  /// Ranks the raw OCR candidates and appends re-readings of the best
+  /// candidate with confusable characters swapped (O↔0, I↔1, B↔8…). The
+  /// camera misreads those regularly, and the bank's "not found" would
+  /// otherwise send the user away even though the receipt is genuine.
+  /// Variants land at rank 5 — visible as chips, never auto-accepted; the
+  /// exact OCR read stays first and keeps the auto-accept path.
+  List<ReferenceCandidate> _rankedWithVariants(List<ReferenceCandidate> found) {
+    final ranked = dedupeAndRank(found);
+    final top = ranked.isEmpty ? null : ranked.first;
+    if (top == null || top.rank > autoAcceptMaxRank) return ranked;
+    final present = ranked.map((c) => c.value.toUpperCase()).toSet();
+    final variants = <ReferenceCandidate>[];
+    for (final v in ambiguityVariants(top.value)) {
+      if (present.contains(v)) continue;
+      variants.add(ReferenceCandidate(v, 5));
+      if (ranked.length + variants.length >= 7) break;
+    }
+    return [...ranked, ...variants];
   }
 
   void _accept(String value) {
@@ -281,7 +301,7 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
           extractReferenceCandidates(result.text.replaceAll('\n', ' ')),
         );
       }
-      final ranked = dedupeAndRank(found);
+      final ranked = _rankedWithVariants(found);
       if (ranked.isNotEmpty) {
         _accept(ranked.first.value);
         return;

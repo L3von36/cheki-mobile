@@ -152,9 +152,23 @@ const List<BankInfo> kVerifyBanks = [
     name: 'Siinqee Bank',
     shortName: 'Siinqee',
     isWallet: false,
+    referenceLabel: 'Receipt link or reference',
+    referenceHint: 'Paste the siinqeebank.com/receipt/… link',
+    helper:
+        'Tap Share on the Siinqee SuperApp receipt and paste the link — the '
+        'reference after /receipt/ works too. Old receipt.ebirr.com/siinqee '
+        'links are re-routed automatically.',
+  ),
+  BankInfo(
+    id: 'coopay',
+    name: 'Cooperative Bank of Oromia',
+    shortName: 'Coopay',
+    isWallet: true,
     referenceLabel: 'Receipt link or token',
-    referenceHint: 'Paste the receipt.ebirr.com/siinqee/… link',
-    helper: 'Siinqee receipts are served through the eBirr platform.',
+    referenceHint: 'Paste the receipt.ebirr.com/coopay/… link',
+    helper:
+        'Tap Share on the Coopay-Ebirr receipt and paste the link — the '
+        'token after /coopay/ works too.',
   ),
   BankInfo(
     id: 'ebirr',
@@ -165,7 +179,7 @@ const List<BankInfo> kVerifyBanks = [
     referenceHint: 'Paste the full receipt.ebirr.com/{bank}/… link',
     helper:
         'Works for receipts shared via receipt.ebirr.com — Nib, Wegagen, '
-        'Ahadu, KAAFI and others.',
+        'Ahadu, KAAFI, Coopay and others.',
   ),
 ];
 
@@ -227,7 +241,17 @@ class ReceiptData {
 }
 
 /// Why a verification failed, with copy ready for the UI.
-enum VerifyErrorKind { network, notFound, badInput, unreadable, unsupported }
+enum VerifyErrorKind {
+  network,
+  notFound,
+  badInput,
+  unreadable,
+  unsupported,
+
+  /// The bank's receipt service answered, but is currently refusing
+  /// automated checks from this network (anti-bot interstitial).
+  blocked,
+}
 
 class VerifyFailure {
   final VerifyErrorKind kind;

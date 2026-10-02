@@ -321,4 +321,60 @@ void main() {
       expect(c.reference, 'CHQ261Z4AB2'); // cleaned value stays shown
     });
   });
+
+  group('telebirr bare-reference auto-detection (v1.11.0)', () {
+    test('a typed telebirr-shaped number pre-selects Telebirr', () {
+      final c = VerifyController();
+      c.setReference('CHQ261Z4AB2C');
+      expect(c.effectiveBank?.id, 'telebirr');
+      expect(c.reference, 'CHQ261Z4AB2C');
+      expect(c.canVerify, isTrue);
+    });
+
+    test('applyScan with a plain telebirr number does the same', () {
+      final c = VerifyController();
+      c.applyScan('DET261Z4AB2C');
+      expect(c.detectedBank?.id, 'telebirr');
+    });
+
+    test('a manual bank choice always wins', () {
+      final c = VerifyController();
+      c.selectBank(bankById('cbe'));
+      c.setReference('CHQ261Z4AB2C');
+      expect(c.effectiveBank?.id, 'cbe');
+    });
+
+    test('non-telebirr shapes stay undetected', () {
+      final c = VerifyController();
+      c.setReference('123456789012');
+      expect(c.effectiveBank, isNull);
+    });
+
+    test('URLs keep their own detection', () {
+      final c = VerifyController();
+      c.setReference('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
+      expect(c.effectiveBank?.id, 'cbe');
+    });
+  });
+
+  group('applyAdvisoryNote (v1.11.0)', () {
+    test('merges into a successful result, appending to existing notes', () {
+      final c = VerifyController(verifyFn: (input) async => _receiptOk());
+      c.setReference('REF123');
+      c.selectBank(bankById('cbe'));
+      // Simulate a finished run.
+      c.result = _receiptOk();
+      c.applyAdvisoryNote('stale note');
+      expect(c.result!.receipt!.note, 'stale note');
+      c.applyAdvisoryNote('dup note');
+      expect(c.result!.receipt!.note, 'stale note · dup note');
+    });
+
+    test('no-op on failures', () {
+      final c = VerifyController();
+      c.result = _notFound('No receipt found.');
+      c.applyAdvisoryNote('stale note');
+      expect(c.result!.receipt, isNull);
+    });
+  });
 }

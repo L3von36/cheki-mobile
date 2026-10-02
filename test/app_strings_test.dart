@@ -185,6 +185,27 @@ void main() {
           reason: '${locale.code} cbeNeedsCodeTitle');
       expect(s.cbeNeedsCodeBody, isNotEmpty,
           reason: '${locale.code} cbeNeedsCodeBody');
+
+      // v1.11.0: blocked-bank failure + anti-fraud advisories + smart paste.
+      expect(s.failureBlockedMessage(), isNotEmpty,
+          reason: '${locale.code} failureBlockedMessage');
+      expect(s.failureBlockedTips(), isNotEmpty,
+          reason: '${locale.code} failureBlockedTips');
+      for (final tip in s.failureBlockedTips()) {
+        expect(tip, isNotEmpty, reason: '${locale.code} blocked tip');
+      }
+      expect(s.staleReceiptNote(1), isNotEmpty,
+          reason: '${locale.code} staleReceiptNote(1)');
+      expect(s.staleReceiptNote(3), isNotEmpty,
+          reason: '${locale.code} staleReceiptNote(3)');
+      expect(s.staleReceiptNote(3), contains('3'),
+          reason: '${locale.code} staleReceiptNote embeds the count');
+      expect(s.duplicateReceiptNote('10:30'), isNotEmpty,
+          reason: '${locale.code} duplicateReceiptNote');
+      expect(s.duplicateReceiptNote('10:30'), contains('10:30'),
+          reason: '${locale.code} duplicateReceiptNote embeds the stamp');
+      expect(s.pasteExtractedToast, isNotEmpty,
+          reason: '${locale.code} pasteExtractedToast');
     }
   });
 
@@ -220,6 +241,13 @@ void main() {
     expect(_hasEthiopic(s.refScanNoNumberFound), isTrue);
     expect(_hasEthiopic(s.cbeNeedsCodeTitle), isTrue);
     expect(_hasEthiopic(s.cbeNeedsCodeBody), isTrue);
+    expect(_hasEthiopic(s.failureBlockedMessage()), isTrue);
+    for (final tip in s.failureBlockedTips()) {
+      expect(_hasEthiopic(tip), isTrue);
+    }
+    expect(_hasEthiopic(s.staleReceiptNote(3)), isTrue);
+    expect(_hasEthiopic(s.duplicateReceiptNote('10:30')), isTrue);
+    expect(_hasEthiopic(s.pasteExtractedToast), isTrue);
     expect(s.undo, 'መልስ');
     expect(s.locale, AppLocale.amharic);
   });
@@ -250,6 +278,9 @@ void main() {
     expect(s.groupToday, 'Har\u2019aa');
     expect(s.scanNumberAction, 'Lakkoofsa iskaanii godhaa');
     expect(s.cbeNeedsCodeTitle, 'CBE-n koodii risiitii barbaada');
+    expect(s.failureBlockedMessage(), contains('Siinqee'));
+    expect(s.pasteExtractedToast,
+        'Lakkoofsi risitii barreeffamicha keessaa argameera.');
     expect(s.locale, AppLocale.oromo);
   });
 
@@ -276,6 +307,7 @@ void main() {
     expect(s.groupYesterday, 'ትማሊ');
     expect(s.scanNumberAction, 'ቍጽሪ ስካኑ');
     expect(s.cbeNeedsCodeTitle, 'ሲቢኤ ኮድ ሰርተፊኬት ይደሊ');
+    expect(s.pasteExtractedToast, 'ቍጽሪ ሪሲት ካብቲ ጽሑፍ ተረኺቡ ኣሎ።');
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');
     expect(s.verifyTab, 'ምርግጋጽ');

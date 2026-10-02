@@ -146,6 +146,13 @@ UrlDetection? detectBankFromUrl(String input) {
     }
   }
 
+  // Siinqee moved off eBirr: https://siinqeebank.com/receipt/{ref}
+  if (host.contains('siinqeebank.com')) {
+    if (segments.isNotEmpty) {
+      return UrlDetection('siinqee', segments.last);
+    }
+  }
+
   return null;
 }
 
@@ -546,6 +553,28 @@ String? _telebirrNote(
   return bits.isEmpty ? null : bits.join(' · ');
 }
 
+/// Telebirr receipt / invoice numbers start with a service-code prefix
+/// (cheque, deposit, transfer…). The list mirrors the SuperApp's own
+/// reference shapes observed across cheki's guide and live samples.
+/// Distinctive enough that a bare typed number matching it almost always
+/// is a Telebirr invoice — unlike the generic `FT…` core-banking prefix
+/// that CBE, Amhara and BOA all print.
+final RegExp _telebirrReference = RegExp(
+  r'^(?:CHQ|DET|DAB|DEL|ADQ|DEP|DF|CHG|CHA|CHB|CHC|CHD|CHE|CHF'
+  r'|DEB|DEC|DED|DEE|DEF|DEG|DEH|DEI|DEJ|DEK|DEM|DEN|DEO|DEQ|DER|DES'
+  r'|DEU|DEV|DEW|DEX|DEY|DEZ)[A-Z0-9]{5,9}$',
+  caseSensitive: false,
+);
+
+/// True when a bare (non-link) reference has the Telebirr invoice shape —
+/// used to auto-suggest the bank for typed numbers instead of always
+/// falling back to the manual picker.
+bool looksLikeTelebirrReference(String reference) {
+  final value = reference.trim();
+  if (value.length < 8 || value.length > 12) return false;
+  return _telebirrReference.hasMatch(value);
+}
+
 /// Telebirr QR payloads: base64 → utf-8 hex string → bytes → latin1 text
 /// containing the invoice number as an 8–12 char A-Z0-9 run
 /// (port of cheki's extractTelebirrInvoiceFromQr).
@@ -897,9 +926,45 @@ const Map<String, String> _ebirrTenants = {
   'wegagen': 'Wegagen Bank',
   'ahadu': 'Ahadu Bank',
   'kaafimf': 'KAAFI Microfinance',
-  'coop': 'Cooperative Bank of Oromia',
+  'coopay': 'Cooperative Bank of Oromia',
   'siinqee': 'Siinqee Bank',
 };
+
+/// Siinqee moved off the eBirr platform — the old
+/// `receipt.ebirr.com/siinqee/{token}` route now answers 404 (verified
+/// live) and receipts live on the bank's own host. Builds the URI for a
+/// manually-picked Siinqee check: a full link passes through untouched,
+/// old eBirr siinqee links / `siinqee/{token}` pairs are re-routed to the
+/// new host, and a bare reference is appended to it.
+Uri buildSiinqeeUri(String reference) {
+  final ref = reference.trim();
+  if (ref.startsWith('http')) {
+    final uri = Uri.tryParse(ref);
+    if (uri != null && uri.host.contains('receipt.ebirr.com')) {
+      final token = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+      if (token.isNotEmpty) {
+        return Uri.parse('https://siinqeebank.com/receipt/$token');
+      }
+    }
+    return uri ?? Uri.parse(ref);
+  }
+  if (ref.contains('/')) {
+    final token = ref.split('/').where((s) => s.trim().isNotEmpty).last;
+    return Uri.parse('https://siinqeebank.com/receipt/$token');
+  }
+  return Uri.parse('https://siinqeebank.com/receipt/$ref');
+}
+
+/// Coopay (Cooperative Bank of Oromia) receipts ride the eBirr platform
+/// under the `coopay` tenant — verified live (the token-validation shell
+/// matches nib / ahadu / kaafimf / wegagen). The old `coop` slug never
+/// existed.
+Uri buildCoopayUri(String reference) {
+  final ref = reference.trim();
+  if (ref.startsWith('http')) return Uri.parse(ref);
+  if (ref.contains('/')) return Uri.parse('https://receipt.ebirr.com/$ref');
+  return Uri.parse('https://receipt.ebirr.com/coopay/$ref');
+}
 
 Parsed parseEbirrHtml(String html) {
   if (html.contains('Not Found Page') || html.contains('color: red')) {

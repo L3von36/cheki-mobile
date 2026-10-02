@@ -405,6 +405,7 @@ final class AmharicStrings extends AppStrings {
           'የደረሰኙን QR ማንበብ አልተቻለም — እንደገና ይሞክሩ።',
         VerifyErrorKind.unsupported =>
           'ይህ ባንክ ወይም የደረሰኝ ዓይነት እስካሁን አይደገፍም።',
+        VerifyErrorKind.blocked => failureBlockedMessage(),
       };
 
   @override
@@ -428,6 +429,7 @@ final class AmharicStrings extends AppStrings {
         VerifyErrorKind.unsupported => const [
           'መተግበሪያው የሚደግፋቸውን ባንኮች በመጀመሪያው ገጽ ላይ ይመልከቱ።',
         ],
+        VerifyErrorKind.blocked => failureBlockedTips(),
       };
 
   // ---------------------------------------------------------------- history
@@ -720,4 +722,29 @@ final class AmharicStrings extends AppStrings {
       'በደረሰኙ ላይ የሚታየው የFT ቁጥር የሲቢኤ ውስጣዊ ቁጥር ነው — ባንኩ የሚያረጋግጠው ከተሰራጨው '
       'የደረሰኝ ሊንክ ወይም ከQR ውስጥ ያለውን ኮድ ብቻ ነው። እባክዎ ሊንኩን ይለጥፉ ወይም በሲቢኤ '
       'መተግበሪያው ውስጥ የሚታየውን QR ይስካኑ።';
+
+  @override
+  String failureBlockedMessage() =>
+      'የሲንቄ ባንክ ደረሰኝ አገልግሎት ለወዲሁን ከዚህ ኔትወርክ ራሱን እየከላከለ ነው።';
+
+  @override
+  List<String> failureBlockedTips() => const [
+        'የደረሰኙን ሊንክ በብራውዘርዎ ይክፈቱ።',
+        'ከላኪው የደረሰኙ ስክሪንሾት ጠይቁ።',
+      ];
+
+  @override
+  String staleReceiptNote(int days) => days == 1
+      ? 'ደረሰኙ ከአንድ ቀን በፊት የተፈጠረ ነው። ከዛሬ ሽያጭዎ ጋር መዛመዱን እስከማረጋገጥዎ እባክዎ '
+          'እቃውን አይስጡ።'
+      : 'ደረሰኙ ከ$days ቀናት በፊት የተፈጠረ ነው። ከዛሬ ሽያጭዎ ጋር መዛመዱን እስከማረጋገጥዎ '
+          'እባክዎ እቃውን አይስጡ።';
+
+  @override
+  String duplicateReceiptNote(String when) =>
+      'ይህን ትክክለኛ ደረሰኝ ከዚህ በፊት ($when) አረጋግጠዋል። ደጋግሞ የሚያሳዩ ደረሰኞች '
+      'የተለመደ ማጭበርከር ነው — አዲስ ክፍያ መሆኑን ያረጋግጡ።';
+
+  @override
+  String get pasteExtractedToast => 'የደረሰኝ ቁጥር ከጽሑፉ ውስጥ ተገኝቷል።';
 }
