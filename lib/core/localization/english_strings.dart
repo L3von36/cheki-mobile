@@ -601,4 +601,39 @@ final class EnglishStrings extends AppStrings {
   String get crashReportsNote =>
       'If the app ever crashes, it sends an anonymous report — no receipt '
       'or account data — so problems get fixed faster.';
+
+  // ------------------------------------------------- history upgrade (v1.9.0)
+
+  @override
+  String get statsChecks => 'Checks';
+
+  @override
+  String get statsVerified => 'Verified';
+
+  @override
+  String get statsTotal => 'Total';
+
+  @override
+  String get groupToday => 'Today';
+
+  @override
+  String get groupYesterday => 'Yesterday';
+
+  @override
+  String get groupThisWeek => 'This week';
+
+  @override
+  String get groupEarlier => 'Earlier';
+
+  @override
+  String get removedToast => 'Removed from history';
+
+  @override
+  String get undo => 'Undo';
+
+  @override
+  String get emptyCta => 'Verify your first receipt';
+
+  @override
+  String get exportTooltip => 'Share history';
 }

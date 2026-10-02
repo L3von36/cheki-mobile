@@ -86,8 +86,11 @@ your first 5 checks are free.
   bank pick
 - **Simple, focused UI** — one card: pick a bank, paste the reference,
   verify. No banners, no clutter. Light & dark themes.
-- **Payment History** — every check is saved on-device; tap an entry for
-  details, long-press to remove
+- **Payment History** — every check is saved on-device with a summary
+  strip (checks / verified / total), Today / Yesterday / This week /
+  Earlier date groups, search, status filters, swipe-to-delete with undo
+  (long-press works too), "Verify again" prefill, and a one-tap CSV
+  share of the whole history
 - **Honest failures** — receipt not found or bank down? The result screen
   says exactly why and lists what to do next
 - **Crash reports (opt-in Sentry)** — release APKs built with a Sentry

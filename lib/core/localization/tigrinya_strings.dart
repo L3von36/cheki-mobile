@@ -694,4 +694,39 @@ final class TigrinyaStrings extends AppStrings {
       'እቲ ኣፕሊኬሽን ምስ ዝወድቕ፣ ብዘይ ስም ሪፖርት ይለኣኽ — '
       'ሰርተፊኬትኩም ወይ መረዳዕታኩም ኣብ ውሽጡ '
       'የብሉን፤ ንምቕሓስ ጥራይ እዩ።';
+
+  // ------------------------------------------------- history upgrade (v1.9.0)
+
+  @override
+  String get statsChecks => 'ፍተሻታት';
+
+  @override
+  String get statsVerified => 'ዝተረጋገጸ';
+
+  @override
+  String get statsTotal => 'ጠቕላላ';
+
+  @override
+  String get groupToday => 'ሎሚ';
+
+  @override
+  String get groupYesterday => 'ትማሊ';
+
+  @override
+  String get groupThisWeek => 'ኣብዚ ሰሙን';
+
+  @override
+  String get groupEarlier => 'ቅድሚ';
+
+  @override
+  String get removedToast => 'ካብ ታሪኽ ተወጊዱ።';
+
+  @override
+  String get undo => 'መልሲ';
+
+  @override
+  String get emptyCta => 'እቲ ቀዳማይ ሰርተፊኬትኩም ኣረጋግጹ';
+
+  @override
+  String get exportTooltip => 'ታሪኽ ኣካፍሉ';
 }

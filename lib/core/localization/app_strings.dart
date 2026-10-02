@@ -320,4 +320,28 @@ abstract base class AppStrings {
   /// Fine print at the bottom of the settings sheet: crash reports are
   /// anonymous and contain no receipt or account data.
   String get crashReportsNote;
+
+  // ------------------------------------------------- history upgrade (v1.9.0)
+
+  /// Labels of the three summary cells at the top of the history list.
+  String get statsChecks;
+  String get statsVerified;
+  String get statsTotal;
+
+  /// Date-group headers inside the history list (entries are bucketed by
+  /// the day they were checked).
+  String get groupToday;
+  String get groupYesterday;
+  String get groupThisWeek;
+  String get groupEarlier;
+
+  /// Snackbar after a swipe/long-press delete, plus its undo action.
+  String get removedToast;
+  String get undo;
+
+  /// Button on the "no checks yet" empty state — jumps to the Verify tab.
+  String get emptyCta;
+
+  /// App-bar action: share the whole history as CSV text.
+  String get exportTooltip;
 }

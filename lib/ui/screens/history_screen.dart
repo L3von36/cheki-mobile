@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/localization/app_strings.dart';
 import '../../core/receipt_verify/extra_banks.dart';
@@ -16,12 +17,15 @@ import '../widgets/pressable.dart';
 /// Status filter above the history list.
 enum _HistoryFilter { all, verified, failed }
 
-/// History — every past check, searchable and filterable (v1.7.0):
+/// History — every past check, searchable, filterable and grouped (v1.9.0):
+///   * summary strip: checks / verified / total verified amount,
 ///   * search by reference, name or bank,
 ///   * status filter (all / verified / not verified),
-///   * tap an entry for details, long-press to remove,
+///   * date groups (Today / Yesterday / This week / Earlier),
+///   * tap an entry for details, swipe (or long-press) to remove with undo,
 ///   * "Verify again" prefill — jumps back to the Verify tab with the
-///     entry's bank + reference already filled in.
+///     entry's bank + reference already filled in,
+///   * share the whole history as CSV text.
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -63,11 +67,99 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }).toList();
   }
 
-  void _closeSearch() {
-    setState(() {
-      _searchOpen = false;
-      _searchCtrl.clear();
-    });
+  /// Deletes an entry and offers one-tap undo — the snackbar re-inserts
+  /// it at its original position (VerifyHistory.insert clamps the index).
+  void _removeWithUndo(VerifyHistory history, HistoryEntry entry) {
+    final index = history.entries.indexOf(entry);
+    final s = context.read<LocaleController>().strings;
+    final messenger = ScaffoldMessenger.of(context);
+    HapticFeedback.mediumImpact();
+    history.remove(entry.id);
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(s.removedToast),
+        action: SnackBarAction(
+          label: s.undo,
+          onPressed: () => history.insert(index, entry),
+        ),
+      ),
+    );
+  }
+
+  /// Hands the whole history to the Android share sheet as CSV text.
+  Future<void> _shareHistory(VerifyHistory history) async {
+    final s = context.read<LocaleController>().strings;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(title: s.historyTitle, text: history.toCsv()),
+      );
+    } catch (_) {
+      // Share sheet unavailable — nothing to recover, stay silent.
+    }
+  }
+
+  /// Buckets a checked-at date for the group headers.
+  String _bucketOf(HistoryEntry entry, DateTime today) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(entry.verifiedAt);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    if (day == today) return 'today';
+    if (day == today.subtract(const Duration(days: 1))) return 'yesterday';
+    if (day.isAfter(today.subtract(const Duration(days: 7)))) return 'week';
+    return 'earlier';
+  }
+
+  /// Flattens the filtered list into rows: a header whenever the date
+  /// bucket changes, then a dismissible card per entry.
+  List<Widget> _buildRows(
+    AppStrings s,
+    List<HistoryEntry> visible,
+    VerifyHistory history,
+  ) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final headerFor = <String, String>{
+      'today': s.groupToday,
+      'yesterday': s.groupYesterday,
+      'week': s.groupThisWeek,
+      'earlier': s.groupEarlier,
+    };
+    final rows = <Widget>[];
+    String? current;
+    for (final entry in visible) {
+      final bucket = _bucketOf(entry, today);
+      if (bucket != current) {
+        current = bucket;
+        rows.add(_GroupHeader(label: headerFor[bucket]!));
+      }
+      rows.add(
+        Dismissible(
+          key: ValueKey('history-${entry.id}'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 18),
+            decoration: BoxDecoration(
+              color: MahtemPalette.red.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: MahtemPalette.red.withValues(alpha: 0.35)),
+            ),
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: MahtemPalette.red,
+              size: 20,
+            ),
+          ),
+          onDismissed: (_) => _removeWithUndo(history, entry),
+          child: _EntryCard(
+            entry: entry,
+            onTap: () => _showDetails(context, entry),
+            onLongPress: () => _removeWithUndo(history, entry),
+          ),
+        ),
+      );
+    }
+    return rows;
   }
 
   /// "Verify again": prefill the form with this entry's bank + reference,
@@ -96,6 +188,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  void _closeSearch() {
+    setState(() {
+      _searchOpen = false;
+      _searchCtrl.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final history = context.watch<VerifyHistory>();
@@ -107,6 +206,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: _searchOpen ? _buildSearchField(s, isDark) : Text(s.historyTitle),
         actions: [
+          if (entries.isNotEmpty && !_searchOpen)
+            IconButton(
+              tooltip: s.exportTooltip,
+              icon: const Icon(Icons.share_outlined, size: 20),
+              onPressed: () => _shareHistory(history),
+            ),
           if (entries.isNotEmpty)
             IconButton(
               tooltip: _searchOpen
@@ -153,9 +258,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
               icon: Icons.receipt_long_outlined,
               title: s.noChecksTitle,
               body: s.noChecksBody,
+              ctaLabel: s.emptyCta,
+              onCta: () => context.read<AppTab>().switchTo(0),
             )
           : Column(
               children: [
+                _StatsBar(entries: entries),
                 _FilterBar(
                   filter: _filter,
                   onSelected: (f) => setState(() => _filter = f),
@@ -170,18 +278,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         body: s.noMatchesBody,
                       );
                     }
+                    final rows = _buildRows(s, visible, history);
                     return ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                      itemCount: visible.length,
+                      itemCount: rows.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final entry = visible[index];
-                        return _EntryCard(
-                          entry: entry,
-                          onTap: () => _showDetails(context, entry),
-                          onLongPress: () => history.remove(entry.id),
-                        );
-                      },
+                      itemBuilder: (context, index) => rows[index],
                     );
                   }),
                 ),
@@ -426,16 +528,129 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
+/// Summary strip: total checks, verified count and the sum of verified
+/// amounts. Values scale down (FittedBox) so a large total or long
+/// localized label can never overflow a 320dp row.
+class _StatsBar extends StatelessWidget {
+  final List<HistoryEntry> entries;
+
+  const _StatsBar({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final verified =
+        entries.where((e) => e.isVerified).toList(growable: false);
+    final total = verified.fold<double>(
+      0,
+      (sum, e) => sum + (e.amount ?? 0),
+    );
+
+    Widget cell(String value, String label, Color valueColor) {
+      return Expanded(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final divider = Container(
+      width: 1,
+      height: 28,
+      color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
+    );
+    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.navy;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: isDark ? MahtemPalette.dCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          cell('${entries.length}', s.statsChecks, ink),
+          divider,
+          cell('${verified.length}', s.statsVerified, MahtemPalette.green),
+          divider,
+          cell(formatAmount(total, 'ETB'), s.statsTotal, ink),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small faint header above a date group (Today / Yesterday / …).
+class _GroupHeader extends StatelessWidget {
+  final String label;
+
+  const _GroupHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 2),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+          color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+        ),
+      ),
+    );
+  }
+}
+
 /// Shared empty state: no checks at all, or no matches for search/filter.
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String body;
 
+  /// Optional call-to-action shown under the copy — the "no checks yet"
+  /// state jumps to the Verify tab.
+  final String? ctaLabel;
+  final VoidCallback? onCta;
+
   const _EmptyState({
     required this.icon,
     required this.title,
     required this.body,
+    this.ctaLabel,
+    this.onCta,
   });
 
   @override
@@ -468,6 +683,31 @@ class _EmptyState extends StatelessWidget {
               color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
             ),
           ),
+          if (ctaLabel != null && onCta != null) ...[
+            const SizedBox(height: 16),
+            Pressable(
+              onTap: onCta,
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: MahtemPalette.buttonGradient,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  ctaLabel!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

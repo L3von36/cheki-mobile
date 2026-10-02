@@ -651,4 +651,39 @@ final class AmharicStrings extends AppStrings {
   String get crashReportsNote =>
       'መተግበሪያው ሲበላሽ ችግሩን የሚገልጽ መረጃ ያለ ስምዎ '
       'ይላካል — ደረሰኝም ሆነ የመለያ መረጃዎ አያካትቱም።';
+
+  // ------------------------------------------------- history upgrade (v1.9.0)
+
+  @override
+  String get statsChecks => 'ፍተሻዎች';
+
+  @override
+  String get statsVerified => 'የተረጋገጡ';
+
+  @override
+  String get statsTotal => 'ጠቅላላ';
+
+  @override
+  String get groupToday => 'ዛሬ';
+
+  @override
+  String get groupYesterday => 'ትናንት';
+
+  @override
+  String get groupThisWeek => 'በዚህ ሳምንት';
+
+  @override
+  String get groupEarlier => 'ከዚያ በፊት';
+
+  @override
+  String get removedToast => 'ከታሪክ ተወግዷል።';
+
+  @override
+  String get undo => 'መልስ';
+
+  @override
+  String get emptyCta => 'የመጀመሪያውን ደረሰኝዎን ያረጋግጡ';
+
+  @override
+  String get exportTooltip => 'ታሪክ ያጋሩ';
 }

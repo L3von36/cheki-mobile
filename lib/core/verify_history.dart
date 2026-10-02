@@ -183,6 +183,59 @@ class VerifyHistory extends ChangeNotifier {
     await _persist();
   }
 
+  /// Re-inserts an entry at [index] — the undo path for removals. The
+  /// index is whatever position the entry had before it was deleted
+  /// (clamped, since concurrent edits may have shifted the list).
+  Future<void> insert(int index, HistoryEntry entry) async {
+    await _ensureLoaded();
+    var i = index;
+    if (i < 0) i = 0;
+    if (i > _entries.length) i = _entries.length;
+    _entries.insert(i, entry);
+    if (_entries.length > _maxEntries) {
+      _entries.removeRange(_maxEntries, _entries.length);
+    }
+    notifyListeners();
+    await _persist();
+  }
+
+  /// The whole history as CSV (oldest first, spreadsheet-friendly).
+  /// Cells containing commas, quotes or newlines are quoted per RFC 4180.
+  /// Pure — unit-tested; the history screen hands the result to the
+  /// Android share sheet.
+  String toCsv() {
+    String cell(Object? value) {
+      final s = value?.toString() ?? '';
+      final escaped = s.replaceAll('"', '""');
+      final needsQuotes =
+          s.contains(',') || s.contains('"') || s.contains('\n');
+      return needsQuotes ? '"$escaped"' : escaped;
+    }
+
+    final buf = StringBuffer(
+      'Checked at,Status,Bank,Reference,Amount,Currency,Sender,Receiver,'
+      'Receipt date,Note\n',
+    );
+    // entries are newest-first; reverse for a chronological export.
+    for (final e in _entries.reversed) {
+      final checkedAt =
+          DateTime.fromMillisecondsSinceEpoch(e.verifiedAt).toIso8601String();
+      buf.writeln([
+        checkedAt,
+        e.isVerified ? 'verified' : 'not verified',
+        e.bankName,
+        e.reference,
+        e.amount?.toStringAsFixed(2) ?? '',
+        e.currency ?? '',
+        e.senderName ?? '',
+        e.receiverName ?? '',
+        e.receiptDate ?? '',
+        e.message ?? '',
+      ].map(cell).join(','));
+    }
+    return buf.toString();
+  }
+
   Future<void> clear() async {
     await _ensureLoaded();
     _entries.clear();

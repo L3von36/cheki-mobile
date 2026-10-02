@@ -148,6 +148,23 @@ void main() {
       // v1.8.0: crash reporting disclosure.
       expect(s.crashReportsNote, isNotEmpty,
           reason: '${locale.code} crashReportsNote');
+
+      // v1.9.0: history upgrade.
+      expect(s.statsChecks, isNotEmpty, reason: '${locale.code} statsChecks');
+      expect(s.statsVerified, isNotEmpty,
+          reason: '${locale.code} statsVerified');
+      expect(s.statsTotal, isNotEmpty, reason: '${locale.code} statsTotal');
+      expect(s.groupToday, isNotEmpty, reason: '${locale.code} groupToday');
+      expect(s.groupYesterday, isNotEmpty,
+          reason: '${locale.code} groupYesterday');
+      expect(s.groupThisWeek, isNotEmpty,
+          reason: '${locale.code} groupThisWeek');
+      expect(s.groupEarlier, isNotEmpty, reason: '${locale.code} groupEarlier');
+      expect(s.removedToast, isNotEmpty, reason: '${locale.code} removedToast');
+      expect(s.undo, isNotEmpty, reason: '${locale.code} undo');
+      expect(s.emptyCta, isNotEmpty, reason: '${locale.code} emptyCta');
+      expect(s.exportTooltip, isNotEmpty,
+          reason: '${locale.code} exportTooltip');
     }
   });
 
@@ -178,6 +195,8 @@ void main() {
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
     expect(_hasEthiopic(s.crashReportsNote), isTrue);
+    expect(_hasEthiopic(s.groupToday), isTrue);
+    expect(s.undo, 'መልስ');
     expect(s.locale, AppLocale.amharic);
   });
 
@@ -202,6 +221,8 @@ void main() {
     expect(s.filterFailed, 'Hin mirkaneeffamne');
     expect(s.verifyAgain, contains('mirkaneessaa'));
     expect(_hasEthiopic(s.crashReportsNote), isFalse);
+    expect(_hasEthiopic(s.statsChecks), isFalse);
+    expect(s.groupToday, 'Har\u2019aa');
     expect(s.locale, AppLocale.oromo);
   });
 
@@ -223,6 +244,8 @@ void main() {
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
     expect(_hasEthiopic(s.crashReportsNote), isTrue);
+    expect(_hasEthiopic(s.groupToday), isTrue);
+    expect(s.groupYesterday, 'ትማሊ');
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');
     expect(s.verifyTab, 'ምርግጋጽ');

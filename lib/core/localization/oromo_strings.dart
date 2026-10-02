@@ -683,4 +683,39 @@ final class OromoStrings extends AppStrings {
       'Appiin yeroo dhabeessu gabaasa maqaa hin qabne ni erama — '
       'risiitii fi odeeffannoo keessan isa keessatti hin jiru; '
       'saffisaan fooyyessuuf qofa.';
+
+  // ------------------------------------------------- history upgrade (v1.9.0)
+
+  @override
+  String get statsChecks => 'Mirkaneessota';
+
+  @override
+  String get statsVerified => 'Mirkaneefaman';
+
+  @override
+  String get statsTotal => 'Waliigalaa';
+
+  @override
+  String get groupToday => 'Har\u2019aa';
+
+  @override
+  String get groupYesterday => 'Kaleessa';
+
+  @override
+  String get groupThisWeek => 'Torban kana';
+
+  @override
+  String get groupEarlier => 'Kan duraan';
+
+  @override
+  String get removedToast => 'Seenaa irraa haqameera.';
+
+  @override
+  String get undo => 'Deebi\u2019i';
+
+  @override
+  String get emptyCta => 'Risiitii kee jalqabaa mirkaneessi';
+
+  @override
+  String get exportTooltip => 'Seenaa qoodi';
 }
