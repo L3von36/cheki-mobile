@@ -720,6 +720,31 @@ final class TigrinyaStrings extends AppStrings {
       'ሰርተፊኬትኩም ወይ መረዳዕታኩም ኣብ ውሽጡ '
       'የብሉን፤ ንምቕሓስ ጥራይ እዩ።';
 
+  // ------------------------------------------------ error safety net (v1.12.1)
+
+  @override
+  String get somethingWentWrongScreen =>
+      'ኣብ ምርኢትዚ ክፍሊ ጸገም ተዛሚዙ። ተመለስን ደጊምኩም ፈትኑ።';
+
+  @override
+  String get reportProblemTile => 'ጸገም የዛዝዝ';
+
+  @override
+  String get reportProblemTitle => 'ኣብዚ መሣሪሒ ዝተመዝገቡ ጸገማት';
+
+  @override
+  String get reportProblemEmpty =>
+      'ድሕሪ ሕጂ ዝኾነ ጸገም ኣይተመዝገበን። ትሕዝቶ ትጥቃመርያ ግዜ ጸገም '
+      'ኩነታት ኣብዚ ክርከብ ይኽእል — ክትሓብርዎ ክትኽእል።';
+
+  @override
+  String get reportProblemHint =>
+      'እዞም ሓበሬታት ኣብ መሣሪሒኩም ጥራይ ይቕረቡ። ጸገም ምስ ተራኺኹም፣ '
+      'ቅጂኦም ወጻእቶም ምስ ዝሓበሩ ይለኣኩ።';
+
+  @override
+  String get reportProblemCopy => 'ቅጂ ሓበሬታ';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

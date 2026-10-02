@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/account.dart';
+import '../../core/error_safety_net.dart';
 import '../../core/localization/app_strings.dart';
 import '../../state/auth_controller.dart';
 import '../../state/license_controller.dart';
@@ -124,6 +125,10 @@ class SettingsSheet extends StatelessWidget {
                 valueFuture: Future.value(license.deviceCode),
                 copyable: true,
               ),
+            const SizedBox(height: 10),
+            _DiagnosticsTile(strings: strings),
+            const SizedBox(height: 8),
+            _FinePrint(text: strings.reportProblemHint),
             const SizedBox(height: 8),
             _FinePrint(text: strings.crashReportsNote),
           ],
@@ -331,6 +336,114 @@ class _FinePrint extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(color: faint, fontSize: 10.5, height: 1.4),
+      ),
+    );
+  }
+}
+
+/// "Report a problem" tile: opens the on-device diagnostics trail so a
+/// user who saw something break can read it and copy the details. Purely
+/// local — nothing here ever uploads; sharing happens only via copy.
+class _DiagnosticsTile extends StatelessWidget {
+  final AppStrings strings;
+
+  const _DiagnosticsTile({required this.strings});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final count = DiagnosticsLog.I.count;
+    return Pressable(
+      onTap: () => _showDiagnostics(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? MahtemPalette.dCard : Colors.white,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: (isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim)
+                .withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.bug_report_rounded,
+              size: 18,
+              color: isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                strings.reportProblemTile,
+                style: TextStyle(
+                  color: isDark ? MahtemPalette.dInk : MahtemPalette.lInk,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (count > 0)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: MahtemPalette.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: MahtemPalette.red,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDiagnostics(BuildContext context) async {
+    final strings = context.read<LocaleController>().strings;
+    final messenger = ScaffoldMessenger.of(context);
+    final hasEntries = DiagnosticsLog.I.count > 0;
+    final text = DiagnosticsLog.I.copyText();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.reportProblemTitle),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: hasEntries
+                ? Text(text, style: monoStyle(size: 11))
+                : Text(strings.reportProblemEmpty),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.ok),
+          ),
+          if (hasEntries)
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: text));
+                Navigator.of(dialogContext).pop();
+                messenger.showSnackBar(
+                  SnackBar(
+                    behavior: SnackBarBehavior.floating,
+                    content: Text(strings.copiedToClipboard),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded, size: 15),
+              label: Text(strings.reportProblemCopy),
+            ),
+        ],
       ),
     );
   }

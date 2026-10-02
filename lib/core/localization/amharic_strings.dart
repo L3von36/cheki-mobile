@@ -677,6 +677,31 @@ final class AmharicStrings extends AppStrings {
       'መተግበሪያው ሲበላሽ ችግሩን የሚገልጽ መረጃ ያለ ስምዎ '
       'ይላካል — ደረሰኝም ሆነ የመለያ መረጃዎ አያካትቱም።';
 
+  // ------------------------------------------------ error safety net (v1.12.1)
+
+  @override
+  String get somethingWentWrongScreen =>
+      'ይህንን ክፍል በማሳየት ላይ ችግር በገጠመ። ተመልሰው እንደገና ይሞክሩ።';
+
+  @override
+  String get reportProblemTile => 'ችግር ይመዝግቡ';
+
+  @override
+  String get reportProblemTitle => 'በዚህ መሣሪያ ላይ የተመዘገቡ ችግሮች';
+
+  @override
+  String get reportProblemEmpty =>
+      'እስካሁን ምንም ችግር አልተመዘገበም። መተግበሪያው ችግር ከፈጠረ ዝርዝሮቹ '
+      'እዚህ ይታያሉ — ችግሩን ስያዘው እንዲጋሩዎት ይቻላል።';
+
+  @override
+  String get reportProblemHint =>
+      'እነዚህ ዝርዝሮች በመሣሪያዎ ውስጥ ብቻ ይቆያሉ። ችግር ስያስቡ ቅጂያቸውን '
+      'አውጥተው አብረው ይላኩ።';
+
+  @override
+  String get reportProblemCopy => 'ዝርዝሮቹን ቅጂ';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

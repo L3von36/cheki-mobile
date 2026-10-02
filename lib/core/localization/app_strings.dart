@@ -343,6 +343,28 @@ abstract base class AppStrings {
   /// anonymous and contain no receipt or account data.
   String get crashReportsNote;
 
+  // ------------------------------------------------ error safety net (v1.12.1)
+
+  /// Release-mode error card shown when a screen fails to build — calm,
+  /// no technical detail, points the user back.
+  String get somethingWentWrongScreen;
+
+  /// Settings tile that opens the on-device diagnostics trail.
+  String get reportProblemTile;
+
+  /// Title of the diagnostics dialog.
+  String get reportProblemTitle;
+
+  /// Empty state: no problems have been recorded on this device yet.
+  String get reportProblemEmpty;
+
+  /// Fine print under the tile: the trail is local-only, sharing happens
+  /// only when the user copies it.
+  String get reportProblemHint;
+
+  /// Copy button inside the diagnostics dialog.
+  String get reportProblemCopy;
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   /// Labels of the three summary cells at the top of the history list.

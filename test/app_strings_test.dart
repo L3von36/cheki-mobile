@@ -148,6 +148,20 @@ void main() {
       expect(s.crashReportsNote, isNotEmpty,
           reason: '${locale.code} crashReportsNote');
 
+      // v1.12.1: error safety net + report-a-problem flow.
+      expect(s.somethingWentWrongScreen, isNotEmpty,
+          reason: '${locale.code} somethingWentWrongScreen');
+      expect(s.reportProblemTile, isNotEmpty,
+          reason: '${locale.code} reportProblemTile');
+      expect(s.reportProblemTitle, isNotEmpty,
+          reason: '${locale.code} reportProblemTitle');
+      expect(s.reportProblemEmpty, isNotEmpty,
+          reason: '${locale.code} reportProblemEmpty');
+      expect(s.reportProblemHint, isNotEmpty,
+          reason: '${locale.code} reportProblemHint');
+      expect(s.reportProblemCopy, isNotEmpty,
+          reason: '${locale.code} reportProblemCopy');
+
       // v1.9.0: history upgrade.
       expect(s.statsChecks, isNotEmpty, reason: '${locale.code} statsChecks');
       expect(s.statsVerified, isNotEmpty,
@@ -295,6 +309,10 @@ void main() {
     expect(_hasEthiopic(s.staleReceiptNote(3)), isTrue);
     expect(_hasEthiopic(s.duplicateReceiptNote('10:30')), isTrue);
     expect(_hasEthiopic(s.pasteExtractedToast), isTrue);
+    expect(_hasEthiopic(s.somethingWentWrongScreen), isTrue);
+    expect(_hasEthiopic(s.reportProblemTile), isTrue);
+    expect(_hasEthiopic(s.reportProblemTitle), isTrue);
+    expect(_hasEthiopic(s.reportProblemCopy), isTrue);
     expect(s.undo, 'መልስ');
     expect(s.locale, AppLocale.amharic);
   });
@@ -326,6 +344,9 @@ void main() {
     expect(s.scanNumberAction, 'Lakkoofsa iskaanii godhaa');
     expect(s.cbeNeedsCodeTitle, 'CBE-n koodii risiitii barbaada');
     expect(s.failureBlockedMessage(), contains('Siinqee'));
+    expect(s.reportProblemTile, 'Rakkoo gabaasi');
+    expect(_hasEthiopic(s.somethingWentWrongScreen), isFalse);
+    expect(_hasEthiopic(s.reportProblemEmpty), isFalse);
     expect(s.pasteExtractedToast,
         'Lakkoofsi risitii barreeffamicha keessaa argameera.');
     expect(s.locale, AppLocale.oromo);
@@ -353,6 +374,9 @@ void main() {
     expect(s.groupYesterday, 'ትማሊ');
     expect(s.scanNumberAction, 'ቍጽሪ ስካኑ');
     expect(s.cbeNeedsCodeTitle, 'ሲቢኤ ኮድ ሰርተፊኬት ይደሊ');
+    expect(_hasEthiopic(s.somethingWentWrongScreen), isTrue);
+    expect(_hasEthiopic(s.reportProblemTile), isTrue);
+    expect(s.reportProblemCopy, 'ቅጂ ሓበሬታ');
     expect(s.pasteExtractedToast, 'ቍጽሪ ሪሲት ካብቲ ጽሑፍ ተረኺቡ ኣሎ።');
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');

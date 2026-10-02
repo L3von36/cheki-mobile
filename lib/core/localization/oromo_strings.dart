@@ -712,6 +712,34 @@ final class OromoStrings extends AppStrings {
       'risiitii fi odeeffannoo keessan isa keessatti hin jiru; '
       'saffisaan fooyyessuuf qofa.';
 
+  // ------------------------------------------------ error safety net (v1.12.1)
+
+  @override
+  String get somethingWentWrongScreen =>
+      'Kun naannoo kana agarsiisuu keessatti rakkoo uume. Gara duubatti '
+      'deebi\u2019ee irra deebi\u2019aan yaalaa.';
+
+  @override
+  String get reportProblemTile => 'Rakkoo gabaasi';
+
+  @override
+  String get reportProblemTitle =>
+      'Rakkoota meeshaa kana irratti galmeefaman';
+
+  @override
+  String get reportProblemEmpty =>
+      'Hanga ammaa rakkoo kamuu hin galmeefamin. Appiin yeroo tokko yoo '
+      'dogoggore, odeeffannoon asitti mul\u2019ata — yeroo gabaassu waliin '
+      'qooddachuu dandeessu.';
+
+  @override
+  String get reportProblemHint =>
+      'Odeeffannoon kun meeshaa keessatti qofa jira. Yeroo rakkoo '
+      'gabaassu, kopii isaa kaasuun waliinitti jedhi.';
+
+  @override
+  String get reportProblemCopy => 'Odeeffannoo kopii godhi';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

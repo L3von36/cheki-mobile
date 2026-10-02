@@ -627,6 +627,31 @@ final class EnglishStrings extends AppStrings {
       'If the app ever crashes, it sends an anonymous report — no receipt '
       'or account data — so problems get fixed faster.';
 
+  // ------------------------------------------------ error safety net (v1.12.1)
+
+  @override
+  String get somethingWentWrongScreen =>
+      'Something went wrong displaying this part. Go back and try again.';
+
+  @override
+  String get reportProblemTile => 'Report a problem';
+
+  @override
+  String get reportProblemTitle => 'Problems recorded on this device';
+
+  @override
+  String get reportProblemEmpty =>
+      'No problems have been recorded. If the app ever misbehaves, the '
+      'details will appear here so you can share them.';
+
+  @override
+  String get reportProblemHint =>
+      'These details stay on your device only. When reporting a problem, '
+      'copy them and include the copy.';
+
+  @override
+  String get reportProblemCopy => 'Copy details';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

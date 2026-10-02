@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/auth/account_store.dart';
 import 'core/auth/password_hasher.dart';
+import 'core/error_safety_net.dart';
 import 'core/localization/am_material_localizations.dart';
 import 'core/localization/app_strings.dart';
 import 'core/verify_history.dart';
@@ -77,27 +78,34 @@ class MahtemApp extends StatelessWidget {
         ),
       ],
       child: Consumer2<ThemeController, LocaleController>(
-        builder: (context, theme, locale, _) => MaterialApp(
-          title: 'Mahtem',
-          debugShowCheckedModeBanner: false,
-          // Flutter has no built-in `am` MaterialLocalizations — this
-          // delegate ships the Amharic system strings (copy/paste menus,
-          // tooltips) so Amharic mode boots clean, without the "locale am
-          // is not supported" warning.
-          localizationsDelegates: const [
-            MahtemLocalizationsDelegate(),
-            MahtemCupertinoLocalizationsDelegate(),
-          ],
-          locale: locale.materialLocale,
-          supportedLocales: kSupportedLocales,
-          theme: MahtemTheme.light(ethiopicFont: locale.usesEthiopicScript),
-          darkTheme: MahtemTheme.dark(ethiopicFont: locale.usesEthiopicScript),
-          themeMode: theme.mode,
-          home: const AuthGate(),
-          // Records which screen the user was on when a crash happens —
-          // a no-op unless Sentry was initialized at boot (DSN present).
-          navigatorObservers: [SentryNavigatorObserver()],
-        ),
+        builder: (context, theme, locale, _) {
+          // Friendly error widget text stays localized: the resolver holds
+          // the current LocaleController instance (no context needed), and
+          // app.dart rebuilds it on every locale switch.
+          localizedScreenErrorResolver =
+              () => locale.strings.somethingWentWrongScreen;
+          return MaterialApp(
+            title: 'Mahtem',
+            debugShowCheckedModeBanner: false,
+            // Flutter has no built-in `am` MaterialLocalizations — this
+            // delegate ships the Amharic system strings (copy/paste menus,
+            // tooltips) so Amharic mode boots clean, without the "locale am
+            // is not supported" warning.
+            localizationsDelegates: const [
+              MahtemLocalizationsDelegate(),
+              MahtemCupertinoLocalizationsDelegate(),
+            ],
+            locale: locale.materialLocale,
+            supportedLocales: kSupportedLocales,
+            theme: MahtemTheme.light(ethiopicFont: locale.usesEthiopicScript),
+            darkTheme: MahtemTheme.dark(ethiopicFont: locale.usesEthiopicScript),
+            themeMode: theme.mode,
+            home: const AuthGate(),
+            // Records which screen the user was on when a crash happens —
+            // a no-op unless Sentry was initialized at boot (DSN present).
+            navigatorObservers: [SentryNavigatorObserver()],
+          );
+        },
       ),
     );
   }
