@@ -65,6 +65,15 @@ your first 5 checks are free.
   hosted API in between, which means Telebirr and M-Pesa work on Ethiopian
   networks (a hosted non-Ethiopian server could never reach them).
 - **Verify any receipt** — paste a reference or a share link from SMS
+- **Scan the number off a paper receipt** — no QR on the slip? Point the
+  camera at the printed transaction / reference number and Mahtem reads
+  it with on-device ML Kit OCR: labeled numbers (`RRN:`, `Ref No:`,
+  `FT#…`) and RRN-shaped numbers are accepted automatically once several
+  consecutive frames agree; weaker candidates (bare numbers, telebirr-
+  style tokens) show up as tappable chips so nothing is verified by
+  accident. Account numbers, TINs and phone lines are filtered out, and
+  Gallery photos are OCR'd too — with a "type instead" fallback a tap
+  away
 - **QR scan that works** — every receipt QR format the stylepos verifier
   knows: bank receipt links, CBE `mbreciept` ids, **encrypted BOA receipt
   QR payloads (decrypted fully offline on-device)**, the Telebirr SuperApp
@@ -98,7 +107,9 @@ your first 5 checks are free.
   screenshots, no PII) so bugs get fixed fast; builds without a DSN
   behave exactly as before — zero network, zero overhead. The settings
   sheet discloses this in all four languages
-- **Private** — history never leaves the device; nothing to sign up for
+- **Private** — history never leaves the device; nothing to sign up for.
+  The receipt-number OCR runs on-device too (ML Kit) — camera frames are
+  never uploaded
 
 ## How verification works
 

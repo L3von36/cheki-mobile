@@ -305,6 +305,31 @@ final class TigrinyaStrings extends AppStrings {
   @override
   String get typeSheetRecent => 'ናይ ቅሩብ እዋን ፍተሻታት';
 
+  // ------------------------------------- reference number scanner (v1.10.0)
+
+  @override
+  String get scanNumberAction => 'ቍጽሪ ስካኑ';
+
+  @override
+  String get refScanTitle => 'ቍጽሪ ሰርተፊኬት ስካኑ';
+
+  @override
+  String get refScanHint =>
+      'እቲ ካሜራ ኣብ ተሓቂ ዘሎ ቍጽሪ ክፍሊት ወይ ሪፈረንስ ኣውቒሉ';
+
+  @override
+  String get refScanLooking => 'ቍጽሪ ደሊና ኣላ…';
+
+  @override
+  String get refScanFoundTitle => 'ቍጽሪታት ተረኺቡ — ንምርግጋጽ ጠቅ ግበር';
+
+  @override
+  String get refScanTypeInstead => 'ብኢድ ጽሓፉ';
+
+  @override
+  String get refScanNoNumberFound =>
+      'ቍጽሪ ዘይተረኽበ። ቀሪቕ፣ ብርሃን ወስኽ፣ ወይ ብኢድ ጽሓፍ።';
+
   // ---------------------------------------------------------------- result
 
   @override

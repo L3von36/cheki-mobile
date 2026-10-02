@@ -192,6 +192,31 @@ abstract base class AppStrings {
   /// Section header above the recent-reference chips.
   String get typeSheetRecent;
 
+  // ------------------------------------- reference number scanner (v1.10.0)
+
+  /// Label under the camera icon on the scan screen — opens the OCR
+  /// scanner that reads the number printed on a paper receipt.
+  String get scanNumberAction;
+
+  /// App-bar title of the reference-number OCR scanner.
+  String get refScanTitle;
+
+  /// Instruction shown under the title while the scanner is open.
+  String get refScanHint;
+
+  /// Status line shown while no candidate number has been read yet.
+  String get refScanLooking;
+
+  /// Header above the chips listing the numbers found in the frame.
+  String get refScanFoundTitle;
+
+  /// Label under the keyboard icon on the OCR screen — opens the manual
+  /// entry sheet when the camera cannot read the print.
+  String get refScanTypeInstead;
+
+  /// Shown when the gallery image contains no readable number.
+  String get refScanNoNumberFound;
+
   // ---------------------------------------------------------------- result
 
   String get resultTitle;

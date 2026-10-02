@@ -9,11 +9,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/scan_input.dart';
 import '../../state/locale_controller.dart';
+import 'reference_scan_screen.dart';
 import '../widgets/reference_entry_sheet.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
-/// the frame" hint, green corner brackets, and Flash / Gallery / Type-number
-/// buttons.
+/// the frame" hint, green corner brackets, and Flash / Gallery /
+/// Scan-number / Type-number buttons.
 ///
 /// Robust by design:
 ///   * explicit camera-permission flow (request, recover, open settings)
@@ -176,6 +177,37 @@ class _ScanScreenState extends State<ScanScreen>
     _tryAccept(text);
   }
 
+  /// Opens the OCR scanner that reads the transaction / reference number
+  /// printed on the receipt. The QR camera is paused while the OCR screen
+  /// owns the device camera; when the user comes back without a number
+  /// the QR camera resumes, and when a number was captured it flows
+  /// through the exact same pipeline as a QR payload.
+  Future<void> _openReferenceScan() async {
+    if (_handled) return;
+    try {
+      await _controller?.stop();
+    } catch (_) {
+      // Camera already stopping — the OCR screen manages its own device.
+    }
+    if (!mounted) return;
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ReferenceScanScreen()),
+    );
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
+      // Back without a number — bring the QR camera back up.
+      try {
+        await _controller?.start();
+      } catch (_) {
+        // Restart failures are surfaced by the error builder on the next
+        // frame; nothing else to do here.
+      }
+      return;
+    }
+    if (!mounted) return;
+    _tryAccept(text);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleController>().strings;
@@ -269,6 +301,11 @@ class _ScanScreenState extends State<ScanScreen>
                         icon: Icons.photo_outlined,
                         label: s.scanGallery,
                         onTap: _pickFromGallery,
+                      ),
+                      _RoundAction(
+                        icon: Icons.document_scanner_rounded,
+                        label: s.scanNumberAction,
+                        onTap: _openReferenceScan,
                       ),
                       _RoundAction(
                         icon: Icons.keyboard_rounded,

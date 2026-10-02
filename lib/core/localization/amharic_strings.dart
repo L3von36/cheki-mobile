@@ -289,6 +289,31 @@ final class AmharicStrings extends AppStrings {
   @override
   String get typeSheetRecent => 'የቅርብ ጊዜ ፍተሻዎች';
 
+  // ------------------------------------- reference number scanner (v1.10.0)
+
+  @override
+  String get scanNumberAction => 'ቁጥር ይስካኑ';
+
+  @override
+  String get refScanTitle => 'የደረሰኝ ቁጥር ይስካኑ';
+
+  @override
+  String get refScanHint =>
+      'ካሜራውን በደረሰኙ ላይ ያለው የግብይት ወይም የማጣቀሻ ቁጥር ላይ ያነጣጥሉ';
+
+  @override
+  String get refScanLooking => 'ቁጥሩን በመፈለግ ላይ…';
+
+  @override
+  String get refScanFoundTitle => 'የተገኙ ቁጥሮች — ለማረጋገጥ ይንኩ';
+
+  @override
+  String get refScanTypeInstead => 'በእጅ ይጻፉ';
+
+  @override
+  String get refScanNoNumberFound =>
+      'ቁጥር አልተገኘም። ተቃርበው፣ ብርሃን ይጨምሩ ወይም በእጅ ይጻፉ።';
+
   // ---------------------------------------------------------------- result
 
   @override

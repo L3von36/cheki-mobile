@@ -293,6 +293,32 @@ final class EnglishStrings extends AppStrings {
   @override
   String get typeSheetRecent => 'Recent checks';
 
+  // ------------------------------------- reference number scanner (v1.10.0)
+
+  @override
+  String get scanNumberAction => 'Scan number';
+
+  @override
+  String get refScanTitle => 'Scan Receipt Number';
+
+  @override
+  String get refScanHint =>
+      'Point the camera at the transaction or reference number '
+      'printed on the receipt';
+
+  @override
+  String get refScanLooking => 'Looking for the number…';
+
+  @override
+  String get refScanFoundTitle => 'Numbers found — tap one to verify';
+
+  @override
+  String get refScanTypeInstead => 'Type instead';
+
+  @override
+  String get refScanNoNumberFound =>
+      'No number found. Move closer, add light, or type it instead.';
+
   // ---------------------------------------------------------------- result
 
   @override

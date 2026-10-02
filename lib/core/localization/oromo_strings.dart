@@ -310,6 +310,34 @@ final class OromoStrings extends AppStrings {
   @override
   String get typeSheetRecent => 'Yaalii dhiyoo';
 
+  // ------------------------------------- reference number scanner (v1.10.0)
+
+  @override
+  String get scanNumberAction => 'Lakkoofsa iskaanii godhaa';
+
+  @override
+  String get refScanTitle => 'Lakkoofsa risiitii iskaanii godhaa';
+
+  @override
+  String get refScanHint =>
+      'Kaameeraa lakkoofsa kaffaltii ykn qajeelfama risiitii irratti '
+      'barreeffame irratti qabi';
+
+  @override
+  String get refScanLooking => 'Lakkoofsa barbaadaa jirra\u2026';
+
+  @override
+  String get refScanFoundTitle =>
+      'Lakkofsota argaman \u2014 tuqaa mirkaneessi';
+
+  @override
+  String get refScanTypeInstead => 'Harkaan barreessi';
+
+  @override
+  String get refScanNoNumberFound =>
+      'Lakkoofsi hin argamne. Dhiyoomi, ifa dabalaa, ykn harkaan '
+      'barreessaa.';
+
   // ---------------------------------------------------------------- result
 
   @override
