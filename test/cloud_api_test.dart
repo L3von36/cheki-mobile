@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mahtem/core/cloud/cloud_api.dart';
 
-const _idh = 'a' * 64;
-const _auth = 'b' * 64;
+final String _idh = 'a' * 64;
+final String _auth = 'b' * 64;
 
 void main() {
   test('createAccount + session + vault round-trip against a fake server',

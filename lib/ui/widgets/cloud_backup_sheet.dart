@@ -14,6 +14,7 @@ import '../../core/localization/app_strings.dart';
 import '../../core/verify_history.dart';
 import '../../state/auth_controller.dart';
 import '../../state/cloud_controller.dart';
+import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import 'pressable.dart';
 
