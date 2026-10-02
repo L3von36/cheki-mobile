@@ -1,8 +1,3 @@
-import 'dart:async';
-
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-
 /// Crash reporting (v1.8.0) — opt-in Sentry wiring.
 ///
 /// The DSN arrives at BUILD time through `--dart-define=SENTRY_DSN=…`
@@ -13,6 +8,11 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 /// Firebase project (`google-services.json` + console access); Sentry
 /// stays buildable with no external account at all.
 library;
+
+import 'dart:async';
+
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// DSN baked in at build time — empty in every build without the secret.
 const String kSentryDsn = String.fromEnvironment('SENTRY_DSN');
@@ -47,8 +47,11 @@ Future<(String release, String? dist)> loadAppIdentity() async {
 /// Error events only: no personally identifiable data, no screenshots, no
 /// view hierarchies, no performance-tracing network chatter. Session
 /// tracking stays on (default) so Sentry's release health shows adopters.
+/// (Screenshot / view-hierarchy attachment are Flutter-level options and
+/// default to false — pinned here so a future SDK default flip can't
+/// silently change what Mahtem sends.)
 void configureSentryOptions(
-  SentryOptions options, {
+  SentryFlutterOptions options, {
   required String dsn,
   required String release,
   String? dist,

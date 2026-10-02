@@ -41,7 +41,7 @@ void main() {
 
   group('configureSentryOptions', () {
     test('locks in the privacy-first profile', () {
-      final options = SentryOptions();
+      final options = SentryFlutterOptions();
       configureSentryOptions(
         options,
         dsn: 'https://k@o1.ingest.sentry.io/42',
