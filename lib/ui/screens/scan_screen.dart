@@ -7,6 +7,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/scan_input.dart';
+import '../../core/localization/app_strings.dart';
+import '../../state/locale_controller.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
 /// the frame" hint, green corner brackets, and Flash / Gallery buttons.
@@ -131,18 +133,20 @@ class _ScanScreenState extends State<ScanScreen>
           return;
         }
       }
+      final s = context.read<LocaleController>().strings;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('No receipt QR code found in that image.'),
+          content: Text(s.scanNoQrFound),
         ),
       );
     } catch (_) {
       if (mounted) {
+        final s = context.read<LocaleController>().strings;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             behavior: SnackBarBehavior.floating,
-            content: Text('Could not read that image.'),
+            content: Text(s.scanImageUnreadable),
           ),
         );
       }
@@ -160,6 +164,7 @@ class _ScanScreenState extends State<ScanScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -184,11 +189,11 @@ class _ScanScreenState extends State<ScanScreen>
                               color: Colors.white, size: 22),
                           onPressed: () => Navigator.of(context).pop(),
                         ),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Scan Payment',
+                            s.scanTitle,
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15.5,
                               fontWeight: FontWeight.w700,
@@ -202,7 +207,7 @@ class _ScanScreenState extends State<ScanScreen>
                   ),
                   const SizedBox(height: 26),
                   Text(
-                    'Position the QR code within the frame',
+                    s.scanPositionHint,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.92),
                       fontSize: 12.5,
@@ -212,8 +217,7 @@ class _ScanScreenState extends State<ScanScreen>
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    'Use the QR printed on a payment receipt — '
-                    'not a pay or receive-money QR',
+                    s.scanUsageHint,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.6),
@@ -244,12 +248,12 @@ class _ScanScreenState extends State<ScanScreen>
                     icon: _torchOn
                         ? Icons.flashlight_on_rounded
                         : Icons.flashlight_off_rounded,
-                    label: 'Flash',
+                    label: s.scanFlash,
                     onTap: _toggleTorch,
                   ),
                   _RoundAction(
                     icon: Icons.photo_outlined,
-                    label: 'Gallery',
+                    label: s.scanGallery,
                     onTap: _pickFromGallery,
                   ),
                 ],
@@ -261,6 +265,7 @@ class _ScanScreenState extends State<ScanScreen>
   }
 
   Widget _buildCamera() {
+    final s = context.watch<LocaleController>().strings;
     switch (_cameraState) {
       case _CameraState.checking:
         return const Center(
@@ -272,24 +277,22 @@ class _ScanScreenState extends State<ScanScreen>
           onDetect: _onDetect,
           errorBuilder: (context, error) {
             return _ScanErrorView(
-              message: 'The camera could not start (${error.errorCode.name}). '
-                  'Close this screen and try again.',
-              actionLabel: 'Retry',
+              message: s.scanCameraError(error.errorCode.name),
+              actionLabel: s.scanRetry,
               onAction: _startCamera,
             );
           },
         );
       case _CameraState.denied:
         return _ScanErrorView(
-          message: 'Camera permission is needed to scan receipt QR codes.',
-          actionLabel: 'Grant permission',
+          message: s.scanCameraPermissionNeeded,
+          actionLabel: s.scanGrantPermission,
           onAction: _ensurePermission,
         );
       case _CameraState.permanentlyDenied:
         return _ScanErrorView(
-          message: 'Camera access is turned off for Mahtem. Enable it in '
-              'system settings, or paste the receipt link instead.',
-          actionLabel: 'Open settings',
+          message: s.scanCameraOff,
+          actionLabel: s.scanOpenSettings,
           onAction: openAppSettings,
         );
     }
@@ -522,6 +525,7 @@ class _ScanErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -531,9 +535,9 @@ class _ScanErrorView extends StatelessWidget {
             const Icon(Icons.no_photography_rounded,
                 color: Colors.white70, size: 42),
             const SizedBox(height: 14),
-            const Text(
-              'Camera unavailable',
-              style: TextStyle(
+            Text(
+              s.scanCameraUnavailable,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,

@@ -76,6 +76,59 @@ void main() {
       expect(s.copiedToClipboard, isNotEmpty);
       expect(s.close, isNotEmpty);
       expect(s.loading, isNotEmpty);
+
+      // v1.6.6: scan / result / history / paywall catalogs.
+      expect(s.scanTitle, isNotEmpty);
+      expect(s.scanPositionHint, isNotEmpty);
+      expect(s.scanCameraError('x'), contains('x'));
+      expect(s.scanCameraOff, isNotEmpty);
+      expect(s.resultTitle, isNotEmpty);
+      expect(s.resultVerifiedTitle, isNotEmpty);
+      expect(s.resultFailedBody, isNotEmpty);
+      expect(s.senderAccountLabel, isNotEmpty);
+      expect(
+        s.shareText(
+          bankName: 'CBE',
+          reference: 'r1',
+          amount: 'a1',
+          sender: 's1',
+          receiver: 'r2',
+          date: 'd1',
+        ),
+        contains('CBE'),
+      );
+      for (final kind in VerifyErrorKind.values) {
+        expect(
+          s.failureMessage(kind, 'fallback'),
+          isNotEmpty,
+          reason: '${locale.code} failureMessage($kind)',
+        );
+        expect(
+          s.failureTips(kind, const ['fallback']),
+          isNotEmpty,
+          reason: '${locale.code} failureTips($kind)',
+        );
+      }
+      expect(s.historyTitle, isNotEmpty);
+      expect(s.clearHistoryBody, isNotEmpty);
+      expect(s.verifiedPaymentLabel, isNotEmpty);
+      expect(s.checkedLabel, isNotEmpty);
+      expect(s.paywallTitle, isNotEmpty);
+      expect(s.codeExpired('1 Jan 2026'), contains('1 Jan 2026'));
+      expect(s.proActivatedToast('1 Feb 2026'), contains('1 Feb 2026'));
+      expect(s.trialsLeftTitle(1), isNotEmpty);
+      expect(s.trialsLeftTitle(3), isNotEmpty);
+      expect(s.priceYearlyOnce('900'), contains('900'));
+      expect(s.step1Title('99', '900'), contains('900'));
+      expect(s.step2Body('99'), contains('99'));
+      expect(s.verifyAndActivate, isNotEmpty);
+      for (final reason in ActivationRejectReason.values) {
+        expect(
+          s.activationRejection(reason, 'fallback'),
+          isNotEmpty,
+          reason: '${locale.code} activationRejection($reason)',
+        );
+      }
     }
   });
 
@@ -83,6 +136,9 @@ void main() {
     final s = AppStrings.of(AppLocale.english);
     expect(_hasEthiopic(s.welcomeBack), isFalse);
     expect(_hasEthiopic(s.verifyReceiptButton), isFalse);
+    expect(_hasEthiopic(s.resultVerifiedTitle), isFalse);
+    expect(_hasEthiopic(s.failureMessage(VerifyErrorKind.network, 'fb')),
+        isFalse);
     expect(s.locale, AppLocale.english);
   });
 
@@ -92,6 +148,12 @@ void main() {
     expect(_hasEthiopic(s.verifyTab), isTrue);
     expect(_hasEthiopic(s.verifyReceiptButton), isTrue);
     expect(_hasEthiopic(s.authPrivacyNote), isTrue);
+    expect(_hasEthiopic(s.resultVerifiedTitle), isTrue);
+    expect(
+      _hasEthiopic(s.failureMessage(VerifyErrorKind.network, 'fb')),
+      isTrue,
+    );
+    expect(_hasEthiopic(s.trialsGoneTitle), isTrue);
     expect(s.locale, AppLocale.amharic);
   });
 

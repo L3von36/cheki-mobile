@@ -228,4 +228,329 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String get loading => 'Loading…';
+
+  // ---------------------------------------------------------------- scan
+
+  @override
+  String get scanTitle => 'Scan Payment';
+
+  @override
+  String get scanPositionHint => 'Position the QR code within the frame';
+
+  @override
+  String get scanUsageHint =>
+      'Use the QR printed on a payment receipt — '
+      'not a pay or receive-money QR';
+
+  @override
+  String get scanFlash => 'Flash';
+
+  @override
+  String get scanGallery => 'Gallery';
+
+  @override
+  String get scanNoQrFound => 'No receipt QR code found in that image.';
+
+  @override
+  String get scanImageUnreadable => 'Could not read that image.';
+
+  @override
+  String scanCameraError(String code) =>
+      'The camera could not start ($code). Close this screen and try again.';
+
+  @override
+  String get scanRetry => 'Retry';
+
+  @override
+  String get scanCameraPermissionNeeded =>
+      'Camera permission is needed to scan receipt QR codes.';
+
+  @override
+  String get scanGrantPermission => 'Grant permission';
+
+  @override
+  String get scanCameraOff =>
+      'Camera access is turned off for Mahtem. Enable it in system '
+      'settings, or paste the receipt link instead.';
+
+  @override
+  String get scanOpenSettings => 'Open settings';
+
+  @override
+  String get scanCameraUnavailable => 'Camera unavailable';
+
+  // ---------------------------------------------------------------- result
+
+  @override
+  String get resultTitle => 'Verification Result';
+
+  @override
+  String get resultNothingToShow => 'No receipt to display.';
+
+  @override
+  String get resultVerifiedTitle => 'Payment Verified!';
+
+  @override
+  String get resultFailedTitle => 'Verification Failed';
+
+  @override
+  String get resultVerifiedBody =>
+      'This payment is real and confirmed by the bank.';
+
+  @override
+  String get resultFailedBody => 'This receipt could not be verified.';
+
+  @override
+  String get resultDone => 'Done';
+
+  @override
+  String get resultShare => 'Share';
+
+  @override
+  String get resultTryAgain => 'Try again';
+
+  @override
+  String get senderLabel => 'From';
+
+  @override
+  String get senderAccountLabel => 'From account';
+
+  @override
+  String get receiverLabel => 'To';
+
+  @override
+  String get receiverAccountLabel => 'To account';
+
+  @override
+  String get dateLabel => 'Date';
+
+  @override
+  String get referenceShortLabel => 'Reference';
+
+  @override
+  String get reasonLabel => 'Reason';
+
+  @override
+  String get statusLabel => 'Status';
+
+  @override
+  String get bankShortLabel => 'Bank';
+
+  @override
+  String shareText({
+    required String bankName,
+    required String reference,
+    required String amount,
+    required String sender,
+    required String receiver,
+    required String date,
+  }) {
+    final buffer = StringBuffer()
+      ..writeln('Payment verified via Mahtem')
+      ..writeln('Bank: $bankName')
+      ..writeln('Reference: $reference')
+      ..writeln('Amount: $amount')
+      ..writeln('Sender: $sender')
+      ..writeln('Receiver: $receiver')
+      ..write('Date: $date');
+    return buffer.toString();
+  }
+
+  // ------------------------------------------------------- verify failures
+
+  @override
+  String failureMessage(VerifyErrorKind kind, String fallback) => fallback;
+
+  @override
+  List<String> failureTips(VerifyErrorKind kind, List<String> fallback) =>
+      fallback;
+
+  // ---------------------------------------------------------------- history
+
+  @override
+  String get historyTitle => 'History';
+
+  @override
+  String get clearHistoryTooltip => 'Clear history';
+
+  @override
+  String get clearHistoryTitle => 'Clear history?';
+
+  @override
+  String get clearHistoryBody =>
+      'All saved checks will be removed from this device.';
+
+  @override
+  String get clearButton => 'Clear';
+
+  @override
+  String get noChecksTitle => 'No checks yet';
+
+  @override
+  String get noChecksBody => 'Verified receipts will appear here.';
+
+  @override
+  String get verifiedPaymentLabel => 'Verified payment';
+
+  @override
+  String get notVerifiedLabel => 'Not verified';
+
+  @override
+  String get checkedLabel => 'Checked';
+
+  @override
+  String get noteLabel => 'Note';
+
+  // ---------------------------------------------------------------- paywall
+
+  @override
+  String get paywallTitle => 'Mahtem Pro';
+
+  @override
+  String get pasteReceiptFromSms =>
+      'Paste the receipt number from the Telebirr SMS.';
+
+  @override
+  String get pasteActivationCode =>
+      'Paste the activation code you received.';
+
+  @override
+  String get codeBadFormat =>
+      "That doesn't look like a Mahtem activation code.";
+
+  @override
+  String get codeBadSignature =>
+      'This code is not valid — ask the sender to resend it.';
+
+  @override
+  String get codeWrongDevice =>
+      'This code was issued for a different device. Send the device code '
+      'shown below with your payment.';
+
+  @override
+  String codeExpired(String date) =>
+      'This code expired on $date. Buy a new one to renew.';
+
+  @override
+  String get codeNotAccepted => 'This code could not be accepted.';
+
+  @override
+  String proActivatedToast(String date) =>
+      'Mahtem Pro is active until $date 🎉';
+
+  @override
+  String get clipboardEmptyForPaste =>
+      'Your clipboard is empty — copy the number first.';
+
+  @override
+  String telebirrNumberCopied(String number) =>
+      'Telebirr number $number copied — paste it into the Telebirr app.';
+
+  @override
+  String amountCopied(String amount) => 'Amount $amount ETB copied.';
+
+  @override
+  String get stackingNote =>
+      'One receipt activates one plan on this device. To renew, pay again '
+      'and paste the fresh receipt number — paid days always stack.';
+
+  @override
+  String get hideActivationCode => 'Hide activation code';
+
+  @override
+  String get haveActivationCode => 'Have an activation code instead?';
+
+  @override
+  String get deviceCodeCopied => 'Device code copied.';
+
+  @override
+  String get proActiveTitle => 'Mahtem Pro is active';
+
+  @override
+  String proUnlimitedUntil(String date) =>
+      'Unlimited checks until $date.';
+
+  @override
+  String trialsLeftTitle(int count) =>
+      '$count free check${count == 1 ? '' : 's'} left';
+
+  @override
+  String get trialsLeftBody =>
+      'After that, activate Mahtem Pro below — your history and settings '
+      'stay untouched.';
+
+  @override
+  String get trialsGoneTitle => 'Free checks used up';
+
+  @override
+  String get trialsGoneBody =>
+      'Activate below to keep verifying receipts — it takes a minute.';
+
+  @override
+  String get pricePerMonth => 'ETB / month';
+
+  @override
+  String get priceUnlimitedBody =>
+      'Unlimited receipt checks on every bank and wallet — CBE, Telebirr, '
+      'BOA, M-Pesa and more.';
+
+  @override
+  String priceYearlyOnce(String price) =>
+      'Or pay $price ETB once for a whole year.';
+
+  @override
+  String get howToActivate => 'How to activate';
+
+  @override
+  String step1Title(String monthly, String yearly) =>
+      'Pay $monthly ETB (or $yearly ETB / year) via Telebirr';
+
+  @override
+  String get step1Body =>
+      'Send the exact amount to this Telebirr account:';
+
+  @override
+  String copyAmountChip(String amount) => 'Copy amount — $amount ETB';
+
+  @override
+  String get step2Title => 'Paste the receipt number below';
+
+  @override
+  String step2Body(String monthly) =>
+      'Telebirr sends a confirmation SMS with a receipt number '
+      '(e.g. CHQ261Z4AB2C) — paste it here and the app checks it with '
+      'Telebirr itself. If it is a real $monthly ETB payment to the '
+      'account above, Mahtem Pro unlocks instantly.';
+
+  @override
+  String get telebirrReceiptNumber => 'Telebirr receipt number';
+
+  @override
+  String get receiptNumberHint => 'e.g. CHQ261Z4AB2C';
+
+  @override
+  String get checkingWithTelebirr => 'Checking with Telebirr…';
+
+  @override
+  String get verifyAndActivate => 'Verify & Activate';
+
+  @override
+  String get activationCodeTitle => 'Activation code';
+
+  @override
+  String get codeBoundNote =>
+      'Codes are bound to one device. If a receipt check ever fails, send '
+      'this device code with your payment and a code is minted for this '
+      'phone.';
+
+  @override
+  String get activate => 'Activate';
+
+  @override
+  String activationRejection(
+    ActivationRejectReason reason,
+    String fallback, {
+    String amount = '',
+  }) =>
+      fallback;
 }

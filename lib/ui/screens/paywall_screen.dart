@@ -7,7 +7,9 @@ import 'package:provider/provider.dart';
 import '../../core/licensing/license.dart';
 import '../../core/licensing/paywall_config.dart';
 import '../../core/licensing/receipt_activation.dart';
+import '../../core/localization/app_strings.dart';
 import '../../state/license_controller.dart';
+import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../widgets/confetti.dart';
 import '../widgets/pressable.dart';
@@ -56,10 +58,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _verifyAndActivate() async {
     if (_checking) return;
+    final s = context.read<LocaleController>().strings;
     final raw = _receiptCtrl.text;
     if (raw.trim().isEmpty) {
-      setState(() =>
-          _error = 'Paste the receipt number from the Telebirr SMS.');
+      setState(() => _error = s.pasteReceiptFromSms);
       return;
     }
     setState(() {
@@ -76,11 +78,15 @@ class _PaywallScreenState extends State<PaywallScreen> {
       return;
     }
     if (outcome is ReceiptActivationRejected) {
-      setState(() => _error = outcome.message);
+      setState(() => _error = outcome.reason == null
+          ? outcome.message
+          : s.activationRejection(outcome.reason!, outcome.message));
     } else if (outcome is ReceiptActivationError) {
       final failure = outcome.failure;
-      final tip = failure.tips.isEmpty ? '' : ' ${failure.tips.first}';
-      setState(() => _error = '${failure.message}$tip');
+      final tips = s.failureTips(failure.kind, failure.tips);
+      final tip = tips.isEmpty ? '' : ' ${tips.first}';
+      setState(() =>
+          _error = '${s.failureMessage(failure.kind, failure.message)}$tip');
     }
     unawaited(HapticFeedback.vibrate());
   }
@@ -89,10 +95,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _activate() async {
     if (_activating) return;
+    final s = context.read<LocaleController>().strings;
     final controller = context.read<LicenseController>();
     final raw = _codeCtrl.text;
     if (raw.trim().isEmpty) {
-      setState(() => _codeError = 'Paste the activation code you received.');
+      setState(() => _codeError = s.pasteActivationCode);
       return;
     }
     setState(() {
@@ -110,16 +117,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
     setState(() {
       _codeError = switch (validation) {
-        LicenseBadFormat() =>
-          "That doesn't look like a Mahtem activation code.",
-        LicenseBadSignature() =>
-          'This code is not valid — ask the sender to resend it.',
-        LicenseWrongDevice() =>
-          'This code was issued for a different device. Send the device '
-              'code shown below with your payment.',
+        LicenseBadFormat() => s.codeBadFormat,
+        LicenseBadSignature() => s.codeBadSignature,
+        LicenseWrongDevice() => s.codeWrongDevice,
         LicenseExpired(:final expiryUtc) =>
-          'This code expired on ${_fmt(expiryUtc)}. Buy a new one to renew.',
-        _ => 'This code could not be accepted.',
+          s.codeExpired(_fmt(expiryUtc)),
+        _ => s.codeNotAccepted,
       };
     });
     unawaited(HapticFeedback.vibrate());
@@ -134,10 +137,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
     unawaited(HapticFeedback.heavyImpact());
     final until = _fmt(expiryUtc);
     if (!mounted) return;
+    final s = context.read<LocaleController>().strings;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
       backgroundColor: MahtemPalette.greenDeep,
-      content: Text('Mahtem Pro is active until $until 🎉'),
+      content: Text(s.proActivatedToast(until)),
     ));
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (mounted) Navigator.of(context).pop(true);
@@ -148,9 +152,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final text = data?.text?.trim();
     if (text == null || text.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        final s = context.read<LocaleController>().strings;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Your clipboard is empty — copy the number first.'),
+          content: Text(s.clipboardEmptyForPaste),
         ));
       }
       return;
@@ -183,6 +188,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   @override
   Widget build(BuildContext context) {
     final license = context.watch<LicenseController>();
+    final s = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
     final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
@@ -195,7 +201,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: ink),
-        title: Text('Mahtem Pro',
+        title: Text(s.paywallTitle,
             style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
         centerTitle: true,
       ),
@@ -213,12 +219,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
               _StepsCard(
                 onCopyNumber: () => _copy(
                   '+251$kPayTelebirrDigits',
-                  'Telebirr number +251$kPayTelebirrDigits copied — paste it '
-                      'into the Telebirr app.',
+                  s.telebirrNumberCopied('+251$kPayTelebirrDigits'),
                 ),
                 onCopyAmount: () => _copy(
                   '$kMonthlyPriceEtb',
-                  'Amount $kMonthlyPriceEtb ETB copied.',
+                  s.amountCopied('$kMonthlyPriceEtb'),
                 ),
               ),
               const SizedBox(height: 14),
@@ -237,9 +242,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
               const SizedBox(height: 10),
 
               Text(
-                'One receipt activates one plan on this device. To renew, '
-                'pay again and paste the fresh receipt number — paid days '
-                'always stack.',
+                s.stackingNote,
                 style: TextStyle(color: dim, fontSize: 11.5, height: 1.5),
                 textAlign: TextAlign.center,
               ),
@@ -262,8 +265,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
                       const SizedBox(width: 4),
                       Text(
                         _showCodeFallback
-                            ? 'Hide activation code'
-                            : 'Have an activation code instead?',
+                            ? s.hideActivationCode
+                            : s.haveActivationCode,
                         style: TextStyle(
                           color: dim,
                           fontSize: 12.5,
@@ -286,7 +289,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   ink: ink,
                   dim: dim,
                   onCopyDeviceCode: () =>
-                      _copy(license.deviceCode, 'Device code copied.'),
+                      _copy(license.deviceCode, s.deviceCodeCopied),
                   onPaste: () => _pasteInto(_codeCtrl),
                   onActivate: _activate,
                 ),
@@ -312,6 +315,7 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.watch<LocaleController>().strings;
     final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
     final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
 
@@ -320,25 +324,23 @@ class _StatusCard extends StatelessWidget {
             Icons.verified_rounded,
             MahtemPalette.green,
             isDark ? MahtemPalette.dCard : MahtemPalette.greenSoft,
-            'Mahtem Pro is active',
-            'Unlimited checks until ${_ProCard.fmtDate(license.expiresAt!)}.',
+            s.proActiveTitle,
+            s.proUnlimitedUntil(_ProCard.fmtDate(license.expiresAt!)),
           )
         : license.trialsLeft > 0
             ? (
                 Icons.stars_rounded,
                 MahtemPalette.amber,
                 isDark ? MahtemPalette.dCard : MahtemPalette.amberSoft,
-                '${license.trialsLeft} free check${license.trialsLeft == 1 ? '' : 's'} left',
-                'After that, activate Mahtem Pro below — your history and '
-                    'settings stay untouched.',
+                s.trialsLeftTitle(license.trialsLeft),
+                s.trialsLeftBody,
               )
             : (
                 Icons.lock_clock_rounded,
                 MahtemPalette.red,
                 isDark ? MahtemPalette.dCard : MahtemPalette.redSoft,
-                'Free checks used up',
-                'Activate below to keep verifying receipts — it takes a '
-                    'minute.',
+                s.trialsGoneTitle,
+                s.trialsGoneBody,
               );
 
     return Container(
@@ -380,6 +382,7 @@ class _PriceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.watch<LocaleController>().strings;
     final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
     final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
     final card = isDark ? MahtemPalette.dCard : MahtemPalette.lCard;
@@ -406,7 +409,7 @@ class _PriceCard extends StatelessWidget {
                       fontWeight: FontWeight.w900)),
               Padding(
                 padding: const EdgeInsets.only(left: 5, bottom: 3),
-                child: Text('ETB / month',
+                child: Text(s.pricePerMonth,
                     style: TextStyle(
                         color: dim,
                         fontSize: 13,
@@ -416,13 +419,12 @@ class _PriceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Unlimited receipt checks on every bank and wallet — CBE, '
-            'Telebirr, BOA, M-Pesa and more.',
+            s.priceUnlimitedBody,
             style: TextStyle(color: dim, fontSize: 12.5, height: 1.5),
           ),
           const SizedBox(height: 4),
           Text(
-            'Or pay $kYearlyPriceEtb ETB once for a whole year.',
+            s.priceYearlyOnce('$kYearlyPriceEtb'),
             style: TextStyle(
                 color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
           ),
@@ -444,6 +446,7 @@ class _StepsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.watch<LocaleController>().strings;
     final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
     final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
     final card = isDark ? MahtemPalette.dCard : MahtemPalette.lCard;
@@ -463,17 +466,16 @@ class _StepsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('How to activate', style: stepStyle.copyWith(fontSize: 15)),
+          Text(s.howToActivate, style: stepStyle.copyWith(fontSize: 15)),
           const SizedBox(height: 14),
           _Step(
             n: 1,
-            title: 'Pay $kMonthlyPriceEtb ETB (or $kYearlyPriceEtb ETB / '
-                'year) via Telebirr',
+            title: s.step1Title('$kMonthlyPriceEtb', '$kYearlyPriceEtb'),
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Send the exact amount to this Telebirr account:',
+                  s.step1Body,
                   style: stepDim,
                 ),
                 const SizedBox(height: 8),
@@ -529,7 +531,7 @@ class _StepsCard extends StatelessWidget {
                       Icon(Icons.copy_rounded,
                           size: 13, color: MahtemPalette.blue),
                       const SizedBox(width: 5),
-                      Text('Copy amount — $kMonthlyPriceEtb ETB',
+                      Text(s.copyAmountChip('$kMonthlyPriceEtb'),
                           style: const TextStyle(
                               color: MahtemPalette.blue,
                               fontSize: 12.5,
@@ -543,13 +545,9 @@ class _StepsCard extends StatelessWidget {
           const SizedBox(height: 12),
           _Step(
             n: 2,
-            title: 'Paste the receipt number below',
+            title: s.step2Title,
             body: Text(
-              'Telebirr sends a confirmation SMS with a receipt number '
-              '(e.g. CHQ261Z4AB2C) — paste it here and the app checks it '
-              'with Telebirr itself. If it is a real $kMonthlyPriceEtb ETB '
-              'payment to the account above, Mahtem Pro unlocks '
-              'instantly.',
+              s.step2Body('$kMonthlyPriceEtb'),
               style: stepDim,
             ),
           ),
@@ -633,6 +631,7 @@ class _ReceiptActivationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -644,7 +643,7 @@ class _ReceiptActivationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Telebirr receipt number',
+          Text(s.telebirrReceiptNumber,
               style: TextStyle(
                   color: ink, fontSize: 15, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
@@ -654,7 +653,7 @@ class _ReceiptActivationCard extends StatelessWidget {
             style: TextStyle(
                 color: ink, fontSize: 14, fontWeight: FontWeight.w700),
             decoration: InputDecoration(
-              hintText: 'e.g. CHQ261Z4AB2C',
+              hintText: s.receiptNumberHint,
               hintStyle: TextStyle(color: dim, fontWeight: FontWeight.w500),
               filled: true,
               fillColor: dim.withValues(alpha: 0.06),
@@ -681,7 +680,7 @@ class _ReceiptActivationCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: checking ? null : onPaste,
                   icon: const Icon(Icons.content_paste_rounded, size: 17),
-                  label: const Text('Paste'),
+                  label: Text(s.pasteTooltip),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: ink,
                     side: BorderSide(color: border),
@@ -714,15 +713,15 @@ class _ReceiptActivationCard extends StatelessWidget {
                                     strokeWidth: 2.4, color: Colors.white),
                               ),
                               const SizedBox(width: 9),
-                              Text('Checking with Telebirr…',
-                                  style: TextStyle(
+                              Text(s.checkingWithTelebirr,
+                                  style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.w700)),
                             ],
                           )
-                        : const Text('Verify & Activate',
-                            style: TextStyle(
+                        : Text(s.verifyAndActivate,
+                            style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w800)),
@@ -766,6 +765,7 @@ class _CodeFallbackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleController>().strings;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -777,14 +777,12 @@ class _CodeFallbackCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Activation code',
+          Text(s.activationCodeTitle,
               style: TextStyle(
                   color: ink, fontSize: 15, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           Text(
-            'Codes are bound to one device. If a receipt check ever fails, '
-            'send this device code with your payment and a code is minted '
-            'for this phone.',
+            s.codeBoundNote,
             style: TextStyle(color: dim, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 10),
@@ -850,7 +848,7 @@ class _CodeFallbackCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: activating ? null : onPaste,
                   icon: const Icon(Icons.content_paste_rounded, size: 17),
-                  label: const Text('Paste'),
+                  label: Text(s.pasteTooltip),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: ink,
                     side: BorderSide(color: border),
@@ -879,8 +877,8 @@ class _CodeFallbackCard extends StatelessWidget {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2.4, color: Colors.white),
                           )
-                        : const Text('Activate',
-                            style: TextStyle(
+                        : Text(s.activate,
+                            style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w800)),

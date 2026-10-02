@@ -37,9 +37,27 @@ class ReceiptActivationAccepted extends ReceiptActivation {
 }
 
 /// Telebirr verified the receipt, but it is NOT a valid plan payment.
+///
+/// [message] is the owner-ready English copy (tests assert on it);
+/// [reason] is the machine-readable cause the UI maps to the active
+/// locale — when it is set, screens show the localized text instead.
+enum ActivationRejectReason {
+  emptyInput,
+  notTelebirr,
+  transactionFailed,
+  wrongAmount,
+  wrongReceiver,
+  receiptTooOld,
+  alreadyUsed,
+}
+
 class ReceiptActivationRejected extends ReceiptActivation {
   final String message;
-  const ReceiptActivationRejected(this.message);
+
+  /// Why the receipt was refused — lets the UI show the rejection in the
+  /// user's language instead of the embedded English copy.
+  final ActivationRejectReason? reason;
+  const ReceiptActivationRejected(this.message, {this.reason});
 }
 
 /// The check could not complete (network / Telebirr unreachable) — the
@@ -142,11 +160,13 @@ ReceiptActivation evaluateActivationReceipt(
 }) {
   if (receipt.bankCode != 'telebirr') {
     return const ReceiptActivationRejected(
-        'Only Telebirr payment receipts can activate Mahtem Pro.');
+        'Only Telebirr payment receipts can activate Mahtem Pro.',
+        reason: ActivationRejectReason.notTelebirr);
   }
   if (_statusLooksFailed(receipt.transactionStatus)) {
     return const ReceiptActivationRejected(
-        'That Telebirr transaction did not complete — no activation.');
+        'That Telebirr transaction did not complete — no activation.',
+        reason: ActivationRejectReason.transactionFailed);
   }
 
   final days = planDaysForAmount(receipt.amount);
@@ -155,6 +175,7 @@ ReceiptActivation evaluateActivationReceipt(
       'This receipt is for ${_fmtAmount(receipt.amount ?? 0)} ETB — activation '
       'needs exactly $kMonthlyPriceEtb ETB (1 month) or $kYearlyPriceEtb ETB '
       '(1 year) sent to $kPayTelebirrNumber.',
+      reason: ActivationRejectReason.wrongAmount,
     );
   }
 
@@ -164,6 +185,7 @@ ReceiptActivation evaluateActivationReceipt(
     return ReceiptActivationRejected(
       'This payment was not sent to $kPayTelebirrName ($kPayTelebirrNumber). '
       'Pay the plan price to that account and paste the new receipt.',
+      reason: ActivationRejectReason.wrongReceiver,
     );
   }
 
@@ -176,6 +198,7 @@ ReceiptActivation evaluateActivationReceipt(
       return ReceiptActivationRejected(
         'This receipt is more than $kActivationReceiptMaxAgeDays days old. '
         'Pay again and use the fresh receipt from the new SMS.',
+        reason: ActivationRejectReason.receiptTooOld,
       );
     }
   }

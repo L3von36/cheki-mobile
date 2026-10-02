@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/receipt_verify/models.dart';
+import '../../core/localization/app_strings.dart';
+import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
@@ -18,12 +20,13 @@ class ResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
+    final s = context.watch<LocaleController>().strings;
     final result = controller.result;
 
     if (result == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Verification Result')),
-        body: const Center(child: Text('No receipt to display.')),
+        appBar: AppBar(title: Text(s.resultTitle)),
+        body: Center(child: Text(s.resultNothingToShow)),
       );
     }
 
@@ -37,7 +40,7 @@ class ResultScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Verification Result'),
+        title: Text(s.resultTitle),
       ),
       body: Stack(
         children: [
@@ -54,7 +57,7 @@ class ResultScreen extends StatelessWidget {
                 const SizedBox(height: 18),
                 Center(
                   child: Text(
-                    verified ? 'Payment Verified!' : 'Verification Failed',
+                    verified ? s.resultVerifiedTitle : s.resultFailedTitle,
                     style: TextStyle(
                       fontSize: 21,
                       fontWeight: FontWeight.w800,
@@ -68,9 +71,10 @@ class ResultScreen extends StatelessWidget {
                 Center(
                   child: Text(
                     verified
-                        ? 'This payment is real and confirmed by the bank.'
-                        : (failure?.message ??
-                            'This receipt could not be verified.'),
+                        ? s.resultVerifiedBody
+                        : (failure == null
+                            ? s.resultFailedBody
+                            : s.failureMessage(failure.kind, failure.message)),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
@@ -82,7 +86,9 @@ class ResultScreen extends StatelessWidget {
                 ),
                 if (!verified && (failure?.tips.isNotEmpty ?? false)) ...[
                   const SizedBox(height: 14),
-                  _TipsCard(tips: failure!.tips),
+                  _TipsCard(
+                    tips: s.failureTips(failure!.kind, failure!.tips),
+                  ),
                 ],
                 const SizedBox(height: 22),
 
@@ -125,7 +131,7 @@ class ResultScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _GhostButton(
-                        label: 'Done',
+                        label: s.resultDone,
                         onTap: () {
                           controller.reset();
                           Navigator.of(context).pop();
@@ -135,9 +141,9 @@ class ResultScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _GradientButton(
-                        label: verified ? 'Share' : 'Try again',
+                        label: verified ? s.resultShare : s.resultTryAgain,
                         onTap: verified
-                            ? () => _shareResult(receipt!, bankName)
+                            ? () => _shareResult(s, receipt!, bankName)
                             : () {
                                 controller.reset();
                                 Navigator.of(context).pop();
@@ -154,16 +160,16 @@ class ResultScreen extends StatelessWidget {
     );
   }
 
-  void _shareResult(ReceiptData receipt, String bankName) {
-    final buffer = StringBuffer()
-      ..writeln('Payment verified via Mahtem')
-      ..writeln('Bank: $bankName')
-      ..writeln('Reference: ${receipt.reference}')
-      ..writeln('Amount: ${formatAmount(receipt.amount, receipt.currency)}')
-      ..writeln('Sender: ${receipt.senderName ?? '-'}')
-      ..writeln('Receiver: ${receipt.receiverName ?? '-'}')
-      ..writeln('Date: ${receipt.date ?? '-'}');
-    SharePlus.instance.share(ShareParams(text: buffer.toString()));
+  void _shareResult(AppStrings s, ReceiptData receipt, String bankName) {
+    final text = s.shareText(
+      bankName: bankName,
+      reference: receipt.reference,
+      amount: formatAmount(receipt.amount, receipt.currency),
+      sender: receipt.senderName ?? '-',
+      receiver: receipt.receiverName ?? '-',
+      date: receipt.date ?? '-',
+    );
+    SharePlus.instance.share(ShareParams(text: text));
   }
 }
 
@@ -289,6 +295,7 @@ class _DetailCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.watch<LocaleController>().strings;
     return Container(
       decoration: BoxDecoration(
         color: isDark ? MahtemPalette.dCard : Colors.white,
@@ -303,53 +310,53 @@ class _DetailCard extends StatelessWidget {
           if (receipt.senderName != null)
             DetailRow(
               icon: Icons.person_outline_rounded,
-              label: 'From',
+              label: s.senderLabel,
               value: receipt.senderName,
             ),
           if (receipt.senderAccount != null)
             DetailRow(
               icon: Icons.account_balance_wallet_outlined,
-              label: 'From account',
+              label: s.senderAccountLabel,
               value: receipt.senderAccount,
               mono: true,
             ),
           if (receipt.receiverName != null)
             DetailRow(
               icon: Icons.person_outline_rounded,
-              label: 'To',
+              label: s.receiverLabel,
               value: receipt.receiverName,
             ),
           if (receipt.receiverAccount != null)
             DetailRow(
               icon: Icons.account_balance_wallet_outlined,
-              label: 'To account',
+              label: s.receiverAccountLabel,
               value: receipt.receiverAccount,
               mono: true,
             ),
           if (receipt.date != null)
             DetailRow(
               icon: Icons.schedule_rounded,
-              label: 'Date',
+              label: s.dateLabel,
               value: receipt.date,
             ),
           if (receipt.reference.isNotEmpty)
             DetailRow(
               icon: Icons.tag_rounded,
-              label: 'Reference',
+              label: s.referenceShortLabel,
               value: receipt.reference,
               mono: true,
             ),
           if (receipt.reason != null && receipt.reason!.isNotEmpty)
             DetailRow(
               icon: Icons.notes_rounded,
-              label: 'Reason',
+              label: s.reasonLabel,
               value: receipt.reason,
             ),
           if (receipt.transactionStatus != null &&
               receipt.transactionStatus!.isNotEmpty)
             DetailRow(
               icon: Icons.verified_outlined,
-              label: 'Status',
+              label: s.statusLabel,
               value: receipt.transactionStatus,
             ),
         ],

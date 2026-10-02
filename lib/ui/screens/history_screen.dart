@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/receipt_verify/extra_banks.dart';
 import '../../core/verify_history.dart';
+import '../../core/localization/app_strings.dart';
+import '../../state/locale_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
@@ -15,32 +17,32 @@ class HistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final history = context.watch<VerifyHistory>();
+    final s = context.watch<LocaleController>().strings;
     final entries = history.entries;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('History'),
+        title: Text(s.historyTitle),
         actions: [
           if (entries.isNotEmpty)
             IconButton(
-              tooltip: 'Clear history',
+              tooltip: s.clearHistoryTooltip,
               icon: const Icon(Icons.delete_sweep_outlined, size: 20),
               onPressed: () async {
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Clear history?'),
-                    content: const Text(
-                        'All saved checks will be removed from this device.'),
+                    title: Text(s.clearHistoryTitle),
+                    content: Text(s.clearHistoryBody),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
+                        child: Text(s.cancel),
                       ),
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Clear'),
+                        child: Text(s.clearButton),
                       ),
                     ],
                   ),
@@ -63,7 +65,7 @@ class HistoryScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'No checks yet',
+                    s.noChecksTitle,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -73,7 +75,7 @@ class HistoryScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Verified receipts will appear here.',
+                    s.noChecksBody,
                     style: TextStyle(
                       fontSize: 11.5,
                       color: isDark
@@ -102,6 +104,7 @@ class HistoryScreen extends StatelessWidget {
 
   void _showDetails(BuildContext context, HistoryEntry entry) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.read<LocaleController>().strings;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -127,7 +130,9 @@ class HistoryScreen extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        entry.isVerified ? 'Verified payment' : 'Not verified',
+                        entry.isVerified
+                            ? s.verifiedPaymentLabel
+                            : s.notVerifiedLabel,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
@@ -150,23 +155,23 @@ class HistoryScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                _Detail(label: 'Bank', value: entry.bankName),
-                _Detail(label: 'Reference', value: entry.reference),
+                _Detail(label: s.bankShortLabel, value: entry.bankName),
+                _Detail(label: s.referenceShortLabel, value: entry.reference),
                 if (entry.title.isNotEmpty)
-                  _Detail(label: 'From', value: entry.title),
+                  _Detail(label: s.senderLabel, value: entry.title),
                 if ((entry.receiverName ?? '').isNotEmpty)
-                  _Detail(label: 'To', value: entry.receiverName!),
+                  _Detail(label: s.receiverLabel, value: entry.receiverName!),
                 if ((entry.receiptDate ?? '').isNotEmpty)
-                  _Detail(label: 'Date', value: entry.receiptDate!),
+                  _Detail(label: s.dateLabel, value: entry.receiptDate!),
                 _Detail(
-                  label: 'Checked',
+                  label: s.checkedLabel,
                   value: formatReceiptDate(
                     DateTime.fromMillisecondsSinceEpoch(entry.verifiedAt)
                         .toIso8601String(),
                   ),
                 ),
                 if ((entry.message ?? '').isNotEmpty)
-                  _Detail(label: 'Note', value: entry.message!),
+                  _Detail(label: s.noteLabel, value: entry.message!),
               ],
             ),
           ),

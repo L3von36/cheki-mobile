@@ -254,7 +254,8 @@ class LicenseController extends ChangeNotifier {
     final input = rawInput.trim();
     if (input.isEmpty) {
       return const ReceiptActivationRejected(
-          'Paste the receipt number from the Telebirr confirmation SMS.');
+          'Paste the receipt number from the Telebirr confirmation SMS.',
+          reason: ActivationRejectReason.emptyInput);
     }
 
     final VerifyResult result;
@@ -298,6 +299,7 @@ class LicenseController extends ChangeNotifier {
       return const ReceiptActivationRejected(
         'This receipt has already been used to activate on this device. '
         'When your plan expires, pay again and paste the new receipt.',
+        reason: ActivationRejectReason.alreadyUsed,
       );
     }
 
