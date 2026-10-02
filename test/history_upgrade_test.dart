@@ -243,6 +243,25 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final history = VerifyHistory();
     final now = DateTime.now();
+    // Real usage: add() prepends, so checks are seeded oldest-first —
+    // the newest check ends up at the front of the list.
+    await history.add(_entry(
+      id: 'old',
+      bankId: 'cbe',
+      bankName: 'CBE',
+      reference: 'FTOLD1',
+      sender: 'Old Check',
+      verified: true,
+      verifiedAt: now.subtract(const Duration(days: 30)).millisecondsSinceEpoch,
+    ));
+    await history.add(_entry(
+      id: 'old2',
+      bankId: 'telebirr',
+      bankName: 'Telebirr',
+      reference: 'PLAIN1',
+      verified: false,
+      verifiedAt: now.subtract(const Duration(days: 2)).millisecondsSinceEpoch,
+    ));
     await history.add(_entry(
       id: 'new',
       bankId: 'cbe',
@@ -253,29 +272,22 @@ void main() {
       verifiedAt: now.millisecondsSinceEpoch,
       message: 'line1\nline2',
     ));
-    await history.add(_entry(
-      id: 'old',
-      bankId: 'telebirr',
-      bankName: 'Telebirr',
-      reference: 'PLAIN1',
-      verified: false,
-      verifiedAt: now.subtract(const Duration(days: 2)).millisecondsSinceEpoch,
-    ));
 
     final csv = history.toCsv();
     final lines = csv.trim().split('\n');
 
     expect(lines.first,
         'Checked at,Status,Bank,Reference,Amount,Currency,Sender,Receiver,Receipt date,Note');
-    // Oldest entry first (chronological export).
-    expect(lines[1], contains('Telebirr'));
-    expect(lines[1], contains('not verified'));
+    // Chronological export: the 30-day-old CBE row leads, the newest is last.
+    expect(lines[1], contains('CBE'));
+    expect(lines[2], contains('Telebirr'));
+    expect(lines[2], contains('not verified'));
     // RFC 4180 quoting — asserted on the whole CSV because the last cell
-    // contains a newline, so the new entry's row legitimately spans two
+    // contains a newline, so the newest row legitimately spans two
     // physical lines.
     expect(csv, contains('"FT,2614"'));
     expect(csv, contains('"Say ""hi"""'));
     expect(csv, contains('"line1\nline2"'));
-    expect(lines, hasLength(4)); // header + old + new row + newline tail
+    expect(lines, hasLength(5)); // header + old + old2 + new row + newline tail
   });
 }

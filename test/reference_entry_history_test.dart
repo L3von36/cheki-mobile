@@ -220,7 +220,9 @@ void main() {
     await tester.pumpWidget(_harness(child: const HistoryScreen(), history: history));
     await tester.pump();
 
-    await tester.tap(find.text('Verified'));
+    // v1.9.0: the summary strip also has a 'Verified' label — the filter
+    // chip is the later one in tree order.
+    await tester.tap(find.text('Verified').last);
     await tester.pump();
     expect(find.text('Alice'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
