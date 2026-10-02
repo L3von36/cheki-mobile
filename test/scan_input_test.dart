@@ -1,3 +1,5 @@
+import 'dart:ui' show Offset, Rect, Size;
+
 import 'package:mahtem/core/scan_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 
