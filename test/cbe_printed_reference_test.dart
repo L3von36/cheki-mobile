@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/core/licensing/license_store.dart';
 import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
+import 'package:mahtem/core/receipt_verify/verifier.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/license_controller.dart';
 import 'package:mahtem/state/locale_controller.dart';
@@ -28,7 +29,7 @@ VerifyResult _failedResult() => VerifyResult.failed(
 
 Widget _harness({
   required VerifyController controller,
-  required void Function(BuildContext) onReady,
+  required WidgetBuilder onReady,
 }) {
   return MultiProvider(
     providers: [
