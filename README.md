@@ -139,6 +139,15 @@ Notes:
   the Amhara web receipt's QR is a bare JSON payload
   (`{"transactionId":"FT…","creditAccountNo":"…"}`) — scanning either
   fills in the right bank and reference automatically.
+- **The number scanner reads only what's inside the frame** (`v1.11.1`):
+  OCR is now position-aware — a number counts only when its center sits
+  inside the viewfinder rectangle, so the amount, account number or
+  footer elsewhere on the receipt can never win the candidate list. Aim
+  the frame at the transaction number and that number alone is read.
+- **The QR screen is camera-only** (`v1.11.1`): the "Type number" button
+  is gone — the QR scanner does exactly one thing (live scan, gallery
+  decode, or the OCR number scanner). Typing stays where it belongs: the
+  Verify tab and the number scanner's own fallback.
 - **Pasted SMS / chat messages collapse to the receipt value** (`v1.11.0`):
   paste a whole Telebirr SMS or a chat message into the number sheet and the
   receipt link / reference is pulled out of the prose automatically — the SMS

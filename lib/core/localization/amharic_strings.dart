@@ -277,9 +277,6 @@ final class AmharicStrings extends AppStrings {
   String get scanCameraUnavailable => 'ካሜራ አይገኝም';
 
   @override
-  String get scanTypeAction => 'ቁጥር ይጻፉ';
-
-  @override
   String get typeSheetTitle => 'የግብይት ወይም የማጣቀሻ ቁጥር ይጻፉ';
 
   @override
@@ -299,7 +296,8 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get refScanHint =>
-      'ካሜራውን በደረሰኙ ላይ ያለው የግብይት ወይም የማጣቀሻ ቁጥር ላይ ያነጣጥሉ';
+      'ካሜራውን በደረሰኙ ላይ ያለው የግብይት ወይም የማጣቀሻ ቁጥር ላይ ያነጣጥሉ '
+      '— በፍሬሙ ውስጥ ያሉ ቁጥሮች ብቻ ይነበባሉ';
 
   @override
   String get refScanLooking => 'ቁጥሩን በመፈለግ ላይ…';

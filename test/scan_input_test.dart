@@ -87,4 +87,134 @@ void main() {
       expect(stripTrailingCeJunk('CHQ261Z4AB2'), 'CHQ261Z4AB2');
     });
   });
+
+  group('numberScanViewfinderRect', () {
+    test('matches the painted overlay geometry', () {
+      final rect = numberScanViewfinderRect(const Size(400, 800));
+      expect(rect.width, closeTo(400 * 0.82, 1e-9));
+      expect(rect.height, 130);
+      expect(rect.top, closeTo(800 * 0.26, 1e-9));
+      expect(rect.center.dx, closeTo(200, 1e-9));
+    });
+
+    test('stays inside the screen on odd shapes', () {
+      for (final size in const [
+        Size(320, 640),
+        Size(412, 915),
+        Size(600, 800),
+      ]) {
+        final rect = numberScanViewfinderRect(size);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(size.width));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.bottom, lessThanOrEqualTo(size.height));
+      }
+    });
+  });
+
+  group('uprightImageSize', () {
+    test('swaps dimensions for 90/270-degree sensors', () {
+      expect(
+        uprightImageSize(
+            frameWidth: 1280, frameHeight: 720, sensorOrientation: 90),
+        const Size(720, 1280),
+      );
+      expect(
+        uprightImageSize(
+            frameWidth: 1280, frameHeight: 720, sensorOrientation: 270),
+        const Size(720, 1280),
+      );
+    });
+
+    test('keeps dimensions for 0/180-degree sensors', () {
+      expect(
+        uprightImageSize(
+            frameWidth: 640, frameHeight: 480, sensorOrientation: 0),
+        const Size(640, 480),
+      );
+      expect(
+        uprightImageSize(
+            frameWidth: 640, frameHeight: 480, sensorOrientation: 180),
+        const Size(640, 480),
+      );
+    });
+  });
+
+  group('ScanRegionMapper — viewfinder-only OCR', () {
+    // Portrait phone, 400x800 logical; camera frame 1280x720 at 90°
+    // sensor orientation → upright image 720x1280. The cover-fit scale
+    // is 800/1280 = 0.625 with the image overflowing 25 px per side.
+    const screen = Size(400, 800);
+    const upright = Size(720, 1280);
+
+    ScanRegionMapper mapper() =>
+        ScanRegionMapper(screenSize: screen, uprightImageSize: upright);
+
+    test('cover-fit scale and centered mapping', () {
+      final m = mapper();
+      expect(m.scale, closeTo(0.625, 1e-9));
+      // The viewfinder is horizontally centered on screen, so its image
+      // counterpart is horizontally centered in the image too.
+      final region = m.regionInImage(numberScanViewfinderRect(screen));
+      expect(region.center.dx, closeTo(upright.width / 2, 1e-9));
+      // A known screen point maps to (screen - offset) / scale.
+      final p = m.regionInImage(const Rect.fromLTRB(199, 272, 201, 274));
+      expect(p.center.dx, closeTo((200 + 25) / 0.625, 1e-9));
+      expect(p.center.dy, closeTo(273 / 0.625, 1e-9));
+    });
+
+    test('a line centered in the frame is read', () {
+      final m = mapper();
+      final viewfinder = numberScanViewfinderRect(screen);
+      final region = m.regionInImage(viewfinder);
+      final line = Rect.fromCenter(
+        center: region.center,
+        width: 300,
+        height: 30,
+      );
+      expect(m.containsCenterOf(viewfinder, line), isTrue);
+    });
+
+    test('lines elsewhere on the receipt are ignored', () {
+      final m = mapper();
+      final viewfinder = numberScanViewfinderRect(screen);
+      final region = m.regionInImage(viewfinder);
+      Rect lineAt(Offset c) =>
+          Rect.fromCenter(center: c, width: 300, height: 30);
+      // Far above the frame (merchant name, amount).
+      expect(
+        m.containsCenterOf(
+            viewfinder, lineAt(Offset(360, region.top - 80))),
+        isFalse,
+      );
+      // Far below the frame (date, footer).
+      expect(
+        m.containsCenterOf(
+            viewfinder, lineAt(Offset(360, region.bottom + 80))),
+        isFalse,
+      );
+      // Deep in the cropped-out side of the image.
+      expect(
+        m.containsCenterOf(
+            viewfinder, lineAt(Offset(40, region.center.dy))),
+        isFalse,
+      );
+    });
+
+    test('the forgiveness margin covers small preview drift', () {
+      final m = mapper();
+      final viewfinder = numberScanViewfinderRect(screen);
+      final region = m.regionInImage(viewfinder);
+      Rect lineAt(Offset c) =>
+          Rect.fromCenter(center: c, width: 300, height: 30);
+      // 8 logical px of drift ≈ 12.8 image px at this scale — the
+      // default margin absorbs it so a slightly misaligned preview
+      // still reads the aimed-at line.
+      final justOutside = lineAt(Offset(360, region.bottom + 10));
+      expect(m.containsCenterOf(viewfinder, justOutside), isTrue);
+      // A clearly-outside line stays out even with margin.
+      final wayOutside = lineAt(Offset(360, region.bottom + 60));
+      expect(m.containsCenterOf(viewfinder, wayOutside), isFalse);
+    });
+  });
 }

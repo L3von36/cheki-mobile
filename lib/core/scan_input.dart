@@ -15,6 +15,9 @@
 /// rare invoice that legitimately ends in C/E.
 library;
 
+import 'dart:math' as math;
+import 'dart:ui' show Offset, Rect, Size;
+
 // ---------------------------------------------------------------------
 // ScanStabilizer
 // ---------------------------------------------------------------------
@@ -132,4 +135,99 @@ String stripTrailingCeJunk(String invoice) {
     ref = ref.substring(0, ref.length - 1);
   }
   return ref;
+}
+
+// ---------------------------------------------------------------------
+// Scan region (viewfinder) geometry
+// ---------------------------------------------------------------------
+
+/// The number scanner's viewfinder rectangle in screen coordinates —
+/// 82% of the screen width, 130 logical pixels tall, its top edge at
+/// 26% of the screen height. The painted overlay and the OCR filter
+/// both derive their geometry from this one function, so the window
+/// the user aims at is exactly the window the app reads.
+Rect numberScanViewfinderRect(Size screenSize) {
+  final width = screenSize.width * 0.82;
+  const height = 130.0;
+  final top = screenSize.height * 0.26;
+  final left = (screenSize.width - width) / 2;
+  return Rect.fromLTWH(left, top, width, height);
+}
+
+/// The upright (rotation-corrected) size of a camera frame.
+///
+/// ML Kit reports bounding boxes in the rotation-corrected space: a
+/// 1280x720 sensor frame captured in portrait at 90° sensor orientation
+/// is reported as if the image were 720x1280.
+Size uprightImageSize({
+  required int frameWidth,
+  required int frameHeight,
+  required int sensorOrientation,
+}) {
+  final swap = sensorOrientation == 90 || sensorOrientation == 270;
+  return swap
+      ? Size(frameHeight.toDouble(), frameWidth.toDouble())
+      : Size(frameWidth.toDouble(), frameHeight.toDouble());
+}
+
+/// Maps between the screen (what the user sees) and the upright camera
+/// image (the space ML Kit reports bounding boxes in).
+///
+/// The camera preview covers the screen: the frame is scaled uniformly
+/// until both of its dimensions cover the view, then the overflow is
+/// cropped equally on the edges that stick out. One scale factor and
+/// one offset therefore connect the two coordinate spaces:
+///
+///     image = (screen - offset) / scale
+///
+/// Preview pipelines differ slightly between devices (a few pixels of
+/// correspondence drift); [containsCenterOf] absorbs that with its
+/// margin instead of pretending pixel-exactness we cannot guarantee.
+class ScanRegionMapper {
+  ScanRegionMapper({
+    required this.screenSize,
+    required this.uprightImageSize,
+  });
+
+  /// Logical size of the preview surface (the whole screen here).
+  final Size screenSize;
+
+  /// Rotation-corrected size of the camera frame.
+  final Size uprightImageSize;
+
+  late final double scale = math.max(
+    screenSize.width / uprightImageSize.width,
+    screenSize.height / uprightImageSize.height,
+  );
+
+  late final Offset _offset = Offset(
+    (screenSize.width - uprightImageSize.width * scale) / 2,
+    (screenSize.height - uprightImageSize.height * scale) / 2,
+  );
+
+  /// [screenRect] expressed in upright image coordinates.
+  Rect regionInImage(Rect screenRect) => Rect.fromLTRB(
+        (screenRect.left - _offset.dx) / scale,
+        (screenRect.top - _offset.dy) / scale,
+        (screenRect.right - _offset.dx) / scale,
+        (screenRect.bottom - _offset.dy) / scale,
+      );
+
+  /// True when the CENTER of an OCR line ([lineBox], upright image
+  /// coordinates) falls inside [screenRegion] (screen coordinates),
+  /// allowing [screenMargin] logical pixels of forgiveness.
+  ///
+  /// The center is what the user aims the frame at. A line whose center
+  /// is outside the window — the amount line above, the date line
+  /// below, the bank footer — stays out of the candidate list even when
+  /// its edges clip the window. The margin is converted into image
+  /// pixels so its meaning is the same on every device.
+  bool containsCenterOf(
+    Rect screenRegion,
+    Rect lineBox, {
+    double screenMargin = 8,
+  }) {
+    final region = regionInImage(screenRegion).inflate(screenMargin / scale);
+    return region.contains(lineBox.center);
+  }
 }

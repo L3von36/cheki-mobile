@@ -115,7 +115,6 @@ void main() {
       expect(s.checkedLabel, isNotEmpty);
 
       // v1.7.0: manual reference entry + history search.
-      expect(s.scanTypeAction, isNotEmpty);
       expect(s.typeSheetTitle, isNotEmpty);
       expect(s.typeSheetHint, isNotEmpty);
       expect(s.typeSheetRecent, isNotEmpty);
@@ -231,7 +230,6 @@ void main() {
       isTrue,
     );
     expect(_hasEthiopic(s.trialsGoneTitle), isTrue);
-    expect(_hasEthiopic(s.scanTypeAction), isTrue);
     expect(_hasEthiopic(s.typeSheetTitle), isTrue);
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
@@ -297,7 +295,6 @@ void main() {
       isTrue,
     );
     expect(_hasEthiopic(s.trialsGoneTitle), isTrue);
-    expect(_hasEthiopic(s.scanTypeAction), isTrue);
     expect(_hasEthiopic(s.typeSheetTitle), isTrue);
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
@@ -314,7 +311,6 @@ void main() {
     expect(s.historyTab(2), contains('ታሪኽ'));
     expect(s.passwordLabel, 'መሕለፊ ቃል');
     expect(s.filterAll, 'ኩሉ');
-    expect(s.scanTypeAction, 'ቁጽሪ ጽሓፉ');
     expect(s.locale, AppLocale.tigrinya);
   });
 

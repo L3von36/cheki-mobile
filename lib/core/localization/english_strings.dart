@@ -280,9 +280,6 @@ final class EnglishStrings extends AppStrings {
   String get scanCameraUnavailable => 'Camera unavailable';
 
   @override
-  String get scanTypeAction => 'Type number';
-
-  @override
   String get typeSheetTitle =>
       'Type the transaction or reference number';
 
@@ -304,7 +301,8 @@ final class EnglishStrings extends AppStrings {
   @override
   String get refScanHint =>
       'Point the camera at the transaction or reference number '
-      'printed on the receipt';
+      'printed on the receipt — only numbers inside the frame '
+      'are read';
 
   @override
   String get refScanLooking => 'Looking for the number…';

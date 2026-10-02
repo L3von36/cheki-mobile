@@ -297,9 +297,6 @@ final class OromoStrings extends AppStrings {
   String get scanCameraUnavailable => 'Kaameeraan hin jiru';
 
   @override
-  String get scanTypeAction => 'Lakkoofsa galchaa';
-
-  @override
   String get typeSheetTitle =>
       'Lakkoofsa kaffaltii ykn referensii barreessaa';
 
@@ -321,7 +318,8 @@ final class OromoStrings extends AppStrings {
   @override
   String get refScanHint =>
       'Kaameeraa lakkoofsa kaffaltii ykn qajeelfama risiitii irratti '
-      'barreeffame irratti qabi';
+      'barreeffame irratti qabi \u2014 lakkoofsi fureemii keessa jiru '
+      'qofa ni dubbifama';
 
   @override
   String get refScanLooking => 'Lakkoofsa barbaadaa jirra\u2026';

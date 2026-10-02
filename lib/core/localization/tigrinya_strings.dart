@@ -293,9 +293,6 @@ final class TigrinyaStrings extends AppStrings {
   String get scanCameraUnavailable => 'ካሜራ ኣይተረኽበን';
 
   @override
-  String get scanTypeAction => 'ቁጽሪ ጽሓፉ';
-
-  @override
   String get typeSheetTitle => 'ቁጽሪ ክፍሊት ወይ ሪፈረንስ ጽሓፉ';
 
   @override
@@ -315,7 +312,8 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get refScanHint =>
-      'እቲ ካሜራ ኣብ ተሓቂ ዘሎ ቍጽሪ ክፍሊት ወይ ሪፈረንስ ኣውቒሉ';
+      'እቲ ካሜራ ኣብ ተሓቂ ዘሎ ቍጽሪ ክፍሊት ወይ ሪፈረንስ ኣውቒሉ '
+      '— ኣብ ውሽጢ እቲ ፍሬም ዝነበበ ቍጽሪ ጥራይ ይንበብ';
 
   @override
   String get refScanLooking => 'ቍጽሪ ደሊና ኣላ…';

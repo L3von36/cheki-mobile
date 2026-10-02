@@ -179,10 +179,6 @@ abstract base class AppStrings {
 
   // ---------------------------------------------------- manual entry (v1.7.0)
 
-  /// Label under the keyboard icon on the scan screen — the "no QR at
-  /// hand" path: type (or paste) the transaction / reference number.
-  String get scanTypeAction;
-
   /// Title of the manual-entry sheet.
   String get typeSheetTitle;
 
@@ -201,7 +197,8 @@ abstract base class AppStrings {
   /// App-bar title of the reference-number OCR scanner.
   String get refScanTitle;
 
-  /// Instruction shown under the title while the scanner is open.
+  /// Instruction shown under the title while the scanner is open —
+  /// only numbers inside the viewfinder frame are read.
   String get refScanHint;
 
   /// Status line shown while no candidate number has been read yet.

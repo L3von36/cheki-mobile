@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/reference_patterns.dart';
+import '../../core/scan_input.dart';
 import '../../state/locale_controller.dart';
 import '../widgets/reference_entry_sheet.dart';
 
@@ -18,9 +19,14 @@ import '../widgets/reference_entry_sheet.dart';
 /// How it works:
 ///   * ML Kit text recognition runs entirely ON-DEVICE; camera frames
 ///     never leave the phone (same privacy story as the QR scanner).
-///   * Every recognized line is handed to [extractReferenceCandidates],
-///     which ranks the numbers it finds (labeled > RRN > bare > token)
-///     and filters out phone numbers and account fields.
+///   * ONLY the viewfinder window is read: a recognized line counts
+///     only when its center sits inside the frame ([ScanRegionMapper]),
+///     so amounts, account numbers and footers elsewhere on the receipt
+///     never become candidates — aim the frame at the number and the
+///     number alone is judged. Lines inside the frame are handed to
+///     [extractReferenceCandidates], which ranks the numbers it finds
+///     (labeled > RRN > bare > token) and filters out phone numbers and
+///     account fields.
 ///   * A labeled / RRN-shaped number that survives three consecutive
 ///     OCR passes is accepted automatically — the same "agree before
 ///     trusting" rule the QR scanner applies via [ScanStabilizer].
@@ -181,9 +187,8 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
     _busy = true;
     try {
       final plane = image.planes.first;
-      final rotation = InputImageRotationValue.fromRawValue(
-        _cameraDescription?.sensorOrientation ?? 0,
-      );
+      final sensorOrientation = _cameraDescription?.sensorOrientation ?? 0;
+      final rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
       final inputImage = InputImage.fromBytes(
         bytes: plane.bytes,
         metadata: InputImageMetadata(
@@ -193,9 +198,20 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
           bytesPerRow: plane.bytesPerRow,
         ),
       );
+      // Ties the painted viewfinder to the pixels this frame's OCR
+      // reports: rebuilt per frame from the live screen size and the
+      // rotation-corrected dimensions of THIS frame.
+      final mapper = ScanRegionMapper(
+        screenSize: MediaQuery.of(context).size,
+        uprightImageSize: uprightImageSize(
+          frameWidth: image.width,
+          frameHeight: image.height,
+          sensorOrientation: sensorOrientation,
+        ),
+      );
       final result = await recognizer.processImage(inputImage);
       if (!mounted || _handled) return;
-      _updateCandidates(result);
+      _updateCandidates(result, mapper);
     } catch (_) {
       // One bad frame (camera warming up, device rotated mid-capture)
       // must never kill the scanner.
@@ -204,17 +220,28 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
     }
   }
 
-  void _updateCandidates(RecognizedText result) {
+  void _updateCandidates(RecognizedText result, ScanRegionMapper mapper) {
+    final viewfinder = numberScanViewfinderRect(mapper.screenSize);
     final found = <ReferenceCandidate>[];
+    final linesInFrame = <String>[];
     for (final block in result.blocks) {
       for (final line in block.lines) {
+        final box = line.boundingBox;
+        // Viewfinder-only reading: a line whose center sits outside the
+        // window is ignored even though OCR saw it — the window is what
+        // the user aimed at.
+        if (box == null || !mapper.containsCenterOf(viewfinder, box)) {
+          continue;
+        }
+        linesInFrame.add(line.text);
         found.addAll(extractReferenceCandidates(line.text));
       }
     }
-    if (found.isEmpty && result.text.trim().isNotEmpty) {
-      // Whole-frame fallback: OCR sometimes splits a number across lines.
+    if (found.isEmpty && linesInFrame.isNotEmpty) {
+      // OCR sometimes splits a number across lines — re-scan the text
+      // that actually came from inside the frame, joined.
       found.addAll(
-        extractReferenceCandidates(result.text.replaceAll('\n', ' ')),
+        extractReferenceCandidates(linesInFrame.join(' ')),
       );
     }
     final ranked = _rankedWithVariants(found);
@@ -290,6 +317,8 @@ class _ReferenceScanScreenState extends State<ReferenceScanScreen>
         InputImage.fromFilePath(image.path),
       );
       if (!mounted || _handled) return;
+      // Gallery images have no viewfinder — the whole picture is the
+      // region the user chose, so every line is a candidate.
       final found = <ReferenceCandidate>[];
       for (final block in result.blocks) {
         for (final line in block.lines) {
@@ -610,6 +639,9 @@ class _RoundAction extends StatelessWidget {
 
 /// Wide rounded-rect viewfinder (a number line, not a square) with dimmed
 /// surroundings, breathing corner brackets and a sweeping scan line.
+///
+/// The rectangle comes from [numberScanViewfinderRect] — the same source
+/// the OCR region filter uses, so paint and reading agree by design.
 class _ViewfinderOverlay extends StatelessWidget {
   final bool pulse;
 
@@ -620,26 +652,25 @@ class _ViewfinderOverlay extends StatelessWidget {
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth * 0.82;
-          const height = 130.0;
-          final top = constraints.maxHeight * 0.26;
-          final left = (constraints.maxWidth - width) / 2;
+          final window = numberScanViewfinderRect(
+            Size(constraints.maxWidth, constraints.maxHeight),
+          );
           return Stack(
             children: [
               Positioned.fill(
                 child: CustomPaint(
                   painter: _DimPainter(
-                    window: Rect.fromLTWH(left, top, width, height),
+                    window: window,
                     radius: 20,
                   ),
                 ),
               ),
               Positioned(
-                left: left,
-                top: top,
+                left: window.left,
+                top: window.top,
                 child: SizedBox(
-                  width: width,
-                  height: height,
+                  width: window.width,
+                  height: window.height,
                   child: pulse
                       ? _PulsingBrackets()
                       : CustomPaint(painter: _BracketPainter()),

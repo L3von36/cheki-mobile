@@ -10,11 +10,15 @@ import 'package:provider/provider.dart';
 import '../../core/scan_input.dart';
 import '../../state/locale_controller.dart';
 import 'reference_scan_screen.dart';
-import '../widgets/reference_entry_sheet.dart';
 
 /// Full-screen QR scanner: dark camera view, "Position the QR code within
 /// the frame" hint, green corner brackets, and Flash / Gallery /
-/// Scan-number / Type-number buttons.
+/// Scan-number buttons.
+///
+/// Camera-only by design: every path here is optical (live QR decode,
+/// gallery decode, or the OCR number scanner). Typing a reference lives
+/// on the Verify tab and inside the number scanner, so this screen never
+/// reaches for the keyboard.
 ///
 /// Robust by design:
 ///   * explicit camera-permission flow (request, recover, open settings)
@@ -165,18 +169,6 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
-  /// Opens the manual entry sheet and treats the typed (or pasted) value
-  /// exactly like a scanned payload — so a broken, busy or denied camera
-  /// never blocks verification.
-  Future<void> _openReferenceEntry() async {
-    if (_handled) return;
-    final value = await showReferenceEntrySheet(context);
-    if (value == null || !mounted) return;
-    final text = value.trim();
-    if (text.isEmpty) return;
-    _tryAccept(text);
-  }
-
   /// Opens the OCR scanner that reads the transaction / reference number
   /// printed on the receipt. The QR camera is paused while the OCR screen
   /// owns the device camera; when the user comes back without a number
@@ -281,7 +273,7 @@ class _ScanScreenState extends State<ScanScreen>
             // Viewfinder.
             const _ViewfinderOverlay(pulse: true),
 
-          // Bottom action buttons.
+          // Bottom action buttons — all optical, no keyboard.
           Positioned(
             left: 0,
             right: 0,
@@ -307,25 +299,11 @@ class _ScanScreenState extends State<ScanScreen>
                         label: s.scanNumberAction,
                         onTap: _openReferenceScan,
                       ),
-                      _RoundAction(
-                        icon: Icons.keyboard_rounded,
-                        label: s.scanTypeAction,
-                        onTap: _openReferenceEntry,
-                      ),
                     ],
                   )
-                // Camera unavailable/denied: typing a reference is still
-                // possible — the screen must never dead-end.
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _RoundAction(
-                        icon: Icons.keyboard_rounded,
-                        label: s.scanTypeAction,
-                        onTap: _openReferenceEntry,
-                      ),
-                    ],
-                  ),
+                // Camera unavailable/denied: the error view above carries
+                // retry / settings — this screen stays camera-only.
+                : const SizedBox.shrink(),
           ),
         ],
       ),
