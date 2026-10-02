@@ -745,6 +745,78 @@ final class TigrinyaStrings extends AppStrings {
   @override
   String get reportProblemCopy => 'ቅጂ ሓበሬታ';
 
+  // --------------------------------------------- cloud backup (v1.13.0)
+
+  @override
+  String get cloudBackupSection => 'መጠባበቂያ ደመና';
+
+  @override
+  String get cloudBackupTileOff => 'መጠባበቂያ ደመና — ዝዕጡ';
+
+  @override
+  String get cloudBackupBetaNote =>
+      'ታሪኽ ምርግጋጽኩም ናብ ትሕዝቶ ካውንትኩም ኣቐምጥዎ — ተለፎንኩም ምስ ጠፊኡ ከይጥፍ። '
+      'ኩሉ ግዜ ቅድሚ ሰርቨር ኣብዚ መሣሪሒ ይመስቕል — እቲ ሰርቨር ክነብቦ ዘይክእል '
+      'መረዳዕታ ጥራይ ይዕቆብ፣ ተምሲል ቃል ሕደጋኹም ድማ መሣሪሒኩም ኣይወጻእን።';
+
+  @override
+  String get cloudBackupPasswordFieldHint => 'ተምሲል ቃል ካውንትኩም';
+
+  @override
+  String get cloudBackupEnable => 'መጠባበቂያ ከፍትዎ';
+
+  @override
+  String get cloudBackupWrongPassword => 'ውሑድ ተምሲል ቃል።';
+
+  @override
+  String get cloudBackupNetworkError =>
+      'ነቲ ኣገልግሎት መጠባበቂያ ክንረኽቦ ኣይከኣለን። ርክብ ኢንተርኔትኩም ኣረጋግጹ።';
+
+  @override
+  String get cloudBackupServerError =>
+      'እቲ ኣገልግሎት መጠባበቂያ ሕጂ ጸገም ኣሎዎ። ድሕሪ ሰዓት ደግሙ።';
+
+  @override
+  String get cloudBackupSessionExpired =>
+      'እቲ ክፍለ-ግዜ መጠባበቂያኩም ኣበልዑሉ። ንምቕጻል መጠባበቂያ ደጊምኩም ክፉትዎ።';
+
+  @override
+  String get cloudBackupDecryptError =>
+      'እቲ ቅጂ ደመና ብዚኣቶም ተምሲል ቃል ክኽፈት ኣይከኣለን።';
+
+  @override
+  String get cloudBackupLastNever => 'ንሕጂ ኣይተኣቐበበን';
+
+  @override
+  String get cloudBackupLastAt => 'ናይ መወዳእታ መጠባበቂያ:';
+
+  @override
+  String get cloudBackupNow => 'ሕጂ ኣቐምጦ';
+
+  @override
+  String get cloudBackupDone => 'እቲ መጠባበቂያ ተዛዚሙ።';
+
+  @override
+  String get cloudBackupRestore => 'ካብቲ ደመና መሊስ';
+
+  @override
+  String cloudBackupRestored(int n) =>
+      '$n ሓድሽ ፍተሻ ካብቲ ደመና ተመሊሱ።';
+
+  @override
+  String get cloudBackupNothingToRestore =>
+      'እቲ መጠባበቂያ ደመና ባዶ እዩ — እንታይ ከይተመሊሰ።';
+
+  @override
+  String get cloudBackupTurnOff => 'ዕጥቶ';
+
+  @override
+  String get cloudBackupTurnedOff =>
+      'እቲ መጠባበቂያ ተዓጺቱ። ቅጂኩም ኣብ ደመና ተሰሪዙ።';
+
+  @override
+  String cloudBackupEntryCount(int n) => '$n ፍተሻ ተኣቐበበ';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

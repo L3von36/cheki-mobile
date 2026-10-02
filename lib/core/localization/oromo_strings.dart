@@ -740,6 +740,80 @@ final class OromoStrings extends AppStrings {
   @override
   String get reportProblemCopy => 'Odeeffannoo kopii godhi';
 
+  // --------------------------------------------- cloud backup (v1.13.0)
+
+  @override
+  String get cloudBackupSection => 'Backup difuu';
+
+  @override
+  String get cloudBackupTileOff => 'Backup difuu — cufame';
+
+  @override
+  String get cloudBackupBetaNote =>
+      'Seenaa mirkaneessaa kee gara accountii keetti olkaa\u2019i — '
+      'bilchaa yoo dhabeessu hin badu. Hundi jalqaba meeshaa kana irratti '
+      'haramoo ta\u2019a — sarvarrii barreeffama dubbisuun danda\u2019amu '
+      'qofa qaba; jecha icciti kee immo meeshaa kee Hinbaatu.';
+
+  @override
+  String get cloudBackupPasswordFieldHint => 'Jecha icciti accountii kee';
+
+  @override
+  String get cloudBackupEnable => 'Backup bani';
+
+  @override
+  String get cloudBackupWrongPassword => 'Jecha icciti dogoggora.';
+
+  @override
+  String get cloudBackupNetworkError =>
+      'Tajaajila backupii hin quunnamne. Walitti dhufeenya inteernetii '
+      'kee mirkaneessi.';
+
+  @override
+  String get cloudBackupServerError =>
+      'Tajaajila backupiin yeroo ammaa rakkoo qaba. Booda yaalaa.';
+
+  @override
+  String get cloudBackupSessionExpired =>
+      'Bakka bu\u2019aa backupiikee dhume. Itti fufuuf backup haaraa bani.';
+
+  @override
+  String get cloudBackupDecryptError =>
+      'Kopii difuu jecha icciti kanaan banuu hin dandeenye.';
+
+  @override
+  String get cloudBackupLastNever => 'Hanga ammaa hin olkaa\u2019inne';
+
+  @override
+  String get cloudBackupLastAt => 'Backupii dhumaa:';
+
+  @override
+  String get cloudBackupNow => 'Amma olkaa\u2019i';
+
+  @override
+  String get cloudBackupDone => 'Backupin xumurameera.';
+
+  @override
+  String get cloudBackupRestore => 'Difuu irraa deebisi';
+
+  @override
+  String cloudBackupRestored(int n) =>
+      'Mirkaneessa haaraa $n difuu irraa deebifame.';
+
+  @override
+  String get cloudBackupNothingToRestore =>
+      'Backupiin difuu duwwaa dha — kan deebifamu hin jiru.';
+
+  @override
+  String get cloudBackupTurnOff => 'Cufi';
+
+  @override
+  String get cloudBackupTurnedOff =>
+      'Backupin cufameera. Kopiin difuu kee haqameera.';
+
+  @override
+  String cloudBackupEntryCount(int n) => 'Mirkaneessa $n olkaa\u2019ame';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

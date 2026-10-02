@@ -162,6 +162,48 @@ void main() {
       expect(s.reportProblemCopy, isNotEmpty,
           reason: '${locale.code} reportProblemCopy');
 
+      // v1.13.0: cloud backup.
+      expect(s.cloudBackupSection, isNotEmpty,
+          reason: '${locale.code} cloudBackupSection');
+      expect(s.cloudBackupTileOff, isNotEmpty,
+          reason: '${locale.code} cloudBackupTileOff');
+      expect(s.cloudBackupBetaNote, isNotEmpty,
+          reason: '${locale.code} cloudBackupBetaNote');
+      expect(s.cloudBackupPasswordFieldHint, isNotEmpty,
+          reason: '${locale.code} cloudBackupPasswordFieldHint');
+      expect(s.cloudBackupEnable, isNotEmpty,
+          reason: '${locale.code} cloudBackupEnable');
+      expect(s.cloudBackupWrongPassword, isNotEmpty,
+          reason: '${locale.code} cloudBackupWrongPassword');
+      expect(s.cloudBackupNetworkError, isNotEmpty,
+          reason: '${locale.code} cloudBackupNetworkError');
+      expect(s.cloudBackupServerError, isNotEmpty,
+          reason: '${locale.code} cloudBackupServerError');
+      expect(s.cloudBackupSessionExpired, isNotEmpty,
+          reason: '${locale.code} cloudBackupSessionExpired');
+      expect(s.cloudBackupDecryptError, isNotEmpty,
+          reason: '${locale.code} cloudBackupDecryptError');
+      expect(s.cloudBackupLastNever, isNotEmpty,
+          reason: '${locale.code} cloudBackupLastNever');
+      expect(s.cloudBackupLastAt, isNotEmpty,
+          reason: '${locale.code} cloudBackupLastAt');
+      expect(s.cloudBackupNow, isNotEmpty,
+          reason: '${locale.code} cloudBackupNow');
+      expect(s.cloudBackupDone, isNotEmpty,
+          reason: '${locale.code} cloudBackupDone');
+      expect(s.cloudBackupRestore, isNotEmpty,
+          reason: '${locale.code} cloudBackupRestore');
+      expect(s.cloudBackupRestored(1), contains('1'),
+          reason: '${locale.code} cloudBackupRestored');
+      expect(s.cloudBackupNothingToRestore, isNotEmpty,
+          reason: '${locale.code} cloudBackupNothingToRestore');
+      expect(s.cloudBackupTurnOff, isNotEmpty,
+          reason: '${locale.code} cloudBackupTurnOff');
+      expect(s.cloudBackupTurnedOff, isNotEmpty,
+          reason: '${locale.code} cloudBackupTurnedOff');
+      expect(s.cloudBackupEntryCount(5), contains('5'),
+          reason: '${locale.code} cloudBackupEntryCount');
+
       // v1.9.0: history upgrade.
       expect(s.statsChecks, isNotEmpty, reason: '${locale.code} statsChecks');
       expect(s.statsVerified, isNotEmpty,
@@ -313,6 +355,10 @@ void main() {
     expect(_hasEthiopic(s.reportProblemTile), isTrue);
     expect(_hasEthiopic(s.reportProblemTitle), isTrue);
     expect(_hasEthiopic(s.reportProblemCopy), isTrue);
+    expect(_hasEthiopic(s.cloudBackupSection), isTrue);
+    expect(_hasEthiopic(s.cloudBackupBetaNote), isTrue);
+    expect(_hasEthiopic(s.cloudBackupEnable), isTrue);
+    expect(_hasEthiopic(s.cloudBackupDone), isTrue);
     expect(s.undo, 'መልስ');
     expect(s.locale, AppLocale.amharic);
   });
@@ -347,6 +393,9 @@ void main() {
     expect(s.reportProblemTile, 'Rakkoo gabaasi');
     expect(_hasEthiopic(s.somethingWentWrongScreen), isFalse);
     expect(_hasEthiopic(s.reportProblemEmpty), isFalse);
+    expect(s.cloudBackupSection, 'Backup difuu');
+    expect(_hasEthiopic(s.cloudBackupBetaNote), isFalse);
+    expect(s.cloudBackupRestore, 'Difuu irraa deebisi');
     expect(s.pasteExtractedToast,
         'Lakkoofsi risitii barreeffamicha keessaa argameera.');
     expect(s.locale, AppLocale.oromo);
@@ -377,6 +426,8 @@ void main() {
     expect(_hasEthiopic(s.somethingWentWrongScreen), isTrue);
     expect(_hasEthiopic(s.reportProblemTile), isTrue);
     expect(s.reportProblemCopy, 'ቅጂ ሓበሬታ');
+    expect(_hasEthiopic(s.cloudBackupSection), isTrue);
+    expect(s.cloudBackupTurnOff, 'ዕጥቶ');
     expect(s.pasteExtractedToast, 'ቍጽሪ ሪሲት ካብቲ ጽሑፍ ተረኺቡ ኣሎ።');
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');

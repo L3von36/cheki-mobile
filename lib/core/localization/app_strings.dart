@@ -365,6 +365,68 @@ abstract base class AppStrings {
   /// Copy button inside the diagnostics dialog.
   String get reportProblemCopy;
 
+  // --------------------------------------------- cloud backup (v1.13.0)
+
+  /// Section/tile title when backup is enabled.
+  String get cloudBackupSection;
+
+  /// Settings tile label when backup is off.
+  String get cloudBackupTileOff;
+
+  /// Privacy explainer at the top of the backup sheet.
+  String get cloudBackupBetaNote;
+
+  /// Password field hint in the enable flow.
+  String get cloudBackupPasswordFieldHint;
+
+  /// Enable button.
+  String get cloudBackupEnable;
+
+  /// Local password verification failed.
+  String get cloudBackupWrongPassword;
+
+  /// Network failure.
+  String get cloudBackupNetworkError;
+
+  /// 5xx / server-side failure.
+  String get cloudBackupServerError;
+
+  /// Stored session no longer valid — re-enable required.
+  String get cloudBackupSessionExpired;
+
+  /// Cloud ciphertext cannot be opened with this password.
+  String get cloudBackupDecryptError;
+
+  /// Status line when no successful backup has happened yet.
+  String get cloudBackupLastNever;
+
+  /// Prefix before the formatted last-backup timestamp.
+  String get cloudBackupLastAt;
+
+  /// Back up now button.
+  String get cloudBackupNow;
+
+  /// Backup success toast.
+  String get cloudBackupDone;
+
+  /// Restore button.
+  String get cloudBackupRestore;
+
+  /// Restore success with [n] new entries.
+  String cloudBackupRestored(int n);
+
+  /// Restore found nothing new.
+  String get cloudBackupNothingToRestore;
+
+  /// Turn off button.
+  String get cloudBackupTurnOff;
+
+  /// Turned-off toast (cloud copy deleted).
+  String get cloudBackupTurnedOff;
+
+  /// Status line with [n] entries currently backed up.
+  String cloudBackupEntryCount(int n);
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   /// Labels of the three summary cells at the top of the history list.

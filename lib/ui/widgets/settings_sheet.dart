@@ -7,10 +7,12 @@ import '../../core/auth/account.dart';
 import '../../core/error_safety_net.dart';
 import '../../core/localization/app_strings.dart';
 import '../../state/auth_controller.dart';
+import '../../state/cloud_controller.dart';
 import '../../state/license_controller.dart';
 import '../../state/locale_controller.dart';
 import '../../state/theme_controller.dart';
 import '../../theme/mahtem_theme.dart';
+import 'cloud_backup_sheet.dart';
 import 'pressable.dart';
 
 /// Opens the settings bottom sheet from any screen.
@@ -126,6 +128,10 @@ class SettingsSheet extends StatelessWidget {
                 copyable: true,
               ),
             const SizedBox(height: 10),
+            if (account != null) ...[
+              _CloudBackupTile(strings: strings),
+              const SizedBox(height: 8),
+            ],
             _DiagnosticsTile(strings: strings),
             const SizedBox(height: 8),
             _FinePrint(text: strings.reportProblemHint),
@@ -336,6 +342,60 @@ class _FinePrint extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(color: faint, fontSize: 10.5, height: 1.4),
+      ),
+    );
+  }
+}
+
+/// "Cloud backup" tile — only shown when a device account exists (the
+/// cloud account is derived from it). Opens the enable/status sheet.
+class _CloudBackupTile extends StatelessWidget {
+  final AppStrings strings;
+
+  const _CloudBackupTile({required this.strings});
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = context.watch<CloudController>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    return Pressable(
+      onTap: () => openCloudBackupSheet(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? MahtemPalette.dCard : Colors.white,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: cloud.enabled
+                ? MahtemPalette.green.withValues(alpha: 0.4)
+                : (isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim)
+                    .withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              cloud.enabled ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+              size: 18,
+              color: cloud.enabled ? MahtemPalette.green : dim,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                cloud.enabled
+                    ? strings.cloudBackupSection
+                    : strings.cloudBackupTileOff,
+                style: TextStyle(
+                  color: isDark ? MahtemPalette.dInk : MahtemPalette.lInk,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: dim),
+          ],
+        ),
       ),
     );
   }

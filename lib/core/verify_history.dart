@@ -199,6 +199,36 @@ class VerifyHistory extends ChangeNotifier {
     await _persist();
   }
 
+  /// Cloud-backup restore path: merges [incoming] entries into the local
+  /// history (union by id / natural signature, newest-first, capped).
+  /// Returns how many NEW entries were added. No-op when offline-safe
+  /// storage fails — a restore must never wipe local data.
+  Future<int> mergeRemote(Iterable<HistoryEntry> incoming) async {
+    await _ensureLoaded();
+    final existingIds = _entries.map((e) => e.id).toSet();
+    final existingSigs = _entries
+        .map((e) => '${e.bankId}|${e.reference}|${e.verifiedAt}|${e.status}')
+        .toSet();
+    var added = 0;
+    for (final e in incoming) {
+      if (existingIds.contains(e.id)) continue;
+      final sig = '${e.bankId}|${e.reference}|${e.verifiedAt}|${e.status}';
+      if (existingSigs.contains(sig)) continue;
+      _entries.add(e);
+      existingIds.add(e.id);
+      existingSigs.add(sig);
+      added++;
+    }
+    if (added == 0) return 0;
+    _entries.sort((a, b) => b.verifiedAt.compareTo(a.verifiedAt));
+    if (_entries.length > _maxEntries) {
+      _entries.removeRange(_maxEntries, _entries.length);
+    }
+    notifyListeners();
+    await _persist();
+    return added;
+  }
+
   /// The whole history as CSV (oldest first, spreadsheet-friendly).
   /// Cells containing commas, quotes or newlines are quoted per RFC 4180.
   /// Pure — unit-tested; the history screen hands the result to the

@@ -12,6 +12,7 @@ import 'core/verify_history.dart';
 import 'state/app_tab.dart';
 import 'state/auth_controller.dart';
 import 'state/batch_controller.dart';
+import 'state/cloud_controller.dart';
 import 'state/license_controller.dart';
 import 'state/locale_controller.dart';
 import 'state/theme_controller.dart';
@@ -56,6 +57,12 @@ class MahtemApp extends StatelessWidget {
         // results. Fresh instance per app boot (nothing persists).
         ChangeNotifierProvider(create: (_) => BatchController()),
         ChangeNotifierProvider(create: (_) => VerifyHistory()),
+        // Cloud backup (v1.13.0) — opt-in zero-knowledge history backup.
+        // Restores its persisted session from the boot prefs; a no-op
+        // until the user enables it in Settings.
+        ChangeNotifierProvider(
+          create: (_) => CloudController(prefs: prefs)..ensureLoaded(),
+        ),
         ChangeNotifierProvider(create: (_) => AppTab()),
         // Licensing loads in the background — the paywall/gate awaits it.
         ChangeNotifierProvider(

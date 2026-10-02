@@ -652,6 +652,80 @@ final class EnglishStrings extends AppStrings {
   @override
   String get reportProblemCopy => 'Copy details';
 
+  // --------------------------------------------- cloud backup (v1.13.0)
+
+  @override
+  String get cloudBackupSection => 'Cloud backup';
+
+  @override
+  String get cloudBackupTileOff => 'Cloud backup — off';
+
+  @override
+  String get cloudBackupBetaNote =>
+      'Back up your verification history to your own account so it survives '
+      'a lost phone. Everything is encrypted on this device first — the '
+      'server stores ciphertext it can never read, and your password never '
+      'leaves the phone.';
+
+  @override
+  String get cloudBackupPasswordFieldHint => 'Your account password';
+
+  @override
+  String get cloudBackupEnable => 'Turn on backup';
+
+  @override
+  String get cloudBackupWrongPassword => 'Wrong password.';
+
+  @override
+  String get cloudBackupNetworkError =>
+      'Could not reach the backup service. Check your internet connection.';
+
+  @override
+  String get cloudBackupServerError =>
+      'The backup service has a problem right now. Try again later.';
+
+  @override
+  String get cloudBackupSessionExpired =>
+      'Your backup session expired. Turn backup on again to continue.';
+
+  @override
+  String get cloudBackupDecryptError =>
+      'The cloud copy could not be opened with this password.';
+
+  @override
+  String get cloudBackupLastNever => 'Never backed up';
+
+  @override
+  String get cloudBackupLastAt => 'Last backup:';
+
+  @override
+  String get cloudBackupNow => 'Back up now';
+
+  @override
+  String get cloudBackupDone => 'Backup complete.';
+
+  @override
+  String get cloudBackupRestore => 'Restore from cloud';
+
+  @override
+  String cloudBackupRestored(int n) =>
+      'Restored $n new check${n == 1 ? '' : 's'} from the cloud.';
+
+  @override
+  String get cloudBackupNothingToRestore =>
+      'The cloud backup is empty — nothing to restore.';
+
+  @override
+  String get cloudBackupTurnOff => 'Turn off';
+
+  @override
+  String get cloudBackupTurnedOff =>
+      'Backup turned off. Your cloud copy was deleted.';
+
+  @override
+  String cloudBackupEntryCount(int n) =>
+      '$n check${n == 1 ? '' : 's'} backed up';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

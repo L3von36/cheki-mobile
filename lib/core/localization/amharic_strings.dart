@@ -702,6 +702,79 @@ final class AmharicStrings extends AppStrings {
   @override
   String get reportProblemCopy => 'ዝርዝሮቹን ቅጂ';
 
+  // --------------------------------------------- cloud backup (v1.13.0)
+
+  @override
+  String get cloudBackupSection => 'የደመና መጠባበቂያ';
+
+  @override
+  String get cloudBackupTileOff => 'የደመና መጠባበቂያ — ዝግጁ አይደለም';
+
+  @override
+  String get cloudBackupBetaNote =>
+      'የፍተሻ ታሪክዎን ወደ የራስዎ መለያ ያስቀምጡ — ስልክዎ ቢጠፋ እንዳይጠፋ። ሁሉም ነገር '
+      'በዚህ መሣሪያ ላይ መጀመሪያ ይመሰጠራል — ሰርቨሩ ሊያነበብ የማይችል መረጃ ብቻ ይይዛል፣ '
+      'የመግቢያ ቃልዎም መሣሪያዎን አይተውድልም።';
+
+  @override
+  String get cloudBackupPasswordFieldHint => 'የመለያ መግቢያ ቃልዎ';
+
+  @override
+  String get cloudBackupEnable => 'መጠባበቂያውን ያንቁ';
+
+  @override
+  String get cloudBackupWrongPassword => 'የተሳሳተ መግቢያ ቃል።';
+
+  @override
+  String get cloudBackupNetworkError =>
+      'የመጠባበቂያ አገልግሎቱን ማግኘት አልተቻለም። የኢንተርኔት ግንኙነትዎን ያረጋግጡ።';
+
+  @override
+  String get cloudBackupServerError =>
+      'የመጠባበቂያ አገልግሎቱ ችግር አለበት። እባክዎ ቆይተው ይሞክሩ።';
+
+  @override
+  String get cloudBackupSessionExpired =>
+      'የመጠባበቂያ ክፍለ-ጊዜዎ አብቅቷል። ለመቀጠል መጠባበቂያውን እንደገና ያንቁ።';
+
+  @override
+  String get cloudBackupDecryptError =>
+      'የደመና ቅጂው በዚህ መግቢያ ቃል መከፈት አልተቻለም።';
+
+  @override
+  String get cloudBackupLastNever => 'ገና አልተጠበቀም';
+
+  @override
+  String get cloudBackupLastAt => 'የመጨረሻ መጠባበቂያ:';
+
+  @override
+  String get cloudBackupNow => 'አሁን አስቀምጥ';
+
+  @override
+  String get cloudBackupDone => 'መጠባበቂያው ተጠናቋል።';
+
+  @override
+  String get cloudBackupRestore => 'ከደመናው መልስ';
+
+  @override
+  String cloudBackupRestored(int n) =>
+      'ከደመናው $n አዲስ ፍተሻ${n == 1 ? '' : 'ዎች'} ተመልሰዋል።';
+
+  @override
+  String get cloudBackupNothingToRestore =>
+      'የደመና መጠባበቂያው ባዶ ነው — የሚመለስ ነገር የለም።';
+
+  @override
+  String get cloudBackupTurnOff => 'አጥፋ';
+
+  @override
+  String get cloudBackupTurnedOff =>
+      'መጠባበቂያው ተዝግቷል። የደመና ቅጂዎ ተሰርዟል።';
+
+  @override
+  String cloudBackupEntryCount(int n) =>
+      '$n ፍተሻ${n == 1 ? '' : 'ዎች'} ተጠብቀዋል';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override
