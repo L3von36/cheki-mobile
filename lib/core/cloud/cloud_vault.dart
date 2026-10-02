@@ -75,8 +75,8 @@ List<HistoryEntry> mergeHistoryEntries(
     }
   }
 
+  addAll(local); // local first — the local copy wins every conflict
   addAll(remote);
-  addAll(local);
 
   final merged = byId.values.toList()
     ..sort((a, b) => b.verifiedAt.compareTo(a.verifiedAt));
