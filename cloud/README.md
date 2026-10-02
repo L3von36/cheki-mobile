@@ -40,7 +40,16 @@ Every request must carry `X-Mahtem-Client` (cheap bot screen). Sessions
 expire after 90 days (KV TTL auto-cleanup). KV free-tier quotas
 (1,000 writes/day, 100k reads/day) act as the de-facto rate limiter.
 
-## Redeploy
+## Deploy
+
+Deploys are automatic: every push to `main` that touches `cloud/**` runs
+[`.github/workflows/deploy-cloud.yml`](../.github/workflows/deploy-cloud.yml),
+which uploads the module (with the KV binding re-asserted) and smoke-tests
+`/v1/health`. It authenticates with the `CLOUDFLARE_API_TOKEN` repo secret
+(a least-privilege token holding Workers Scripts edit only) and can be run
+manually via **Run workflow** (workflow_dispatch) on the Actions tab.
+
+Manual redeploy from a machine (same mechanism the workflow uses):
 
 ```bash
 # metadata.json: {"main_module":"worker.js","compatibility_date":"2026-09-01",
@@ -51,6 +60,6 @@ curl -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   -F "worker.js=@worker.js;type=application/javascript+module"
 ```
 
-Recommended hardening for later: move deploys to CI with the token
-stored as the `CLOUDFLARE_API_TOKEN` repo secret, and rotate the token
-used for initial provisioning.
+Rotate the deploy token from time to time (Cloudflare dashboard → My
+Profile → API Tokens), then update the `CLOUDFLARE_API_TOKEN` repo secret
+with the new value — no other change needed.

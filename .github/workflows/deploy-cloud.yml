@@ -1,0 +1,72 @@
+name: Deploy Cloud Worker
+
+# Re-deploys cloud/worker.js to Cloudflare whenever the backend changes.
+# Token comes from the CLOUDFLARE_API_TOKEN repo secret (least privilege:
+# Workers Scripts edit only). Account id + KV namespace id are identifiers,
+# not secrets — same as a public wrangler.toml.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloud/**"
+      - ".github/workflows/deploy-cloud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloud
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy mahtem-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload worker module
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: "0ea97378caaff17d25132502a718b963"
+          KV_NAMESPACE_ID: "f317f08d8e384fc4ae23c9ed62cd9471"
+        run: |
+          set -euo pipefail
+          printf '{"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":[{"type":"kv_namespace","name":"KV","namespace_id":"%s"}]}' \
+            "$KV_NAMESPACE_ID" > metadata.json
+          http=$(curl -sS -o result.json -w "%{http_code}" -X PUT \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/mahtem-api" \
+            -F "metadata=@metadata.json;type=application/json" \
+            -F "worker.js=@cloud/worker.js;type=application/javascript+module")
+          echo "Cloudflare responded HTTP $http"
+          CLOUDFLARE_HTTP="$http" python3 - <<'PY'
+          import json, os, sys
+          d = json.load(open("result.json"))
+          if not d.get("success"):
+              print("Cloudflare API reported failure:", d.get("errors"))
+              sys.exit(1)
+          if os.environ["CLOUDFLARE_HTTP"] != "200":
+              print("Unexpected HTTP status:", os.environ["CLOUDFLARE_HTTP"])
+              sys.exit(1)
+          print("Worker uploaded:", d["result"]["id"])
+          PY
+
+      - name: Smoke test live endpoint
+        run: |
+          set -euo pipefail
+          sleep 5
+          for i in 1 2 3; do
+            if curl -fsS https://mahtem-api.mahtem.workers.dev/v1/health | tee health.json | grep -q '"ok":true'; then
+              echo "Live health check passed:"
+              cat health.json
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 10
+          done
+          echo "Health check failed after 3 attempts"
+          exit 1
