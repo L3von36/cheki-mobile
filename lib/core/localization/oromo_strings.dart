@@ -677,4 +677,10 @@ final class OromoStrings extends AppStrings {
           'Yeroo karoorni xumuramu irra deebi\u2019ee kaffalaa — risiitii '
           'haaraa dabalaa.',
       };
+
+  @override
+  String get crashReportsNote =>
+      'Appiin yeroo dhabeessu gabaasa maqaa hin qabne ni erama — '
+      'risiitii fi odeeffannoo keessan isa keessatti hin jiru; '
+      'saffisaan fooyyessuuf qofa.';
 }

@@ -144,6 +144,10 @@ void main() {
           reason: '${locale.code} activationRejection($reason)',
         );
       }
+
+      // v1.8.0: crash reporting disclosure.
+      expect(s.crashReportsNote, isNotEmpty,
+          reason: '${locale.code} crashReportsNote');
     }
   });
 
@@ -173,6 +177,7 @@ void main() {
     expect(_hasEthiopic(s.typeSheetTitle), isTrue);
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
+    expect(_hasEthiopic(s.crashReportsNote), isTrue);
     expect(s.locale, AppLocale.amharic);
   });
 
@@ -196,6 +201,7 @@ void main() {
     expect(s.filterAll, 'Hunda');
     expect(s.filterFailed, 'Hin mirkaneeffamne');
     expect(s.verifyAgain, contains('mirkaneessaa'));
+    expect(_hasEthiopic(s.crashReportsNote), isFalse);
     expect(s.locale, AppLocale.oromo);
   });
 
@@ -216,6 +222,7 @@ void main() {
     expect(_hasEthiopic(s.typeSheetTitle), isTrue);
     expect(_hasEthiopic(s.verifyAgain), isTrue);
     expect(_hasEthiopic(s.noMatchesBody), isTrue);
+    expect(_hasEthiopic(s.crashReportsNote), isTrue);
     // Spot-check a few translations so a placeholder can't sneak in.
     expect(s.welcomeBack, 'ብደሓን ተመሊስኩም');
     expect(s.verifyTab, 'ምርግጋጽ');

@@ -90,6 +90,11 @@ your first 5 checks are free.
   details, long-press to remove
 - **Honest failures** — receipt not found or bank down? The result screen
   says exactly why and lists what to do next
+- **Crash reports (opt-in Sentry)** — release APKs built with a Sentry
+  DSN report crashes anonymously (no receipt or account data, no
+  screenshots, no PII) so bugs get fixed fast; builds without a DSN
+  behave exactly as before — zero network, zero overhead. The settings
+  sheet discloses this in all four languages
 - **Private** — history never leaves the device; nothing to sign up for
 
 ## How verification works
@@ -160,7 +165,7 @@ Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/rele
 ```bash
 flutter pub get
 flutter analyze   # must be clean
-flutter test      # 193 tests
+flutter test      # unit + widget tests
 flutter build apk --release
 ```
 
@@ -169,6 +174,33 @@ Launcher icons are regenerated from `assets/icon/` with:
 ```bash
 dart run flutter_launcher_icons
 ```
+
+## Crash reporting (Sentry, opt-in)
+
+Mahtem uses [Sentry](https://sentry.io) for anonymous crash reporting
+(`sentry_flutter`). Nothing is ever sent unless the APK was built with a
+DSN baked in — the feature is inert by default.
+
+To enable it for release builds:
+
+1. Create a free project at [sentry.io](https://sentry.io) (platform:
+   **Flutter**) and copy its **DSN**.
+2. Add repo secrets (**Settings → Secrets and variables → Actions**):
+   - **`SENTRY_DSN`** — turns reporting on. The release workflow passes
+     it to `flutter build` via `--dart-define`; without this secret the
+     app never touches Sentry at all.
+   - **`SENTRY_AUTH_TOKEN`**, **`SENTRY_ORG`**, **`SENTRY_PROJECT`** —
+     optional, used to upload the `--split-debug-info` symbols after the
+     build so the `--obfuscate` Dart frames in crash reports become
+     readable.
+3. Push the next tag — crashes appear in the Sentry dashboard, grouped
+   by release (`app.mahtem.mobile@X.Y.Z+NN`).
+
+Privacy posture (pinned by tests in `test/crash_reporting_test.dart`):
+`sendDefaultPii = false`, screenshots off, view hierarchy off, no
+performance tracing — error events and release-health sessions only.
+Every crash wrapper failure degrades to a plain boot, so reporting can
+never keep the app from starting.
 
 ## Releases
 

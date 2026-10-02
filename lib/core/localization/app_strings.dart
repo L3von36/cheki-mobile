@@ -314,4 +314,10 @@ abstract base class AppStrings {
     String fallback, {
     String amount = '',
   });
+
+  // ------------------------------------------------- crash reporting (v1.8.0)
+
+  /// Fine print at the bottom of the settings sheet: crash reports are
+  /// anonymous and contain no receipt or account data.
+  String get crashReportsNote;
 }

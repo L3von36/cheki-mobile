@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'core/crash_reporting.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,5 +19,10 @@ Future<void> main() async {
   } catch (_) {
     prefs = null;
   }
-  runApp(MahtemApp(prefs: prefs));
+  // Sentry wraps the boot only when a DSN was baked in at build time
+  // (see lib/core/crash_reporting.dart) — otherwise this is a plain
+  // runApp and the app behaves exactly as before.
+  await runWithCrashReporting(
+    appRunner: () => runApp(MahtemApp(prefs: prefs)),
+  );
 }

@@ -71,17 +71,42 @@ jobs:
             echo "No KEYSTORE_BASE64 secret found — building debug-signed release APK."
           fi
 
+      # ── Sentry (opt-in) ───────────────────────────────────────────
+      # Secrets expected (all optional — see README → Crash reporting):
+      #   SENTRY_DSN          bakes crash reporting into the APK
+      #   SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_PROJECT
+      #                       upload --split-debug-info symbols so
+      #                       obfuscated Dart frames become readable
+      # With no SENTRY_DSN the APK is byte-for-byte the old behaviour:
+      # Sentry never initializes, no network, zero overhead.
       - name: Build release APKs (split per ABI + universal)
         run: |
           flutter build apk --release --split-per-abi \
             --obfuscate \
-            --split-debug-info=build/symbols
+            --split-debug-info=build/symbols \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
           # Modern Flutter no longer emits the fat APK from --split-per-abi,
           # so build the universal one as a second pass (gradle cache makes
           # this incremental).
           flutter build apk --release \
             --obfuscate \
-            --split-debug-info=build/symbols
+            --split-debug-info=build/symbols \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+
+      - name: Upload Dart symbols to Sentry (skips without secrets)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ] || [ -z "$SENTRY_ORG" ] || [ -z "$SENTRY_PROJECT" ]; then
+            echo "Sentry symbol secrets not set — skipping upload (reports still flow)."
+            exit 0
+          fi
+          curl -sL -o sentry-cli \
+            https://github.com/getsentry/sentry-cli/releases/latest/download/sentry-cli-Linux-x86_64
+          chmod +x sentry-cli
+          ./sentry-cli upload-dif --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" build/symbols
 
       - name: Rename APKs with tag
         id: rename

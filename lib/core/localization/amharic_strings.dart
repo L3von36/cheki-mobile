@@ -646,4 +646,9 @@ final class AmharicStrings extends AppStrings {
               'ሲያልቅ እንደገና ክፍያ አድርገው አዲሱን ደረሰኝ '
               'ይለጥፉ።',
       };
+
+  @override
+  String get crashReportsNote =>
+      'መተግበሪያው ሲበላሽ ችግሩን የሚገልጽ መረጃ ያለ ስምዎ '
+      'ይላካል — ደረሰኝም ሆነ የመለያ መረጃዎ አያካትቱም።';
 }

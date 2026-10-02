@@ -124,6 +124,8 @@ class SettingsSheet extends StatelessWidget {
                 valueFuture: Future.value(license.deviceCode),
                 copyable: true,
               ),
+            const SizedBox(height: 8),
+            _FinePrint(text: strings.crashReportsNote),
           ],
         ),
       ),
@@ -308,6 +310,27 @@ class _SignOutTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Fine-print disclosure under the meta rows: what (little) crash
+/// reporting sends. Muted like the meta labels, but wraps to 2–3 lines.
+class _FinePrint extends StatelessWidget {
+  final String text;
+
+  const _FinePrint({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final faint = isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Text(
+        text,
+        style: TextStyle(color: faint, fontSize: 10.5, height: 1.4),
       ),
     );
   }

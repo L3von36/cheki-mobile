@@ -596,4 +596,9 @@ final class EnglishStrings extends AppStrings {
     String amount = '',
   }) =>
       fallback;
+
+  @override
+  String get crashReportsNote =>
+      'If the app ever crashes, it sends an anonymous report — no receipt '
+      'or account data — so problems get fixed faster.';
 }

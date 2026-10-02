@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/auth/account_store.dart';
@@ -89,6 +90,9 @@ class MahtemApp extends StatelessWidget {
           darkTheme: MahtemTheme.dark(ethiopicFont: locale.usesEthiopicScript),
           themeMode: theme.mode,
           home: const AuthGate(),
+          // Records which screen the user was on when a crash happens —
+          // a no-op unless Sentry was initialized at boot (DSN present).
+          navigatorObservers: [SentryNavigatorObserver()],
         ),
       ),
     );

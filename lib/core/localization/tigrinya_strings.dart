@@ -688,4 +688,10 @@ final class TigrinyaStrings extends AppStrings {
           'ተጠቂሙ ኣሎ። እቲ መደብ እንተወዲኡ ደጊምኩም '
           'ክፍሊት ገብሩ እቲ ሓድሽ ሰርተፊኬት ኣቐምጡ።',
       };
+
+  @override
+  String get crashReportsNote =>
+      'እቲ ኣፕሊኬሽን ምስ ዝወድቕ፣ ብዘይ ስም ሪፖርት ይለኣኽ — '
+      'ሰርተፊኬትኩም ወይ መረዳዕታኩም ኣብ ውሽጡ '
+      'የብሉን፤ ንምቕሓስ ጥራይ እዩ።';
 }
