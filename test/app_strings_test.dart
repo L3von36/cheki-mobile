@@ -10,7 +10,7 @@ void main() {
   // non-empty strings, the right script per language, and total coverage
   // of the auth error mapping.
 
-  test('every catalog string is non-empty in both languages', () {
+  test('every catalog string is non-empty in all three languages', () {
     for (final locale in AppLocale.values) {
       final s = AppStrings.of(locale);
       expect(s.verifyTab, isNotEmpty, reason: '${locale.code} verifyTab');
@@ -157,7 +157,27 @@ void main() {
     expect(s.locale, AppLocale.amharic);
   });
 
-  test('every AuthError maps to a localized message in both languages', () {
+  test('the Afaan Oromoo catalog uses the Latin (Qubee) script', () {
+    final s = AppStrings.of(AppLocale.oromo);
+    // Qubee is Latin — no Ethiopic block glyphs may leak in.
+    expect(_hasEthiopic(s.welcomeBack), isFalse);
+    expect(_hasEthiopic(s.verifyTab), isFalse);
+    expect(_hasEthiopic(s.verifyReceiptButton), isFalse);
+    expect(_hasEthiopic(s.authPrivacyNote), isFalse);
+    expect(_hasEthiopic(s.resultVerifiedTitle), isFalse);
+    expect(
+      _hasEthiopic(s.failureMessage(VerifyErrorKind.network, 'fb')),
+      isFalse,
+    );
+    expect(_hasEthiopic(s.trialsGoneTitle), isFalse);
+    // Spot-check a few translations so a placeholder can't sneak in.
+    expect(s.welcomeBack, "Baga nagaan deebi'tan");
+    expect(s.verifyTab, 'Mirkaneessa');
+    expect(s.historyTab(2), contains('Seenaa'));
+    expect(s.locale, AppLocale.oromo);
+  });
+
+  test('every AuthError maps to a localized message in all languages', () {
     for (final error in AuthError.values) {
       for (final locale in AppLocale.values) {
         final message = AppStrings.of(locale).errorAuth(error);
@@ -172,11 +192,16 @@ void main() {
 
   test('AppLocale round-trips through its persisted code', () {
     expect(AppLocale.fromCode('am'), AppLocale.amharic);
+    expect(AppLocale.fromCode('om'), AppLocale.oromo);
     expect(AppLocale.fromCode('en'), AppLocale.english);
     expect(AppLocale.fromCode(null), AppLocale.english);
     expect(AppLocale.fromCode('zz'), AppLocale.english);
     expect(AppLocale.amharic.materialLocale.languageCode, 'am');
+    expect(AppLocale.oromo.materialLocale.languageCode, 'om');
     expect(AppLocale.amharic.label, 'አማርኛ');
     expect(AppLocale.english.label, 'English');
+    expect(AppLocale.oromo.label, 'Afaan Oromoo');
+    expect(kSupportedLocales.map((l) => l.languageCode),
+        containsAll(['en', 'am', 'om']));
   });
 }

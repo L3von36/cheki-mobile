@@ -35,6 +35,34 @@ class _AmMaterialLocalizations extends DefaultMaterialLocalizations {
   String get closeButtonTooltip => 'ዝጋ';
 }
 
+/// Same idea for Afaan Oromoo (om) — Qubee is Latin script, so the
+/// default fonts already render it; only the labels need overriding.
+class _OmMaterialLocalizations extends DefaultMaterialLocalizations {
+  const _OmMaterialLocalizations();
+
+  // ── text-selection toolbar (the strings users actually see) ─────────
+  @override
+  String get copyButtonLabel => 'Kopii godhi';
+  @override
+  String get cutButtonLabel => 'Ciniini';
+  @override
+  String get pasteButtonLabel => 'Dabi';
+  @override
+  String get selectAllButtonLabel => 'Hunda fili';
+  @override
+  String get lookUpButtonLabel => 'Barbaadi';
+  @override
+  String get searchWebButtonLabel => 'Interneetii barbaadi';
+  @override
+  String get shareButtonLabel => 'Qoodi';
+
+  // ── common tooltips ─────────────────────────────────────────────────
+  @override
+  String get backButtonTooltip => "Deebi'i";
+  @override
+  String get closeButtonTooltip => 'Cufi';
+}
+
 /// Same idea for Cupertino localizations — nothing Amharic-specific to
 /// override (no cupertino surfaces in Mahtem), but claiming support for
 /// `am` keeps the localization warning out of every boot.
@@ -44,7 +72,7 @@ class MahtemCupertinoLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      const {'en', 'am'}.contains(locale.languageCode);
+      const {'en', 'am', 'om'}.contains(locale.languageCode);
 
   @override
   Future<CupertinoLocalizations> load(Locale locale) async =>
@@ -62,13 +90,15 @@ class MahtemLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      const {'en', 'am'}.contains(locale.languageCode);
+      const {'en', 'am', 'om'}.contains(locale.languageCode);
 
   @override
   Future<MaterialLocalizations> load(Locale locale) async =>
-      locale.languageCode == 'am'
-      ? const _AmMaterialLocalizations()
-      : const DefaultMaterialLocalizations();
+      switch (locale.languageCode) {
+        'am' => const _AmMaterialLocalizations(),
+        'om' => const _OmMaterialLocalizations(),
+        _ => const DefaultMaterialLocalizations(),
+      };
 
   @override
   bool shouldReload(MahtemLocalizationsDelegate old) => false;

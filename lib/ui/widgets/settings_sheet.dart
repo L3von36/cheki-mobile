@@ -22,8 +22,8 @@ Future<void> openSettingsSheet(BuildContext context) {
 }
 
 /// Settings: device account (sign out), appearance (system / light /
-/// dark) and language (English / አማርኛ) — plus version and the device
-/// code users quote when buying an activation code.
+/// dark) and language (English / አማርኛ / Afaan Oromoo) — plus version
+/// and the device code users quote when buying an activation code.
 class SettingsSheet extends StatelessWidget {
   const SettingsSheet({super.key});
 

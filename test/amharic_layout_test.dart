@@ -42,7 +42,11 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   // The regression: after typing a complete form the button must be
   // tappable — signing up swaps the gate into the shell. (Small screens
   // need a scroll first; the button sits below the fold.)
-  final createLabel = localeCode == 'am' ? 'መለያ ይክፈቱ' : 'CREATE ACCOUNT';
+  final createLabel = switch (localeCode) {
+    'am' => 'መለያ ይክፈቱ',
+    'om' => 'Herrega uumaa',
+    _ => 'CREATE ACCOUNT',
+  };
   await tester.ensureVisible(find.text(createLabel));
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(find.text(createLabel));
@@ -64,16 +68,31 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
     expect(find.text('ጨለማ'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('አማርኛ'), findsOneWidget);
+  } else if (localeCode == 'om') {
+    expect(find.text('Sirna'), findsOneWidget);
+    expect(find.text('Ifa'), findsOneWidget);
+    expect(find.text('Dukkaa'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Afaan Oromoo'), findsOneWidget);
   } else {
     expect(find.text('APPEARANCE'), findsOneWidget);
     expect(find.text('System'), findsOneWidget);
     expect(find.text('አማርኛ'), findsOneWidget);
+    expect(find.text('Afaan Oromoo'), findsOneWidget);
   }
 
   // Switch theme light → dark → light while the sheet is open: the
   // switcher must not overflow in either direction.
-  final lightLabel = find.text(localeCode == 'am' ? 'ብርሃናማ' : 'Light');
-  final darkLabel = find.text(localeCode == 'am' ? 'ጨለማ' : 'Dark');
+  final lightLabel = find.text(switch (localeCode) {
+    'am' => 'ብርሃናማ',
+    'om' => 'Ifa',
+    _ => 'Light',
+  });
+  final darkLabel = find.text(switch (localeCode) {
+    'am' => 'ጨለማ',
+    'om' => 'Dukkaa',
+    _ => 'Dark',
+  });
   await tester.tap(lightLabel);
   await tester.pump(const Duration(milliseconds: 200));
   await tester.tap(darkLabel);
@@ -82,7 +101,11 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   await tester.pump(const Duration(milliseconds: 200));
 
   // Sign out (localized dialog) → gate lands on sign-in.
-  final signOutLabel = find.text(localeCode == 'am' ? 'ይውጡ' : 'Sign out');
+  final signOutLabel = find.text(switch (localeCode) {
+    'am' => 'ይውጡ',
+    'om' => "Ba'aa",
+    _ => 'Sign out',
+  });
   await tester.ensureVisible(signOutLabel);
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(signOutLabel);
@@ -97,7 +120,11 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   await tester.enterText(signInFields.at(0), '0911223344');
   await tester.enterText(signInFields.at(1), 'secret1');
   await tester.pump(const Duration(milliseconds: 100));
-  final signInLabel = localeCode == 'am' ? 'ግቡ' : 'SIGN IN';
+  final signInLabel = switch (localeCode) {
+    'am' => 'ግቡ',
+    'om' => "Galmaa'aa",
+    _ => 'SIGN IN',
+  };
   await tester.ensureVisible(find.text(signInLabel));
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(find.text(signInLabel));
@@ -108,7 +135,11 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   // ── history tab ────────────────────────────────────────────────────
   // ('History' matches both the nav tab and the screen title — presence
   // is enough; the point is walking the screen without overflow.)
-  final historyLabel = find.text(localeCode == 'am' ? 'ታሪክ' : 'History');
+  final historyLabel = find.text(switch (localeCode) {
+    'am' => 'ታሪክ',
+    'om' => 'Seenaa',
+    _ => 'History',
+  });
   await tester.tap(historyLabel.first);
   await tester.pump(const Duration(milliseconds: 400));
   expect(historyLabel, findsWidgets);
@@ -144,6 +175,17 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await _walk(tester, 'en');
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  testWidgets(
+    'Afaan Oromoo walk, 320x600 — 3-language switcher must not overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await _walk(tester, 'om');
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

@@ -3,8 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/localization/app_strings.dart';
 
-/// App-wide language state: English or Amharic (አማርኛ), persisted in
-/// [SharedPreferences] and exposed through `provider`. Screens read
+/// App-wide language state: English, Amharic (አማርኛ) or Afaan Oromoo,
+/// persisted in [SharedPreferences] and exposed through `provider`. Screens read
 /// localized strings from [strings] — switch the language and every
 /// listening screen rebuilds in the new language.
 class LocaleController extends ChangeNotifier {
@@ -47,7 +47,8 @@ class LocaleController extends ChangeNotifier {
     }
   }
 
-  /// Toggles between English and Amharic — the switcher's fast path.
+  /// Flips between English and Amharic (legacy fast path — the settings
+  /// switcher walks [AppLocale.values] via setLocale instead).
   Future<void> toggle() =>
       setLocale(isAmharic ? AppLocale.english : AppLocale.amharic);
 }

@@ -1,9 +1,9 @@
-/// App-wide strings for English and Amharic (አማርኛ).
+/// App-wide strings for English, Amharic (አማርኛ) and Afaan Oromoo.
 ///
-/// Design: [AppStrings] is an abstract catalog; [EnglishStrings] and
-/// [AmharicStrings] must implement EVERY getter, so adding a string
-/// without translating it is a compile error — translations can never
-/// silently drift. Look strings up through the [LocaleController]:
+/// Design: [AppStrings] is an abstract catalog; [EnglishStrings],
+/// [AmharicStrings] and [OromoStrings] must implement EVERY getter, so
+/// adding a string without translating it is a compile error —
+/// translations can never silently drift. Look strings up through the [LocaleController]:
 ///
 /// ```dart
 /// final s = context.watch<LocaleController>().strings;
@@ -29,11 +29,13 @@ export '../receipt_verify/models.dart' show VerifyErrorKind;
 
 part 'english_strings.dart';
 part 'amharic_strings.dart';
+part 'oromo_strings.dart';
 
 /// Languages Mahtem ships with.
 enum AppLocale {
   english('en'),
-  amharic('am');
+  amharic('am'),
+  oromo('om');
 
   const AppLocale(this.code);
 
@@ -47,22 +49,29 @@ enum AppLocale {
   String get label => switch (this) {
     AppLocale.english => 'English',
     AppLocale.amharic => 'አማርኛ',
+    AppLocale.oromo => 'Afaan Oromoo',
   };
 
   static AppLocale fromCode(String? code) => switch (code) {
     'am' => AppLocale.amharic,
+    'om' => AppLocale.oromo,
     _ => AppLocale.english,
   };
 }
 
 /// Locales the MaterialApp declares.
-const List<Locale> kSupportedLocales = <Locale>[Locale('en'), Locale('am')];
+const List<Locale> kSupportedLocales = <Locale>[
+  Locale('en'),
+  Locale('am'),
+  Locale('om'),
+];
 
 abstract base class AppStrings {
   const AppStrings();
 
   factory AppStrings.of(AppLocale locale) => switch (locale) {
     AppLocale.amharic => const AmharicStrings(),
+    AppLocale.oromo => const OromoStrings(),
     AppLocale.english => const EnglishStrings(),
   };
 

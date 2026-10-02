@@ -31,11 +31,12 @@ your first 5 checks are free.
   Reset accounts from the sign-in screen (verification history and Pro
   plans are untouched). `lib/core/auth/` + `lib/state/auth_controller.dart`.
 
-- **English / አማርኛ language switcher** — the whole core flow (verify form,
-  auth screens, tabs, settings) is translated; switching is instant and
-  persisted. Amharic mode renders with Noto Sans Ethiopic. Catalogs live in
+- **English / አማርኛ / Afaan Oromoo language switcher** — the whole core
+  flow (verify form, auth screens, tabs, settings) is translated; switching
+  is instant and persisted. Amharic mode renders with Noto Sans Ethiopic;
+  Afaan Oromoo runs on the default Latin fonts. Catalogs live in
   `lib/core/localization/` — the abstract `AppStrings` base makes a missing
-  translation a compile error, so the two languages can never drift.
+  translation a compile error, so the three languages can never drift.
 
 - **Light / dark / system theme switcher** — pick a mode in the settings
   sheet (gear icon on the home screen); the choice persists across
