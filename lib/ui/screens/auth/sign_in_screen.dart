@@ -51,11 +51,24 @@ class _SignInScreenState extends State<SignInScreen> {
     final auth = context.read<AuthController>();
     final strings = context.read<LocaleController>().strings;
     setState(() => _error = null);
-    final result = await auth.signIn(
-      identifier: _identifierCtrl.text,
-      password: _passwordCtrl.text,
-    );
+    // v1.14.1: an UNEXPECTED exception must never fail silently — the user
+    // would see the button stop spinning and nothing else (reported as
+    // "sign in doesn't create an account"). Known failures map to
+    // localized AuthErrors; anything unknown shows the generic message.
+    AuthResult? result;
+    try {
+      result = await auth.signIn(
+        identifier: _identifierCtrl.text,
+        password: _passwordCtrl.text,
+      );
+    } catch (_) {
+      result = null;
+    }
     if (!mounted) return;
+    if (result == null) {
+      setState(() => _error = strings.genericAuthError);
+      return;
+    }
     switch (result) {
       case AuthSuccess(:final account):
         // The gate rebuilds into the shell; clear any pushed auth route.

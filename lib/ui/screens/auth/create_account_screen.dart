@@ -64,12 +64,25 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return;
     }
     setState(() => _error = null);
-    final result = await auth.signUp(
-      displayName: _nameCtrl.text,
-      identifier: _identifierCtrl.text,
-      password: _passwordCtrl.text,
-    );
+    // v1.14.1: an UNEXPECTED exception must never fail silently — the user
+    // would see the button stop spinning and nothing else (reported as
+    // "sign up doesn't create an account"). Every known failure maps to a
+    // localized AuthError; anything unknown shows the generic message.
+    AuthResult? result;
+    try {
+      result = await auth.signUp(
+        displayName: _nameCtrl.text,
+        identifier: _identifierCtrl.text,
+        password: _passwordCtrl.text,
+      );
+    } catch (_) {
+      result = null;
+    }
     if (!mounted) return;
+    if (result == null) {
+      setState(() => _error = strings.genericAuthError);
+      return;
+    }
     switch (result) {
       case AuthSuccess(:final account):
         // The gate rebuilds into the shell; clear any pushed auth route.

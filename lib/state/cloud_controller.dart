@@ -20,6 +20,16 @@
 /// failures retry with backoff. Turning the feature OFF deletes both the
 /// session and the cloud copy (privacy-safe default); the next sign-in
 /// arms it again.
+///
+/// v1.14.1 — arming is no longer one-shot: a sign-up/sign-in that lands
+/// while the network is down (flaky mobile data, DNS hiccup, worker
+/// outage) RETRIES with backoff for a few minutes, so the cloud account
+/// gets created the moment the connection returns. The plaintext password
+/// is held only in memory during that window (never persisted, never
+/// logged) and is dropped as soon as arming succeeds, fails for a
+/// non-transient reason, the window expires, the feature is disabled or
+/// the controller dies. After that the Settings sheet remains the manual
+/// fallback and the next sign-in re-arms.
 library;
 
 import 'dart:async';
@@ -50,6 +60,8 @@ class CloudController extends ChangeNotifier {
     this.autoSyncBackoff = const Duration(minutes: 15),
     this.bootCatchUpDelay = const Duration(seconds: 5),
     this.maxAutoFailures = 3,
+    this.autoArmRetries = 4,
+    this.autoArmRetryDelay = const Duration(seconds: 20),
   })  : _api = api ?? CloudApi(),
         _hasher = hasher ?? PasswordHasher(),
         _prefs = prefs,
@@ -66,6 +78,22 @@ class CloudController extends ChangeNotifier {
   final Duration autoSyncBackoff;
   final Duration bootCatchUpDelay;
   final int maxAutoFailures;
+
+  // Auto-arm retry tuning (v1.14.1). Injected small in tests. With the
+  // defaults the arming window is ~5 minutes: 20s → 40s → 80s → 160s
+  // backoffs after the initial attempt.
+  final int autoArmRetries;
+  final Duration autoArmRetryDelay;
+
+  // Auto-arm retry state (ephemeral). The plaintext password lives here
+  // ONLY while bounded retries are pending — never persisted, never
+  // logged, dropped by [_dropArmCredentials] on every terminal outcome.
+  String? _armPassword;
+  AccountRecord? _armAccount;
+  VerifyHistory? _armHistory;
+  Timer? _armTimer;
+  int _armAttempts = 0;
+  static const Duration _armRecheckDelay = Duration(seconds: 3);
 
   // persisted state
   bool _enabled = false;
@@ -219,12 +247,16 @@ class CloudController extends ChangeNotifier {
   /// a successful sign-up / sign-in, while the plaintext password is still
   /// in hand. No settings visit, no second password prompt, no button.
   ///
-  /// Fire-and-forget contract: failures never escape (enable/restore
-  /// already swallow them into [failure]); an offline sign-up simply
-  /// stays un-synced and the Settings sheet remains the manual fallback.
-  /// Signing in on a new device therefore restores the history without
-  /// any user action: enable() merge-uploads local ∪ remote, then
-  /// restore() pulls cloud-only entries down (a no-op on fresh sign-up).
+  /// Bounded-retry contract (v1.14.1): failures never escape (enable/
+  /// restore swallow them into [failure]); a TRANSIENT failure (network /
+  /// server) schedules up to [autoArmRetries] retries with exponential
+  /// backoff, so a sign-up that lands offline still creates the cloud
+  /// account once the connection returns — zero user action. Deterministic
+  /// failures (wrong password, decrypt) drop the credentials immediately:
+  /// retrying cannot fix those. Signing in on a new device therefore
+  /// restores the history without any user action: enable() merge-uploads
+  /// local ∪ remote, then restore() pulls cloud-only entries down (a
+  /// no-op on fresh sign-up).
   Future<void> autoEnable({
     required String password,
     required AccountRecord account,
@@ -232,23 +264,85 @@ class CloudController extends ChangeNotifier {
   }) async {
     if (isWorking) return;
     // Already syncing THIS exact account (re-sign-in)? Everything is
-    // live — a second session would only burn server writes.
+    // live — a second session would only burn server writes. Also
+    // cancels any retry window still pending for this same account.
     if (_enabled &&
         hasSession &&
         _identifierHash != null &&
         _identifierHash == await cloudIdentifierHash(account.id)) {
+      _dropArmCredentials();
       return;
     }
     // Account SWITCH (another device account): re-link to that cloud
     // identity. The previous account's server copy is intentionally left
     // untouched — signing back into it merges and continues.
+    _armPassword = password;
+    _armAccount = account;
+    _armHistory = history;
+    _armAttempts = 0;
+    await _armAttempt();
+  }
+
+  /// One arming attempt inside the bounded retry window. See autoEnable.
+  Future<void> _armAttempt() async {
+    final password = _armPassword;
+    final account = _armAccount;
+    final history = _armHistory;
+    if (password == null || account == null || history == null) return;
+    if (isWorking) {
+      // Another operation owns the controller right now — recheck
+      // shortly WITHOUT burning a retry (its duration is bounded by
+      // network timeouts, so this cannot loop forever).
+      _scheduleArm(_armRecheckDelay);
+      return;
+    }
+    // Armed for THIS account in the meantime (e.g. manual enable in the
+    // Settings sheet)? The credentials are no longer needed. Armed for a
+    // DIFFERENT account? Keep going — enable() below performs the switch.
+    if (_enabled && hasSession && _identifierHash != null) {
+      final armedForSame =
+          _identifierHash == await cloudIdentifierHash(account.id);
+      if (armedForSame) {
+        _dropArmCredentials();
+        return;
+      }
+    }
     final ok = await enable(
       password: password,
       account: account,
       history: history,
     );
-    if (!ok) return;
-    await restore(history);
+    if (ok) {
+      _dropArmCredentials();
+      await restore(history);
+      return;
+    }
+    // Wrong password / unreadable cloud copy will not heal by retrying.
+    if (_failure != CloudFailure.network && _failure != CloudFailure.server) {
+      _dropArmCredentials();
+      return;
+    }
+    if (_armAttempts >= autoArmRetries) {
+      _dropArmCredentials();
+      return;
+    }
+    _armAttempts++;
+    _scheduleArm(autoArmRetryDelay * (1 << (_armAttempts - 1)));
+  }
+
+  void _scheduleArm(Duration delay) {
+    _armTimer?.cancel();
+    _armTimer = Timer(delay, _armAttempt);
+  }
+
+  /// Ends the retry window and forgets the plaintext password.
+  void _dropArmCredentials() {
+    _armTimer?.cancel();
+    _armTimer = null;
+    _armPassword = null;
+    _armAccount = null;
+    _armHistory = null;
+    _armAttempts = 0;
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -416,6 +510,7 @@ class CloudController extends ChangeNotifier {
         } catch (_) {/* best effort */}
       }
     } finally {
+      _dropArmCredentials();
       _autoTimer?.cancel();
       _enabled = false;
       _sessionToken = null;
@@ -554,6 +649,7 @@ class CloudController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _dropArmCredentials();
     _autoTimer?.cancel();
     _history?.removeListener(_onHistoryChanged);
     super.dispose();

@@ -134,6 +134,14 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Self-healing sign-up sync** (`v1.14.1`): the zero-step arming below is
+  no longer one-shot — if a sign-up or sign-in lands while the network is
+  down (flaky mobile data, DNS hiccup), the phone KEEPS TRYING with
+  backoff for ~5 minutes and creates the hosted account the moment the
+  connection returns. Nothing is stored for this: the password stays in
+  memory only for that window and is dropped afterwards. Auth screens
+  also never fail silently anymore — every failure shows a visible
+  message.
 - **Zero-step cloud sync** (`v1.14.0`): backup arms ITSELF — the moment
   you create your account (or sign in on a new device) the phone links to
   your hosted account and starts mirroring your verification history,

@@ -182,12 +182,19 @@ class AuthController extends ChangeNotifier {
         return const AuthFailure(AuthError.alreadyExists);
       }
 
-      final hash = await _hasher.hash(password);
+      // v1.14.1: a hashing failure (platform crypto edge case) must be a
+      // visible storageFailed, not an exception escaping into the UI.
+      final String hash;
+      try {
+        hash = (await _hasher.hash(password)).encode();
+      } catch (_) {
+        return const AuthFailure(AuthError.storageFailed);
+      }
       final account = AccountRecord(
         id: id,
         identifier: identifier.trim(),
         displayName: name,
-        passwordHash: hash.encode(),
+        passwordHash: hash,
         createdAtUtc: _now(),
       );
       _accounts.add(account);

@@ -19,10 +19,14 @@ class FakeCloudServer {
   final vaults = <String, Map<String, dynamic>>{};
   int revisionBumps = 0;
   int putAttempts = 0; // every vault PUT, successful or not
+  int requests = 0; // every request that reached the client at all
   bool failVaultPut = false; // 500 on vault writes
   bool unauthorizedVault = false; // 401 on vault writes
+  bool down = false; // when true the network itself is unreachable
 
   http.Client client() => MockClient((request) async {
+        requests++;
+        if (down) throw http.ClientException('offline');
         final path = request.url.path;
         if (request.method == 'POST' && path == '/v1/accounts') {
           final body = jsonDecode(request.body) as Map<String, dynamic>;
@@ -133,11 +137,25 @@ HistoryEntry _entry(String id, {int verifiedAt = 1000}) => HistoryEntry(
       status: 'verified',
     );
 
+/// Real-time polling helper. Each enable() attempt runs two 120k-iteration
+/// PBKDF2 derivations which take seconds under the debug VM — fixed sleeps
+/// cannot straddle a retry, so every retry test polls for its condition.
+Future<bool> _waitFor(bool Function() cond,
+    {Duration timeout = const Duration(seconds: 30)}) async {
+  final end = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(end)) {
+    if (cond()) return true;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  return cond();
+}
+
 /// Tiny auto-sync windows so tests exercise the real timers quickly.
 const _kDebounce = Duration(milliseconds: 30);
 const _kRetry = Duration(milliseconds: 40);
 const _kBackoff = Duration(milliseconds: 300);
 const _kCatchUp = Duration(milliseconds: 10);
+const _kArmDelay = Duration(milliseconds: 25);
 
 CloudController _tuned(FakeCloudServer server, PasswordHasher hasher,
         SharedPreferences prefs,
@@ -151,6 +169,8 @@ CloudController _tuned(FakeCloudServer server, PasswordHasher hasher,
       autoSyncRetry: _kRetry,
       autoSyncBackoff: _kBackoff,
       bootCatchUpDelay: _kCatchUp,
+      autoArmRetries: 3,
+      autoArmRetryDelay: _kArmDelay,
     );
 
 Future<(CloudController, VerifyHistory)> _enabledSession(
@@ -562,23 +582,129 @@ void main() {
     expect(server.users.length, usersBefore);
   });
 
-  test('autoEnable stays silent when the network is down', () async {
-    final offline = CloudApi(client: MockClient((request) async {
-      throw http.ClientException('offline');
-    }));
-    final controller = CloudController(api: offline, hasher: hasher);
+  test('autoEnable retries an offline sign-up and arms when the net returns',
+      () async {
+    final controller = _tuned(server, hasher,
+        await SharedPreferences.getInstance(),
+        revisionClock: () => 70000);
     final history = VerifyHistory();
     await history.add(_entry('n1'));
 
-    // Must not throw — the auth screens fire-and-forget this call.
+    // The sign-up lands while the phone cannot reach the worker at all.
+    server.down = true;
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    expect(controller.enabled, isFalse);
+    expect(controller.failure, CloudFailure.network);
+    expect(server.users, isEmpty);
+
+    // The connection returns while the retry window is still open — the
+    // next scheduled attempt must arm with ZERO user action.
+    server.down = false;
+    final armed = await _waitFor(
+      () => controller.enabled && !controller.isWorking,
+    );
+    expect(armed, isTrue,
+        reason: 'the cloud account must be created by itself the moment '
+            'the network returns');
+    expect(controller.failure, CloudFailure.none);
+    expect(server.users, hasLength(1));
+    expect(controller.hasUnsyncedChanges, isFalse,
+        reason: 'the pending local change rides along with the '
+            'successful arm');
+  });
+
+  test('autoEnable retry window expires and drops the credentials', () async {
+    final controller = _tuned(server, hasher,
+        await SharedPreferences.getInstance());
+    final history = VerifyHistory();
+    await history.add(_entry('n2'));
+
+    server.down = true;
     await controller.autoEnable(
       password: 'correct-horse',
       account: account,
       history: history,
     );
 
+    // Every scheduled attempt hits the wire: initial + 3 retries.
+    final allAttempts = await _waitFor(() => server.requests >= 4);
+    expect(allAttempts, isTrue, reason: 'initial attempt + every retry '
+        'must hit the wire while the window is open');
+
+    // The window then closes for good — no growth once attempts settle.
+    final settled = server.requests;
+    await Future<void>.delayed(const Duration(seconds: 3));
+    expect(server.requests, settled,
+        reason: 'attempts stop once the window closes');
     expect(controller.enabled, isFalse);
     expect(controller.failure, CloudFailure.network);
+
+    // Credentials are dropped: the network returning changes nothing.
+    server.down = false;
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(server.requests, settled,
+        reason: 'no further attempts after the window closed');
+    expect(controller.enabled, isFalse);
+  });
+
+  test('a server-side credential rejection never retries (deterministic)',
+      () async {
+    final controller = _tuned(server, hasher,
+        await SharedPreferences.getInstance());
+    final history = VerifyHistory();
+    await history.add(_entry('n3'));
+
+    // The cloud account exists but was created with a DIFFERENT authKey —
+    // session creation 401s → wrongPassword, a failure no retry can fix.
+    final idHash = await cloudIdentifierHash(account.id);
+    server.users[idHash] = {'id': 'u-foreign', 'authKey': 'deadbeef'};
+
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    expect(controller.enabled, isFalse);
+    expect(controller.failure, CloudFailure.wrongPassword);
+    expect(server.requests, 2,
+        reason: 'exactly ONE attempt = lookup + session rejection; a '
+            'deterministic 401 must NOT schedule retries');
+
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(server.requests, 2,
+        reason: 'still one attempt after several backoff windows');
+    expect(controller.enabled, isFalse);
+  });
+
+  test('disable() cancels a pending auto-arm retry for good', () async {
+    final controller = _tuned(server, hasher,
+        await SharedPreferences.getInstance());
+    final history = VerifyHistory();
+    await history.add(_entry('n4'));
+
+    server.down = true;
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    expect(controller.enabled, isFalse);
+
+    await controller.disable();
+
+    // Settle the entire window — whatever interleaving happened, disable
+    // must stick and no retry may resurrect the connection.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    server.down = false;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(controller.enabled, isFalse,
+        reason: 'a pending retry must never re-arm after disable');
+    expect(server.users, isEmpty,
+        reason: 'no cloud account may be created after disable');
   });
 
   test('account switch re-arms sync but leaves the old vault alone',
