@@ -1,11 +1,11 @@
 {
-    "name": "mahtem",
-    "short_name": "mahtem",
+    "name": "Mahtem",
+    "short_name": "Mahtem",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Verify Ethiopian payment receipts — accounts and history stay on this device.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -24,11 +24,12 @@ Future<void> main() async {
   }
   // ── error safety net (v1.12.1) ──────────────────────────────────────
   // The local diagnostics trail always runs (Settings → Report a problem
-  // reads it back). The fallback handlers install ONLY when Sentry is
-  // NOT configured: with a DSN baked in, SentryFlutter.init installs its
-  // own handlers and double-reporting through two channels would only
-  // muddy the trail.
-  final diagnostics = DiagnosticsLog(prefs: prefs);
+  // reads it back). DiagnosticsLog.I is THE shared instance: the safety
+  // net, the error widget and the auth account store all record into it.
+  // The fallback handlers install ONLY when Sentry is NOT configured:
+  // with a DSN baked in, SentryFlutter.init installs its own handlers
+  // and double-reporting through two channels would only muddy the trail.
+  final diagnostics = DiagnosticsLog.I;
   await diagnostics.restore(prefs);
   try {
     final info = await PackageInfo.fromPlatform();

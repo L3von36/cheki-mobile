@@ -134,6 +134,17 @@ class DiagnosticsLog {
     }
   }
 
+  /// Drops every recorded entry (tests; future "clear trail" action).
+  /// Persists the empty trail when a store is attached.
+  void clear() {
+    try {
+      _entries.clear();
+      _persist();
+    } catch (_) {
+      // Never throw from a diagnostics housekeeping call.
+    }
+  }
+
   /// Multi-line human-readable dump for the Settings "copy" button.
   String copyText() {
     if (_entries.isEmpty) {

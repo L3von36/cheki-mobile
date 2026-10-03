@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/auth/account.dart';
 import '../core/auth/account_store.dart';
 import '../core/auth/password_hasher.dart';
+import '../core/error_safety_net.dart';
 
 /// Why a sign-up / sign-in attempt was refused. The UI maps these to
 /// localized messages; the controller stays language-free.
@@ -52,7 +53,7 @@ class AuthController extends ChangeNotifier {
     AccountKeyValue? store,
     PasswordHasher? hasher,
     DateTime Function()? now,
-  }) : _store = store ?? SecureAccountStore(),
+  }) : _store = store ?? ResilientAccountStore(),
        _hasher = hasher ?? PasswordHasher(),
        _now = now ?? (() => DateTime.now().toUtc());
 
@@ -129,7 +130,11 @@ class AuthController extends ChangeNotifier {
           .map(AccountRecord.tryFromJson)
           .whereType<AccountRecord>()
           .toList();
-    } catch (_) {
+    } catch (e, s) {
+      // Persisted accounts could not be decoded — surface it in the
+      // diagnostics trail instead of failing silently; sign-up still
+      // works and the next write replaces the corrupt payload.
+      DiagnosticsLog.I.record('auth: accounts payload unreadable — $e', s);
       _accounts = <AccountRecord>[];
     }
   }
@@ -145,7 +150,8 @@ class AuthController extends ChangeNotifier {
       if (id is String && _accounts.any((a) => a.id == id)) {
         _sessionId = id;
       }
-    } catch (_) {
+    } catch (e, s) {
+      DiagnosticsLog.I.record('auth: session payload unreadable — $e', s);
       _sessionId = null;
     }
   }
@@ -219,7 +225,15 @@ class AuthController extends ChangeNotifier {
     return _guard(() async {
       final validation = validateAccountIdentifier(identifier);
       if (validation is! AccountIdValid) {
-        return const AuthFailure(AuthError.accountNotFound);
+        // A malformed identifier is an INPUT problem, not a missing
+        // account — the old accountNotFound message here sent users
+        // re-creating accounts over a typo.
+        final issue = (validation as AccountIdInvalid).issue;
+        return AuthFailure(switch (issue) {
+          AccountIdIssue.empty || AccountIdIssue.invalidPhone =>
+            AuthError.invalidIdentifier,
+          AccountIdIssue.invalidEmail => AuthError.invalidEmail,
+        });
       }
       final id = validation.normalized;
       AccountRecord? account;

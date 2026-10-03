@@ -134,6 +134,18 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Accounts survive restarts — resilient on-device account storage**
+  (`v1.14.2`): fixes the reported bug where a freshly created account
+  vanished after reopening the app ("No account found for this
+  phone/email — create one first"). Accounts and the session now live in
+  Keystore-encrypted secure storage WITH a second copy in the app's
+  private storage; if the encrypted layer ever becomes unreadable
+  (Keystore invalidation, device migration, plugin migration bugs), the
+  next read self-heals from the mirror instead of losing the account.
+  Sign-in also reports malformed phone/email input truthfully instead of
+  claiming the account doesn't exist, and every storage failure is
+  recorded in Settings → Report a problem. Android auto-backup is now
+  disabled — nothing ever leaves the device via Google cloud backup.
 - **Self-healing sign-up sync** (`v1.14.1`): the zero-step arming below is
   no longer one-shot — if a sign-up or sign-in lands while the network is
   down (flaky mobile data, DNS hiccup), the phone KEEPS TRYING with
