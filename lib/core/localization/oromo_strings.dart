@@ -814,6 +814,13 @@ final class OromoStrings extends AppStrings {
   @override
   String cloudBackupEntryCount(int n) => 'Mirkaneessa $n olkaa\u2019ame';
 
+  @override
+  String get cloudAutoBackupTitle => 'Backup ofumaa';
+
+  @override
+  String get cloudAutoBackupSubtitle =>
+      'Erga mirkaneessaa tokko xumuramee booda ofumaan olkaa\u2019ama.';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

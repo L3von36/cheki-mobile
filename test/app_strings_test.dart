@@ -204,6 +204,12 @@ void main() {
       expect(s.cloudBackupEntryCount(5), contains('5'),
           reason: '${locale.code} cloudBackupEntryCount');
 
+      // v1.13.1: auto-backup toggle.
+      expect(s.cloudAutoBackupTitle, isNotEmpty,
+          reason: '${locale.code} cloudAutoBackupTitle');
+      expect(s.cloudAutoBackupSubtitle, isNotEmpty,
+          reason: '${locale.code} cloudAutoBackupSubtitle');
+
       // v1.9.0: history upgrade.
       expect(s.statsChecks, isNotEmpty, reason: '${locale.code} statsChecks');
       expect(s.statsVerified, isNotEmpty,

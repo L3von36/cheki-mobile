@@ -427,6 +427,12 @@ abstract base class AppStrings {
   /// Status line with [n] entries currently backed up.
   String cloudBackupEntryCount(int n);
 
+  /// Auto-backup toggle title (v1.13.1) — pushes each change by itself.
+  String get cloudAutoBackupTitle;
+
+  /// Auto-backup toggle subtitle.
+  String get cloudAutoBackupSubtitle;
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   /// Labels of the three summary cells at the top of the history list.

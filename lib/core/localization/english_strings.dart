@@ -726,6 +726,13 @@ final class EnglishStrings extends AppStrings {
   String cloudBackupEntryCount(int n) =>
       '$n check${n == 1 ? '' : 's'} backed up';
 
+  @override
+  String get cloudAutoBackupTitle => 'Auto-backup';
+
+  @override
+  String get cloudAutoBackupSubtitle =>
+      'Syncs automatically after each verification';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

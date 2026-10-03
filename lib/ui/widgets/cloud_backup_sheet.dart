@@ -193,6 +193,52 @@ class _CloudBackupSheetState extends State<CloudBackupSheet> {
                 color: MahtemPalette.red, fontSize: 11.5, fontWeight: FontWeight.w600),
           ),
         ],
+        const SizedBox(height: 8),
+        // Auto-backup (v1.13.1): once backup is on, every verification
+        // syncs by itself — this switch only pauses/resumes that push.
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
+          decoration: BoxDecoration(
+            color: isDark ? MahtemPalette.dCard : Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: (isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim)
+                  .withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.sync_rounded, size: 18, color: dim),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.cloudAutoBackupTitle,
+                      style: TextStyle(
+                        color: isDark ? MahtemPalette.dInk : MahtemPalette.lInk,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      strings.cloudAutoBackupSubtitle,
+                      style: TextStyle(color: dim, fontSize: 11, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: cloud.autoSyncEnabled,
+                activeThumbColor: MahtemPalette.green,
+                onChanged:
+                    cloud.isWorking ? null : (v) => cloud.setAutoSync(v),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 12),
         FilledButton(
           onPressed: cloud.isWorking ? null : () => _backupNow(context, cloud),

@@ -18,6 +18,9 @@ class FakeCloudServer {
   final users = <String, Map<String, dynamic>>{};
   final vaults = <String, Map<String, dynamic>>{};
   int revisionBumps = 0;
+  int putAttempts = 0; // every vault PUT, successful or not
+  bool failVaultPut = false; // 500 on vault writes
+  bool unauthorizedVault = false; // 401 on vault writes
 
   http.Client client() => MockClient((request) async {
         final path = request.url.path;
@@ -60,6 +63,13 @@ class FakeCloudServer {
           return http.Response(jsonEncode(v), 200);
         }
         if (request.method == 'PUT' && path == '/v1/vault') {
+          putAttempts++;
+          if (unauthorizedVault) {
+            return http.Response(jsonEncode({'error': 'unauthorized'}), 401);
+          }
+          if (failVaultPut) {
+            return http.Response(jsonEncode({'error': 'internal'}), 500);
+          }
           final body = jsonDecode(request.body) as Map<String, dynamic>;
           final existing = vaults[_uid(request)];
           if (existing != null &&
@@ -111,6 +121,42 @@ HistoryEntry _entry(String id, {int verifiedAt = 1000}) => HistoryEntry(
       verifiedAt: verifiedAt,
       status: 'verified',
     );
+
+/// Tiny auto-sync windows so tests exercise the real timers quickly.
+const _kDebounce = Duration(milliseconds: 30);
+const _kRetry = Duration(milliseconds: 40);
+const _kBackoff = Duration(milliseconds: 300);
+const _kCatchUp = Duration(milliseconds: 10);
+
+CloudController _tuned(FakeCloudServer server, PasswordHasher hasher,
+        SharedPreferences prefs,
+        {int Function()? revisionClock}) =>
+    CloudController(
+      api: CloudApi(client: server.client()),
+      hasher: hasher,
+      prefs: prefs,
+      revisionClock: revisionClock,
+      autoSyncDebounce: _kDebounce,
+      autoSyncRetry: _kRetry,
+      autoSyncBackoff: _kBackoff,
+      bootCatchUpDelay: _kCatchUp,
+    );
+
+Future<(CloudController, VerifyHistory)> _enabledSession(
+    FakeCloudServer server, PasswordHasher hasher, AccountRecord account,
+    {int revision = 60000}) async {
+  final prefs = await SharedPreferences.getInstance();
+  final controller = _tuned(server, hasher, prefs,
+      revisionClock: () => revision);
+  final history = VerifyHistory();
+  await controller.enable(
+    password: 'correct-horse',
+    account: account,
+    history: history,
+  );
+  controller.observe(history);
+  return (controller, history);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -324,5 +370,111 @@ void main() {
     await second.ensureLoaded();
     expect(second.enabled, isTrue);
     expect(second.hasSession, isTrue);
+  });
+
+  // ------------------------------------------- auto-sync (v1.13.1)
+
+  test('auto-syncs a change after the debounce window', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    expect(server.revisionBumps, 1); // the enable-time upload
+    expect(controller.hasUnsyncedChanges, isFalse);
+
+    await history.add(_entry('auto-1', verifiedAt: 2000));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(server.revisionBumps, 2); // pushed by itself
+    expect(controller.hasUnsyncedChanges, isFalse);
+    final key = await deriveVaultKey('correct-horse', 'user@example.com');
+    final merged = decodeVaultPayload(await decryptVaultBlob(
+        key, server.vaults.values.single['blob'] as String));
+    expect(merged.map((e) => e.id), contains('auto-1'));
+  });
+
+  test('coalesces a burst of changes into a single upload', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    for (var i = 0; i < 10; i++) {
+      await history.add(_entry('b$i', verifiedAt: 3000 + i));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(controller.hasUnsyncedChanges, isFalse);
+    expect(server.putAttempts, 2); // enable + exactly one auto push
+  });
+
+  test('toggle off pauses pushes; toggling on flushes pending changes',
+      () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+
+    await controller.setAutoSync(false);
+    await history.add(_entry('paused-1', verifiedAt: 4000));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(server.putAttempts, 1); // nothing pushed while paused
+    expect(controller.hasUnsyncedChanges, isTrue); // but flagged
+
+    await controller.setAutoSync(true);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(server.putAttempts, 2); // pending change flushed
+    expect(controller.hasUnsyncedChanges, isFalse);
+  });
+
+  test('auto-sync retries, then backs off, then recovers', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    server.failVaultPut = true;
+
+    await history.add(_entry('f1', verifiedAt: 5000));
+    // attempt 1 after debounce, attempts 2+3 after retry windows
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    expect(server.putAttempts, 4); // enable + 3 failed auto attempts
+    expect(controller.hasUnsyncedChanges, isTrue);
+    expect(controller.failure, CloudFailure.server);
+
+    // Inside the backoff window further changes stay local.
+    await history.add(_entry('f2', verifiedAt: 5100));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(server.putAttempts, 4);
+
+    // Server recovers and the backoff elapses — the push lands.
+    server.failVaultPut = false;
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(server.putAttempts, 5);
+    expect(controller.hasUnsyncedChanges, isFalse);
+  });
+
+  test('expired session stops auto-sync until re-enable', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    server.unauthorizedVault = true;
+
+    await history.add(_entry('x1', verifiedAt: 6000));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(controller.enabled, isFalse);
+    expect(controller.failure, CloudFailure.sessionExpired);
+    final deadAttempts = server.putAttempts;
+
+    await history.add(_entry('x2', verifiedAt: 6100));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(server.putAttempts, deadAttempts); // no pushes while dead
+  });
+
+  test('boot catch-up pushes changes lost mid-debounce', () async {
+    final (first, history) = await _enabledSession(server, hasher, account);
+    await history.add(_entry('lost-1', verifiedAt: 7000));
+    first.dispose(); // app dies before the debounce window elapses
+
+    // Next boot: same prefs, fresh controller over the same server.
+    final prefs = await SharedPreferences.getInstance();
+    final second = _tuned(server, hasher, prefs);
+    await second.ensureLoaded();
+    second.observe(history);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(server.revisionBumps, 2); // enable + catch-up push
+    expect(second.hasUnsyncedChanges, isFalse);
+    final key = await deriveVaultKey('correct-horse', 'user@example.com');
+    final merged = decodeVaultPayload(await decryptVaultBlob(
+        key, server.vaults.values.single['blob'] as String));
+    expect(merged.map((e) => e.id), contains('lost-1'));
   });
 }

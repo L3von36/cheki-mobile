@@ -134,6 +134,14 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Auto-backup — always-on sync** (`v1.13.1`): once Cloud backup is on,
+  the phone talks to the cloud by itself — every verification is pushed
+  automatically (debounced so a 50-row batch is one upload), app boots
+  catch up anything that never made it, and a daily pull brings in
+  changes made on another device. Failures retry with backoff and an
+  expired session pauses syncing until re-enable (nothing is lost — the
+  next push merge-uploads). An Auto-backup switch in the sheet pauses
+  the automatic push for manual-only control.
 - **Cloud backup — zero-knowledge history backup** (`v1.13.0`): Settings →
   Cloud backup links your device account to your own hosted account
   (Cloudflare Workers + KV) and merge-uploads the verification history as

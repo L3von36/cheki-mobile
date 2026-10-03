@@ -57,11 +57,14 @@ class MahtemApp extends StatelessWidget {
         // results. Fresh instance per app boot (nothing persists).
         ChangeNotifierProvider(create: (_) => BatchController()),
         ChangeNotifierProvider(create: (_) => VerifyHistory()),
-        // Cloud backup (v1.13.0) — opt-in zero-knowledge history backup.
-        // Restores its persisted session from the boot prefs; a no-op
-        // until the user enables it in Settings.
-        ChangeNotifierProvider(
+        // Cloud backup (v1.13.0, auto-sync v1.13.1) — opt-in zero-knowledge
+        // history backup. The proxy wiring attaches the history store, so
+        // while a backup session is live every local change auto-syncs
+        // (debounced) and boots catch up unsynced/stale state. observe()
+        // is idempotent; a no-op until the user enables it in Settings.
+        ChangeNotifierProxyProvider<VerifyHistory, CloudController>(
           create: (_) => CloudController(prefs: prefs)..ensureLoaded(),
+          update: (_, history, cloud) => cloud!..observe(history),
         ),
         ChangeNotifierProvider(create: (_) => AppTab()),
         // Licensing loads in the background — the paywall/gate awaits it.

@@ -817,6 +817,13 @@ final class TigrinyaStrings extends AppStrings {
   @override
   String cloudBackupEntryCount(int n) => '$n ፍተሻ ተኣቐበበ';
 
+  @override
+  String get cloudAutoBackupTitle => 'መጠባበቂያ ብራሱ';
+
+  @override
+  String get cloudAutoBackupSubtitle =>
+      'ኣብ ግርበት ነፍሲ ወከፍ ምርግጋጽ ብራሱ ይመሳስል።';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override

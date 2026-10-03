@@ -15,6 +15,7 @@
 /// the privacy-safe default (the user can always re-enable).
 library;
 
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,6 +38,11 @@ class CloudController extends ChangeNotifier {
     PasswordHasher? hasher,
     SharedPreferences? prefs,
     int Function()? revisionClock,
+    this.autoSyncDebounce = const Duration(seconds: 20),
+    this.autoSyncRetry = const Duration(minutes: 2),
+    this.autoSyncBackoff = const Duration(minutes: 15),
+    this.bootCatchUpDelay = const Duration(seconds: 5),
+    this.maxAutoFailures = 3,
   })  : _api = api ?? CloudApi(),
         _hasher = hasher ?? PasswordHasher(),
         _prefs = prefs,
@@ -47,6 +53,13 @@ class CloudController extends ChangeNotifier {
   final SharedPreferences? _prefs;
   final int Function() _revisionClock;
 
+  // Auto-sync tuning (v1.13.1). Injected small in tests.
+  final Duration autoSyncDebounce;
+  final Duration autoSyncRetry;
+  final Duration autoSyncBackoff;
+  final Duration bootCatchUpDelay;
+  final int maxAutoFailures;
+
   // persisted state
   bool _enabled = false;
   int? _lastSyncAt;
@@ -54,10 +67,20 @@ class CloudController extends ChangeNotifier {
   String? _identifierHash;
   String? _vaultKeyHex;
   int? _sessionExpiresAt;
+  bool _autoSync = true;
+  bool _dirty = false;
 
   // ephemeral state
   CloudStep _step = CloudStep.idle;
   CloudFailure _failure = CloudFailure.none;
+
+  // auto-sync engine state (ephemeral)
+  VerifyHistory? _history;
+  Timer? _autoTimer;
+  int _autoFailures = 0;
+  int? _nextAutoAttemptAt;
+  bool _catchUpPending = false;
+  static const int _kStaleSyncMs = 24 * 60 * 60 * 1000;
 
   // ---------------------------------------------------------------- accessors
   bool get enabled => _enabled;
@@ -72,6 +95,118 @@ class CloudController extends ChangeNotifier {
       (_sessionExpiresAt == null ||
           _sessionExpiresAt! > DateTime.now().millisecondsSinceEpoch);
 
+  /// Whether local changes push to the cloud automatically (v1.13.1).
+  bool get autoSyncEnabled => _autoSync;
+
+  /// True when a local change has not reached the cloud yet.
+  bool get hasUnsyncedChanges => _dirty;
+
+  // ---------------------------------------------------------------- wiring
+  /// Hooks the history store so every local change can auto-sync while a
+  /// backup session is live. Idempotent for the same instance (the proxy
+  /// provider re-runs it on every history notification).
+  void observe(VerifyHistory history) {
+    if (_observes(history)) return;
+    _history?.removeListener(_onHistoryChanged);
+    _history = history;
+    history.addListener(_onHistoryChanged);
+    if (_catchUpPending) {
+      if (_enabled && hasSession && _autoSync) {
+        _catchUpPending = false;
+        _scheduleAutoSync(bootCatchUpDelay);
+      }
+    }
+  }
+
+  bool _observes(VerifyHistory history) =>
+      _history != null && identical(_history, history);
+
+  // ---------------------------------------------------------------- auto-sync
+  void _onHistoryChanged() {
+    // Changes made by our own restore()/enable() are already in the
+    // cloud — only user-driven edits mark the session dirty. Dirty is
+    // tracked even while auto-sync is paused, so the next push (toggle
+    // back on, boot catch-up) never loses a change.
+    if (_step == CloudStep.working) return;
+    if (!_enabled) return;
+    _dirty = true;
+    _persistState();
+    if (_autoSync) _scheduleAutoSync(autoSyncDebounce);
+  }
+
+  void _scheduleAutoSync(Duration delay) {
+    if (!_enabled || !_autoSync || !hasSession) return;
+    _autoTimer?.cancel();
+    _autoTimer = Timer(delay, _runAutoSync);
+  }
+
+  Future<void> _runAutoSync() async {
+    if (!_enabled || !_autoSync || !hasSession) return;
+    if (isWorking) {
+      _scheduleAutoSync(autoSyncRetry);
+      return;
+    }
+    final gate = _nextAutoAttemptAt;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (gate != null && now < gate) {
+      _scheduleAutoSync(Duration(milliseconds: gate - now));
+      return;
+    }
+    final history = _history;
+    if (history == null) return;
+    _failure = CloudFailure.none;
+    _setWorking(true);
+    try {
+      await _mergeUpload(history);
+      _dirty = false;
+      _autoFailures = 0;
+      _nextAutoAttemptAt = null;
+      _persistState();
+    } on CloudApiException catch (e) {
+      if (e.error == CloudApiError.unauthorized) {
+        // Session died server-side — _handleApiFailure disables us, so
+        // auto-sync stops until the user re-enables (re-enable merges
+        // whatever is still on the server).
+        _handleApiFailure(e);
+      } else {
+        _failure = _failureFor(e);
+        _noteAutoFailure();
+      }
+    } catch (_) {
+      _failure = CloudFailure.network;
+      _noteAutoFailure();
+    } finally {
+      _setWorking(false);
+    }
+  }
+
+  void _noteAutoFailure() {
+    _autoFailures++;
+    final backoff = _autoFailures >= maxAutoFailures;
+    if (backoff) {
+      _nextAutoAttemptAt =
+          DateTime.now().millisecondsSinceEpoch + autoSyncBackoff.inMilliseconds;
+    }
+    _scheduleAutoSync(backoff ? autoSyncBackoff : autoSyncRetry);
+  }
+
+  /// User-facing auto-backup toggle. Turning it on syncs pending changes
+  /// promptly; turning it off cancels the pending push (manual Back-up-now
+  /// still works).
+  Future<void> setAutoSync(bool on) async {
+    if (_autoSync == on) return;
+    _autoSync = on;
+    if (on) {
+      if (_dirty) {
+        _scheduleAutoSync(autoSyncDebounce);
+      }
+    } else {
+      _autoTimer?.cancel();
+    }
+    _persistState();
+    notifyListeners();
+  }
+
   // ---------------------------------------------------------------- lifecycle
   Future<void> ensureLoaded() async {
     final prefs = _prefs;
@@ -82,6 +217,15 @@ class CloudController extends ChangeNotifier {
     _vaultKeyHex = prefs.getString(_kVaultKey);
     _sessionExpiresAt = prefs.getInt(_kExpiresAt);
     _lastSyncAt = prefs.getInt(_kLastSync);
+    _autoSync = prefs.getBool(_kAutoSync) ?? true;
+    _dirty = prefs.getBool(_kDirty) ?? false;
+    // Boot catch-up: push anything that never made it (app killed
+    // mid-debounce) and pull when the last sync is stale (changes from
+    // another device). Consumed once a history store is attached.
+    final sync = _lastSyncAt;
+    final stale = sync == null ||
+        DateTime.now().millisecondsSinceEpoch - sync > _kStaleSyncMs;
+    _catchUpPending = _dirty || stale;
     if (_enabled &&
         (_sessionToken == null ||
             _vaultKeyHex == null ||
@@ -140,6 +284,10 @@ class CloudController extends ChangeNotifier {
       // First sync is a MERGE so an existing cloud copy (device change /
       // re-enable) is preserved and combined, never clobbered.
       await _mergeUpload(history);
+      _dirty = false;
+      _autoFailures = 0;
+      _nextAutoAttemptAt = null;
+      _catchUpPending = false;
       _persistState();
       return true;
     } on CloudApiException catch (e) {
@@ -166,6 +314,9 @@ class CloudController extends ChangeNotifier {
     _setWorking(true);
     try {
       await _mergeUpload(history);
+      _dirty = false;
+      _autoFailures = 0;
+      _nextAutoAttemptAt = null;
       _persistState();
       return true;
     } on CloudApiException catch (e) {
@@ -221,6 +372,7 @@ class CloudController extends ChangeNotifier {
         } catch (_) {/* best effort */}
       }
     } finally {
+      _autoTimer?.cancel();
       _enabled = false;
       _sessionToken = null;
       _identifierHash = null;
@@ -228,6 +380,9 @@ class CloudController extends ChangeNotifier {
       _sessionExpiresAt = null;
       _lastSyncAt = null;
       _failure = CloudFailure.none;
+      _autoFailures = 0;
+      _nextAutoAttemptAt = null;
+      _dirty = false;
       _persistState();
       _setWorking(false);
     }
@@ -320,6 +475,8 @@ class CloudController extends ChangeNotifier {
   static const String _kVaultKey = 'cloud.vaultKey';
   static const String _kExpiresAt = 'cloud.expiresAt';
   static const String _kLastSync = 'cloud.lastSyncAt';
+  static const String _kAutoSync = 'cloud.autoSync';
+  static const String _kDirty = 'cloud.dirty';
 
   void _persistState() {
     final prefs = _prefs;
@@ -344,8 +501,17 @@ class CloudController extends ChangeNotifier {
       } else {
         prefs.setInt(_kLastSync, sync);
       }
+      prefs.setBool(_kAutoSync, _autoSync);
+      prefs.setBool(_kDirty, _dirty);
     } catch (_) {
       // Storage failure keeps the in-memory state for this run.
     }
+  }
+
+  @override
+  void dispose() {
+    _autoTimer?.cancel();
+    _history?.removeListener(_onHistoryChanged);
+    super.dispose();
   }
 }

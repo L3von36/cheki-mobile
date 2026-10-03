@@ -775,6 +775,13 @@ final class AmharicStrings extends AppStrings {
   String cloudBackupEntryCount(int n) =>
       '$n ፍተሻ${n == 1 ? '' : 'ዎች'} ተጠብቀዋል';
 
+  @override
+  String get cloudAutoBackupTitle => 'በራስ-ሰር መጠባበቂያ';
+
+  @override
+  String get cloudAutoBackupSubtitle =>
+      'ከእያንዳንዱ ማረጋገጫ በኋላ በራስ-ሰር ያመሳስራል።';
+
   // ------------------------------------------------- history upgrade (v1.9.0)
 
   @override
