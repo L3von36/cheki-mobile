@@ -113,6 +113,17 @@ Future<AccountRecord> _account(PasswordHasher hasher) async {
   );
 }
 
+Future<AccountRecord> _secondAccount(PasswordHasher hasher) async {
+  final hash = await hasher.hash('other-pass');
+  return AccountRecord(
+    id: 'other@example.com',
+    identifier: 'other@example.com',
+    displayName: 'Other User',
+    passwordHash: hash.encode(),
+    createdAtUtc: DateTime(2026),
+  );
+}
+
 HistoryEntry _entry(String id, {int verifiedAt = 1000}) => HistoryEntry(
       id: id,
       bankId: 'cbe',
@@ -476,5 +487,126 @@ void main() {
     final merged = decodeVaultPayload(await decryptVaultBlob(
         key, server.vaults.values.single['blob'] as String));
     expect(merged.map((e) => e.id), contains('lost-1'));
+  });
+
+  // ------------------------------------------- auto-enable (v1.14.0)
+
+  test('autoEnable arms backup at sign-up with no manual step', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs,
+        revisionClock: () => 70000);
+    final history = VerifyHistory();
+    await history.add(_entry('s1', verifiedAt: 100));
+
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+
+    expect(controller.enabled, isTrue);
+    expect(controller.failure, CloudFailure.none);
+    expect(server.users, hasLength(1)); // cloud account created by itself
+    expect(server.revisionBumps, 1); // first merge upload ran by itself
+    expect(prefs.getBool('cloud.enabled'), isTrue);
+  });
+
+  test('sign-in on a new device restores cloud history automatically',
+      () async {
+    // Device 1 backs up one entry.
+    SharedPreferences.setMockInitialValues({});
+    final d1 = _tuned(server, hasher, await SharedPreferences.getInstance(),
+        revisionClock: () => 80000);
+    final h1 = VerifyHistory();
+    await h1.add(_entry('from-phone-1', verifiedAt: 9000));
+    await d1.enable(password: 'correct-horse', account: account, history: h1);
+
+    // Device 2: no persisted state at all (fresh install), empty local
+    // history — the user just signs in with the same credentials.
+    final d2 = CloudController(
+      api: CloudApi(client: server.client()),
+      hasher: hasher,
+      revisionClock: () => 81000,
+      autoSyncDebounce: _kDebounce,
+      autoSyncRetry: _kRetry,
+      autoSyncBackoff: _kBackoff,
+      bootCatchUpDelay: _kCatchUp,
+    );
+    final h2 = VerifyHistory();
+
+    await d2.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: h2,
+    );
+
+    expect(d2.enabled, isTrue);
+    expect(h2.entries.map((e) => e.id), contains('from-phone-1'),
+        reason: 'the cloud copy must come down with no manual restore');
+  });
+
+  test('autoEnable is a no-op when this account already syncs', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    final putsBefore = server.putAttempts;
+    final usersBefore = server.users.length;
+
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+
+    expect(controller.enabled, isTrue);
+    expect(server.putAttempts, putsBefore); // no second session/upload churn
+    expect(server.users.length, usersBefore);
+  });
+
+  test('autoEnable stays silent when the network is down', () async {
+    final offline = CloudApi(client: MockClient((request) async {
+      throw http.ClientException('offline');
+    }));
+    final controller = CloudController(api: offline, hasher: hasher);
+    final history = VerifyHistory();
+    await history.add(_entry('n1'));
+
+    // Must not throw — the auth screens fire-and-forget this call.
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+
+    expect(controller.enabled, isFalse);
+    expect(controller.failure, CloudFailure.network);
+  });
+
+  test('account switch re-arms sync but leaves the old vault alone',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = _tuned(server, hasher, await SharedPreferences.getInstance(),
+        revisionClock: () => 90000);
+    final history = VerifyHistory();
+    await history.add(_entry('a1', verifiedAt: 100));
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    final firstVaultKeys = List.of(server.vaults.keys);
+
+    final other = await _secondAccount(hasher);
+    await controller.autoEnable(
+      password: 'other-pass',
+      account: other,
+      history: history,
+    );
+
+    expect(controller.enabled, isTrue);
+    expect(controller.failure, CloudFailure.none);
+    expect(server.users, hasLength(2));
+    expect(server.vaults.keys, containsAll(firstVaultKeys),
+        reason: 'the previous account cloud copy must survive the switch');
+    expect(server.vaults, hasLength(2)); // new account has its own vault
   });
 }

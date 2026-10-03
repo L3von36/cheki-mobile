@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/verify_history.dart';
 import '../../../state/auth_controller.dart';
+import '../../../state/cloud_controller.dart';
 import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import 'auth_shared.dart';
@@ -67,9 +71,20 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
     if (!mounted) return;
     switch (result) {
-      case AuthSuccess():
+      case AuthSuccess(:final account):
         // The gate rebuilds into the shell; clear any pushed auth route.
         Navigator.of(context).popUntil((route) => route.isFirst);
+        // v1.14.0: cloud backup arms ITSELF — no settings visit, no
+        // re-typed password, no button. Fire-and-forget: the shell is
+        // usable immediately and a network failure stays silent (the
+        // Settings sheet remains the manual fallback).
+        unawaited(
+          context.read<CloudController>().autoEnable(
+                password: _passwordCtrl.text,
+                account: account,
+                history: context.read<VerifyHistory>(),
+              ),
+        );
       case AuthFailure(:final error):
         setState(() => _error = strings.errorAuth(error));
     }

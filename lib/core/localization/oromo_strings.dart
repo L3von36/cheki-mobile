@@ -161,9 +161,9 @@ final class OromoStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      "Herregoonni meeshaa kana irratti qofa jiraatu — iccitii ta'ee "
-      'bakka kamiyyuu hin eramamu. Seenaa mirkaneessaa keessas akkasuma '
-      'iccitiidhaan eegama.';
+      'Herregoonni meeshaa kana irratti qofa jiraatu — iccitii ta\u2019ee '
+      'bakka kamiyyuu hin eramamu. Backup seenaa mirkaneessaa haramoo '
+      'ta\u2019ee qofa erama — jecha icciti keetiin qofa kan bana.';
 
   @override
   String errorAuth(AuthError error) => switch (error) {

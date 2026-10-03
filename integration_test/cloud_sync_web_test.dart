@@ -1,4 +1,4 @@
-/// Flutter Web end-to-end proof for the v1.13.1 always-on cloud sync.
+/// Flutter Web end-to-end proof for the v1.14.0 self-arming cloud sync.
 ///
 /// Boots the REAL MahtemApp (real prefs, real secure storage, real network
 /// stack) inside a real Chrome browser and talks to the LIVE Cloudflare
@@ -9,9 +9,10 @@
 ///
 /// What this proves, in order:
 ///   1. the app runs and signs up on Flutter Web;
-///   2. enabling Cloud Backup reaches the live Worker (lookup/create/
-///      session/first merge upload) and reports success in the UI state;
-///   3. WITHOUT touching the manual "Back-up now" button, a local history
+///   2. cloud backup arms ITSELF at sign-up — no settings visit, no
+///      sheet, no button: lookup/create/session/first merge upload all
+///      happen against the live Worker while the shell is already usable;
+///   3. WITHOUT touching any manual "Back-up now" button, a local history
 ///      change is pushed to Cloudflare automatically after the debounce
 ///      window — the phone talked to the Worker on its own;
 ///   4. an independent session (fresh login, same credentials, separate
@@ -36,7 +37,6 @@ import 'package:mahtem/core/cloud/cloud_vault.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/main.dart' as app;
 import 'package:mahtem/state/cloud_controller.dart';
-import 'package:mahtem/ui/widgets/cloud_backup_sheet.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -93,37 +93,31 @@ void main() {
 
         final appCtx = tester.element(find.byType(MaterialApp).first);
         final cloud = Provider.of<CloudController>(appCtx, listen: false);
-        expect(cloud.enabled, isFalse);
-        expect(cloud.autoSyncEnabled, isTrue,
-            reason: 'auto-sync defaults to ON once backup is enabled');
 
-        // ── 2. enable Cloud Backup (real network round-trips) ──────────
-        await step('open settings + cloud sheet', () async {
-          await tester.tap(find.byIcon(Icons.settings_outlined));
-          await settle();
-          await tester.tap(find.text('Cloud backup — off'));
-          await settle();
-          final sheetField = find
-              .descendant(
-                of: find.byType(CloudBackupSheet),
-                matching: find.byType(TextField),
-              )
-              .first;
-          await tester.enterText(sheetField, password);
-          await tester.pump();
+        // ── 2. backup armed ITSELF at sign-up (no settings, no sheet!) ──
+        late final int syncAfterEnable;
+        await step('cloud sync self-arms at sign-up (live Worker)', () async {
+          // autoEnable runs fire-and-forget right after the sign-up
+          // button — poll until the session lands (lookup/create/
+          // session/first merge upload against the real Worker). The
+          // controller must be IDLE two checks in a row before we
+          // proceed: exiting on enabled==true alone would race the
+          // trailing restore() and swallow the next history change.
+          var stable = 0;
+          for (var i = 0; i < 80 && stable < 2; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            await tester.pump();
+            stable = (cloud.enabled && !cloud.isWorking) ? stable + 1 : 0;
+          }
+          expect(cloud.enabled, isTrue,
+              reason: 'backup must arm itself at sign-up — no settings '
+                  'visit, no sheet, no button '
+                  '(failure was: ${cloud.failure})');
+          expect(cloud.isWorking, isFalse,
+              reason: 'arming (enable+restore) must be fully settled '
+                  'before the next history change');
+          syncAfterEnable = cloud.lastSyncAt!;
         });
-
-        await step('tap Turn on backup (live Worker)', () async {
-          await tester.tap(find.text('Turn on backup'));
-          await settle(const Duration(seconds: 12));
-        });
-
-        expect(cloud.enabled, isTrue,
-            reason: 'enable must succeed against the live Worker '
-                '(failure was: ${cloud.failure})');
-        final syncAfterEnable = cloud.lastSyncAt;
-        expect(syncAfterEnable, isNotNull,
-            reason: 'first merge-upload should stamp lastSyncAt');
 
         // ── 3. local change → automatic push (no manual button!) ───────
         await step('insert history entry via real store', () async {
@@ -147,17 +141,18 @@ void main() {
 
         // The debounce is 20s in the real app — wait it out in real time.
         // This is the "phone talks to Cloudflare by itself" moment.
-        await Future<void>.delayed(debounced);
-        await settle(const Duration(seconds: 5));
-
-        expect(cloud.hasUnsyncedChanges, isFalse,
-            reason: 'auto-sync must clear the dirty flag after pushing');
-        expect(cloud.lastSyncAt, greaterThan(syncAfterEnable!),
-            reason: 'auto-sync must refresh the last-sync stamp');
+        await step('debounce elapses and the auto-push lands', () async {
+          await Future<void>.delayed(debounced);
+          await settle(const Duration(seconds: 5));
+          expect(cloud.hasUnsyncedChanges, isFalse,
+              reason: 'auto-sync must clear the dirty flag after pushing');
+          expect(cloud.lastSyncAt, greaterThan(syncAfterEnable),
+              reason: 'auto-sync must refresh the last-sync stamp');
+        });
 
         // ── 4. independent device check: download + decrypt the vault ──
-        final remote = await step(
-          'independent session downloads vault from live Worker',
+        await step(
+          'independent session downloads + decrypts the vault',
           () async {
             final idHash = await cloudIdentifierHash(identifier);
             final authKey = await deriveCloudAuthKey(password);
@@ -166,16 +161,16 @@ void main() {
               identifierHash: idHash,
               authKey: authKey,
             );
-            final r = await api.getVault(session.sessionToken);
-            expect(r, isNotNull, reason: 'vault must exist on the Worker');
-            return r!;
+            final remote = await api.getVault(session.sessionToken);
+            expect(remote, isNotNull,
+                reason: 'vault must exist on the Worker');
+            final vaultKey = await deriveVaultKey(password, identifier);
+            final entries = decodeVaultPayload(
+                await decryptVaultBlob(vaultKey, remote!.blob));
+            expect(entries.map((e) => e.id), contains(entryId),
+                reason: 'the auto-pushed vault must contain the new entry');
           },
         );
-        final vaultKey = await deriveVaultKey(password, identifier);
-        final entries =
-            decodeVaultPayload(await decryptVaultBlob(vaultKey, remote.blob));
-        expect(entries.map((e) => e.id), contains(entryId),
-            reason: 'the auto-pushed vault must contain the new entry');
 
         // ── 5. turn off → cloud copy deleted (privacy default) ─────────
         await step('disable deletes the cloud copy', () async {

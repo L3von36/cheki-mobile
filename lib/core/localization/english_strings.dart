@@ -153,7 +153,8 @@ final class EnglishStrings extends AppStrings {
   @override
   String get authPrivacyNote =>
       'Accounts live only on this device — encrypted, and never sent '
-      'anywhere. Your verification history stays private.';
+      'anywhere. History backups travel only as ciphertext, sealed with '
+      'your password.';
 
   @override
   String errorAuth(AuthError error) => switch (error) {

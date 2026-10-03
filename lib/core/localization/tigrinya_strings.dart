@@ -158,8 +158,9 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      'ሕሳብኩም ኣብዚ ተሌፎን እዚ ጥራይ ይቐመጥ — ናብ ወጻኢ '
-      'ኣይሓድግን። ታሪኽ ምርግጋጽኩም ውልቃዊ ክኾን ይቕጽል።';
+      'ሕሳብኩም ኣብዚ ተሌፎን እዚ ጥራይ ይቐመጥ — ናብ ወጻኢ ኣይሓድግን። '
+      'መጠባበቂያ ታሪኽ ምርግጋጽ ብመስቕሊ ጥራይ ይሓልፍ — ብተምሲል ቃል '
+      'ሕደጋኹም ጥራይ ዚኽፈት።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {

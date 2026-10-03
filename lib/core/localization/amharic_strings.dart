@@ -155,7 +155,8 @@ final class AmharicStrings extends AppStrings {
   @override
   String get authPrivacyNote =>
       'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ብቻ ይቀመጣል — ወደ ውጭ በጭራሽ አይላክም። '
-      'የማረጋገጫ ታሪክዎ የግል ይቆያል።';
+      'የማረጋገጫ ታሪክ መጠባበቂያዎች ተመስጥረው ብቻ ይላካሉ — በመግቢያ ቃልዎ ብቻ '
+      'ይከፈታሉ።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {

@@ -1,18 +1,25 @@
-/// Mahtem Cloud Backup controller (v1.13.0) — opt-in, zero-knowledge.
+/// Mahtem Cloud Backup controller — zero-knowledge, self-arming.
 ///
 /// Local-first forever: the app works fully without this controller ever
-/// being touched. Enabling it requires the user's own account password
-/// (verified against the LOCAL account record first — the same password
-/// that already protects the device account), then:
+/// reaching the network. Since v1.14.0 the backup arms ITSELF: the auth
+/// screens call [autoEnable] right after a successful sign-up / sign-in
+/// while the plaintext password is still in hand — no settings visit, no
+/// second password prompt, no button. That call:
 ///
-///   1. derive authKey + identifierHash + vault key on-device,
-///   2. create (or reuse) the cloud account for that identifier hash,
-///   3. open a session, merge-upload the local history as one AES-GCM
-///      blob whose key never leaves the phone.
+///   1. verifies the password against the LOCAL account record first,
+///   2. derives authKey + identifierHash + vault key on-device,
+///   3. creates (or reuses) the cloud account for that identifier hash,
+///   4. opens a session, merge-uploads the local history as one AES-GCM
+///      blob whose key never leaves the phone,
+///   5. pulls cloud-only entries back down (a fresh sign-in on a new
+///      device restores the history with zero user action).
 ///
 /// The server stores only ciphertext + digests — see cloud_keys.dart.
-/// Turning the feature OFF deletes both the session and the cloud copy,
-/// the privacy-safe default (the user can always re-enable).
+/// After arming, auto-sync (v1.13.1) keeps the mirror live: every local
+/// change is pushed debounced, boots catch up unsynced/stale state, and
+/// failures retry with backoff. Turning the feature OFF deletes both the
+/// session and the cloud copy (privacy-safe default); the next sign-in
+/// arms it again.
 library;
 
 import 'dart:async';
@@ -205,6 +212,43 @@ class CloudController extends ChangeNotifier {
     }
     _persistState();
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------- auto-on
+  /// v1.14.0 — backup arms ITSELF: the auth screens call this right after
+  /// a successful sign-up / sign-in, while the plaintext password is still
+  /// in hand. No settings visit, no second password prompt, no button.
+  ///
+  /// Fire-and-forget contract: failures never escape (enable/restore
+  /// already swallow them into [failure]); an offline sign-up simply
+  /// stays un-synced and the Settings sheet remains the manual fallback.
+  /// Signing in on a new device therefore restores the history without
+  /// any user action: enable() merge-uploads local ∪ remote, then
+  /// restore() pulls cloud-only entries down (a no-op on fresh sign-up).
+  Future<void> autoEnable({
+    required String password,
+    required AccountRecord account,
+    required VerifyHistory history,
+  }) async {
+    if (isWorking) return;
+    // Already syncing THIS exact account (re-sign-in)? Everything is
+    // live — a second session would only burn server writes.
+    if (_enabled &&
+        hasSession &&
+        _identifierHash != null &&
+        _identifierHash == await cloudIdentifierHash(account.id)) {
+      return;
+    }
+    // Account SWITCH (another device account): re-link to that cloud
+    // identity. The previous account's server copy is intentionally left
+    // untouched — signing back into it merges and continues.
+    final ok = await enable(
+      password: password,
+      account: account,
+      history: history,
+    );
+    if (!ok) return;
+    await restore(history);
   }
 
   // ---------------------------------------------------------------- lifecycle

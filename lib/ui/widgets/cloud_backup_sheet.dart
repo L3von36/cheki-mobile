@@ -1,9 +1,12 @@
-/// Cloud Backup sheet (v1.13.0) — opt-in, zero-knowledge backup of the
-/// verification history to the user's own Cloudflare-hosted Mahtem API.
+/// Cloud Backup sheet — zero-knowledge backup of the verification
+/// history to the user's own Cloudflare-hosted Mahtem API.
 ///
-/// OFF state: privacy explainer + password field (the SAME password as
-/// the device account — verified locally first, never sent anywhere).
-/// ON state: last-sync status, Back up now / Restore / Turn off.
+/// Since v1.14.0 backup arms itself at sign-up/sign-in; this sheet is
+/// the status + control surface, and the manual fallback when arming
+/// failed (e.g. offline). OFF state: privacy explainer + password field
+/// (the SAME password as the device account — verified locally first,
+/// never sent anywhere). ON state: last-sync status, Auto-backup switch,
+/// Back up now / Restore / Turn off.
 library;
 
 

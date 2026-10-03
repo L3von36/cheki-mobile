@@ -134,6 +134,14 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Zero-step cloud sync** (`v1.14.0`): backup arms ITSELF — the moment
+  you create your account (or sign in on a new device) the phone links to
+  your hosted account and starts mirroring your verification history,
+  encrypted end-to-end. No settings visit, no second password prompt, no
+  button: signing in on a new phone restores your history automatically.
+  An offline sign-up simply stays local (the Settings sheet remains the
+  manual fallback), turning backup off still deletes the cloud copy, and
+  the next sign-in arms it again.
 - **Auto-backup — always-on sync** (`v1.13.1`): once Cloud backup is on,
   the phone talks to the cloud by itself — every verification is pushed
   automatically (debounced so a 50-row batch is one upload), app boots
@@ -150,7 +158,7 @@ Notes:
   ciphertext it can never open — the raw password and the vault key never
   leave the device. Restore on a new phone merges (never overwrites)
   local history; turning backup off deletes the cloud copy. The app
-  stays fully local-first — backup is strictly opt-in.
+  stays fully local-first — the vault key never leaves the device.
 - **Global error safety net + "Report a problem"** (`v1.12.1`): unexpected
   framework and async errors no longer vanish or show Flutter's grey
   developer box. Every build keeps a small, local-only diagnostics trail
