@@ -54,7 +54,6 @@ android/app/upload-keystore.jks
 # Generated
 *.g.dart
 *.freezed.dart
-/lib/generated_plugin_registrant.dart
 
 # Platform
  ios/Pods/
