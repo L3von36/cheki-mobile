@@ -40,13 +40,12 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Ship ARM only. 100% of the phones Mahtem serves run armeabi-v7a or
-        // arm64-v8a; x86_64 exists for emulators and rare Intel devices and
-        // was adding ~37 MB to the universal APK. Each ABI carries its own
-        // copy of the Flutter engine + ML Kit OCR + barcode native libs.
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
+        // NOTE on ABIs: AGP forbids ndk.abiFilters alongside the splits
+        // configuration the Flutter gradle plugin manages. The universal APK
+        // is narrowed to ARM via `--target-platform=android-arm,android-arm64`
+        // on the build command (see .github/workflows/release.yml). x86_64
+        // only exists for emulators/rare Intel devices and was adding ~37 MB
+        // to the universal APK — every real phone runs armeabi-v7a/arm64.
     }
 
     // Deflate native libraries inside the APK instead of storing them raw.
