@@ -137,6 +137,7 @@ abstract base class AppStrings {
   String get hidePassword;
   String get signingIn;
   String get creatingAccount;
+  String get accountCreatedSuccess;
   String get authPrivacyNote;
   String errorAuth(AuthError error);
   String get genericAuthError;

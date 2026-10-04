@@ -55,37 +55,37 @@ class _SignInScreenState extends State<SignInScreen> {
     // would see the button stop spinning and nothing else (reported as
     // "sign in doesn't create an account"). Known failures map to
     // localized AuthErrors; anything unknown shows the generic message.
+    final cloud = context.read<CloudController>();
+    final history = context.read<VerifyHistory>();
+    final navigator = Navigator.of(context);
+    final password = _passwordCtrl.text;
+
     AuthResult? result;
     try {
       result = await auth.signIn(
         identifier: _identifierCtrl.text,
-        password: _passwordCtrl.text,
+        password: password,
       );
     } catch (_) {
       result = null;
     }
-    if (!mounted) return;
-    if (result == null) {
-      setState(() => _error = strings.genericAuthError);
-      return;
-    }
+
     switch (result) {
       case AuthSuccess(:final account):
-        // The gate rebuilds into the shell; clear any pushed auth route.
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        // v1.14.0: cloud backup arms ITSELF — signing in on a new device
-        // pulls the cloud copy down with zero user action. Fire-and-
-        // forget: a network failure stays silent; the Settings sheet
-        // remains the manual fallback.
+        if (navigator.canPop()) {
+          navigator.popUntil((route) => route.isFirst);
+        }
         unawaited(
-          context.read<CloudController>().autoEnable(
-                password: _passwordCtrl.text,
-                account: account,
-                history: context.read<VerifyHistory>(),
-              ),
+          cloud.autoEnable(
+            password: password,
+            account: account,
+            history: history,
+          ),
         );
       case AuthFailure(:final error):
-        setState(() => _error = strings.errorAuth(error));
+        if (mounted) setState(() => _error = strings.errorAuth(error));
+      case null:
+        if (mounted) setState(() => _error = strings.genericAuthError);
     }
   }
 

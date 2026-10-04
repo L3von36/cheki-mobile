@@ -153,6 +153,9 @@ final class AmharicStrings extends AppStrings {
   String get creatingAccount => 'መለያ በመክፈት ላይ…';
 
   @override
+  String get accountCreatedSuccess => 'መለያዎ በተሳካ ሁኔታ ተፈጥሯል!';
+
+  @override
   String get authPrivacyNote =>
       'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ይቀመጣል — የይለፍ ቃልዎ ግን ወደ ውጭ አይላክም። '
       'በአዲስ መሣሪያ ላይ ሲገቡ ከይለፍ ቃልዎ የተሰራ አንድ-አቅጣጫ ቁልፍ ብቻ ይላካል፤ '

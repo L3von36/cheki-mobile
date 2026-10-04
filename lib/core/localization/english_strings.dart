@@ -151,6 +151,9 @@ final class EnglishStrings extends AppStrings {
   String get creatingAccount => 'Creating account…';
 
   @override
+  String get accountCreatedSuccess => 'Account created — you\'re all set!';
+
+  @override
   String get authPrivacyNote =>
       'Accounts live on this device, encrypted — your password never '
       'leaves it. New-device sign-ins prove themselves with a one-way '

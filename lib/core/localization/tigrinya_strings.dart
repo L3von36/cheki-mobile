@@ -157,6 +157,9 @@ final class TigrinyaStrings extends AppStrings {
   String get creatingAccount => 'ሕሳብ ይኽፈል ኣሎ…';
 
   @override
+  String get accountCreatedSuccess => 'ሕሳብኩም ብዓወት ተፈጢሩ ኣሎ!';
+
+  @override
   String get authPrivacyNote =>
       'ሕሳብኩም ኣብዚ ተሌፎን እዚ ተመሂሩ ይቐመጥ — ተምሲል ቃልኩም ግን ናብ ወጻኢ '
       'ኣይሓልፍን። ኣብ ሓድሽ ተሌፎን ምእታይ ብሓንሳባዊ ቁልፊ እዩ ዝርግግጥ፤ '

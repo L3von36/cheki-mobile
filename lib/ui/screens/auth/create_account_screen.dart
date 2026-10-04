@@ -59,47 +59,72 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
     final strings = context.read<LocaleController>().strings;
-    if (_passwordCtrl.text != _confirmCtrl.text) {
+    final messenger = ScaffoldMessenger.of(context);
+    final cloud = context.read<CloudController>();
+    final history = context.read<VerifyHistory>();
+    final navigator = Navigator.of(context);
+    final password = _passwordCtrl.text;
+
+    if (password != _confirmCtrl.text) {
       setState(() => _error = strings.errorAuth(AuthError.passwordMismatch));
       return;
     }
     setState(() => _error = null);
-    // v1.14.1: an UNEXPECTED exception must never fail silently — the user
-    // would see the button stop spinning and nothing else (reported as
-    // "sign up doesn't create an account"). Every known failure maps to a
-    // localized AuthError; anything unknown shows the generic message.
+
     AuthResult? result;
     try {
       result = await auth.signUp(
         displayName: _nameCtrl.text,
         identifier: _identifierCtrl.text,
-        password: _passwordCtrl.text,
+        password: password,
       );
     } catch (_) {
       result = null;
     }
-    if (!mounted) return;
-    if (result == null) {
-      setState(() => _error = strings.genericAuthError);
-      return;
-    }
+
     switch (result) {
       case AuthSuccess(:final account):
-        // The gate rebuilds into the shell; clear any pushed auth route.
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        // v1.14.0: cloud backup arms ITSELF — no settings visit, no
-        // re-typed password, no button. Fire-and-forget: the shell is
-        // usable immediately and a network failure stays silent (the
-        // Settings sheet remains the manual fallback).
+        messenger.showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: MahtemPalette.green,
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    strings.accountCreatedSuccess,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (navigator.canPop()) {
+          navigator.popUntil((route) => route.isFirst);
+        }
         unawaited(
-          context.read<CloudController>().autoEnable(
-                password: _passwordCtrl.text,
-                account: account,
-                history: context.read<VerifyHistory>(),
-              ),
+          cloud.autoEnable(
+            password: password,
+            account: account,
+            history: history,
+          ),
         );
       case AuthFailure(:final error):
-        setState(() => _error = strings.errorAuth(error));
+        if (mounted) setState(() => _error = strings.errorAuth(error));
+      case null:
+        if (mounted) setState(() => _error = strings.genericAuthError);
     }
   }
 

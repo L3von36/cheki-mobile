@@ -59,7 +59,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     PasswordHasher? hasher,
     SharedPreferences? prefs,
     int Function()? revisionClock,
-    this.autoSyncDebounce = const Duration(seconds: 20),
+    this.autoSyncDebounce = const Duration(seconds: 3),
     this.autoSyncRetry = const Duration(minutes: 2),
     this.autoSyncBackoff = const Duration(minutes: 15),
     this.bootCatchUpDelay = const Duration(seconds: 5),
@@ -169,6 +169,12 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_enabled && _autoSync && hasSession && _dirty) {
+        _scheduleAutoSync(Duration.zero);
+      }
+      return;
+    }
     if (state != AppLifecycleState.resumed) return;
     final history = _history;
     if (_enabled && _autoSync && hasSession && history != null) {
