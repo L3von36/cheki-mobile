@@ -70,12 +70,14 @@ UrlDetection? detectBankFromUrl(String input) {
   final uri = Uri.tryParse(trimmed);
   if (uri == null || !looksLikeUrl(trimmed) || uri.host.isEmpty) return null;
   final host = uri.host.toLowerCase();
-  final segments = uri.pathSegments;
+  final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
 
-  // CBE new: https://mbreciept.cbe.com.et/{shortId}
-  if (host.contains('mbreciept.cbe.com.et') || host.contains('mb.cbe.com.et')) {
-    if (segments.isNotEmpty) {
-      return UrlDetection('cbe', segments.last);
+  // CBE Birr: https://cbepay1.cbe.com.et/aureceipt?TID=...&PH=...
+  if (host.contains('cbepay') || uri.path.contains('aureceipt')) {
+    final tid = uri.queryParameters['TID'] ?? uri.queryParameters['tid'];
+    final ph = uri.queryParameters['PH'] ?? uri.queryParameters['ph'];
+    if (tid != null && tid.isNotEmpty) {
+      return UrlDetection('cbebirr', tid, ph);
     }
   }
 
@@ -90,14 +92,25 @@ UrlDetection? detectBankFromUrl(String input) {
     }
   }
 
-  // Telebirr: https://transactioninfo.ethiotelecom.et/receipt/{ref}
-  if (host.contains('transactioninfo.ethiotelecom.et')) {
+  // CBE new: https://mbreciept.cbe.com.et/{shortId}, https://mbreceipt.cbe.com.et/{shortId}
+  if (host.contains('mbreciept.cbe.com.et') ||
+      host.contains('mbreceipt.cbe.com.et') ||
+      host.contains('mb.cbe.com.et') ||
+      (host.contains('cbe.com.et') && !host.contains('apps.cbe.com.et') && !host.contains('cbepay'))) {
+    if (segments.isNotEmpty) {
+      return UrlDetection('cbe', segments.last);
+    }
+  }
+
+  // Telebirr: https://transactioninfo.ethiotelecom.et/receipt/{ref} or /receipt_detail/{ref}
+  if (host.contains('transactioninfo.ethiotelecom.et') ||
+      (host.contains('ethiotelecom.et') && host.contains('telebirr'))) {
     if (segments.isNotEmpty) {
       return UrlDetection('telebirr', segments.last);
     }
   }
 
-  // BOA: /slip/?trx={ref} or API ?id={ref}{last5}
+  // BOA: /slip/?trx={ref} or /slip/{ref} or API ?id={ref}{last5}
   if (host.contains('bankofabyssinia.com')) {
     final trx = uri.queryParameters['trx'];
     final id = uri.queryParameters['id'];
@@ -107,6 +120,9 @@ UrlDetection? detectBankFromUrl(String input) {
           id.substring(id.length - 5));
     }
     if (id != null && id.isNotEmpty) return UrlDetection('boa', id);
+    if (segments.length >= 2 && segments[0].toLowerCase() == 'slip') {
+      return UrlDetection('boa', segments[1]);
+    }
   }
 
   // Dashen: .../receipt/{ref} or Within-Dashen-Transfer-{REF}.pdf
@@ -137,11 +153,16 @@ UrlDetection? detectBankFromUrl(String input) {
   if (host.contains('safaricom.et')) {
     final trx = uri.queryParameters['trxNo'];
     if (trx != null && trx.isNotEmpty) return UrlDetection('mpesa', trx);
+    if (segments.isNotEmpty) return UrlDetection('mpesa', segments.last);
   }
 
   // eBirr family: https://receipt.ebirr.com/{tenant}/{token}
   if (host.contains('receipt.ebirr.com')) {
     if (segments.length >= 2) {
+      final tenant = segments[0].toLowerCase();
+      if (tenant == 'coopay') {
+        return UrlDetection('coopay', segments[1]);
+      }
       return UrlDetection('ebirr', '${segments[0]}/${segments[1]}');
     }
   }
@@ -404,7 +425,8 @@ String _restructureInvoiceSection(String text) {
 
 Parsed parseTelebirrHtml(String html) {
   if (html.contains('This request is not correct') ||
-      !html.toLowerCase().contains('telebirr receipt')) {
+      (!html.toLowerCase().contains('telebirr') &&
+          !html.contains('\u12E8\u1274\u120C\u1265\u122D'))) {
     return Parsed.notFound;
   }
 

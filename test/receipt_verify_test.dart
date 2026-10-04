@@ -64,6 +64,44 @@ void main() {
       expect(d.reference, 'nib/abc123def');
     });
 
+    test('CBE link with trailing slash still detects correctly', () {
+      final d = detectBankFromUrl('https://mbreciept.cbe.com.et/fHCx8QmLpZ1/');
+      expect(d, isNotNull);
+      expect(d!.bank, 'cbe');
+      expect(d.reference, 'fHCx8QmLpZ1');
+    });
+
+    test('CBE mbreceipt (ei spelling) link detects correctly', () {
+      final d = detectBankFromUrl('https://mbreceipt.cbe.com.et/fHCx8QmLpZ1');
+      expect(d, isNotNull);
+      expect(d!.bank, 'cbe');
+      expect(d.reference, 'fHCx8QmLpZ1');
+    });
+
+    test('CBE Birr link detects bank, TID and phone correctly', () {
+      final d = detectBankFromUrl(
+          'https://cbepay1.cbe.com.et/aureceipt?TID=FT26140P01YB&PH=0911223344');
+      expect(d, isNotNull);
+      expect(d!.bank, 'cbebirr');
+      expect(d.reference, 'FT26140P01YB');
+      expect(d.account, '0911223344');
+    });
+
+    test('BOA slip link with path segment', () {
+      final d = detectBankFromUrl(
+          'https://cs.bankofabyssinia.com/slip/FT25001XYZ');
+      expect(d, isNotNull);
+      expect(d!.bank, 'boa');
+      expect(d.reference, 'FT25001XYZ');
+    });
+
+    test('Coopay link maps to coopay bank', () {
+      final d = detectBankFromUrl('https://receipt.ebirr.com/coopay/tk12345');
+      expect(d, isNotNull);
+      expect(d!.bank, 'coopay');
+      expect(d.reference, 'tk12345');
+    });
+
     test('non-bank URL returns null', () {
       expect(
           detectBankFromUrl('https://example.com/receipt/123'), isNull);

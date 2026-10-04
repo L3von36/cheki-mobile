@@ -443,8 +443,9 @@ void main() {
     server.failVaultPut = true;
 
     await history.add(_entry('f1', verifiedAt: 5000));
-    // attempt 1 after debounce, attempts 2+3 after retry windows
-    await Future<void>.delayed(const Duration(milliseconds: 160));
+    // attempt 1 after debounce (30ms), attempts 2+3 after retry windows (2×40ms)
+    // 250ms gives 100ms slack so parallel tests don't cause a flake
+    await Future<void>.delayed(const Duration(milliseconds: 250));
     expect(server.putAttempts, 4); // enable + 3 failed auto attempts
     expect(controller.hasUnsyncedChanges, isTrue);
     expect(controller.failure, CloudFailure.server);

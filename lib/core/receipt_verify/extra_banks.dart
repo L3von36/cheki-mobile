@@ -416,8 +416,9 @@ class ExtraHttpResponse {
 typedef ExtraHttpFn = Future<ExtraHttpResponse> Function(
     Uri uri, Map<String, String> headers);
 
-Future<ExtraHttpResponse> _defaultHttp(Uri uri, Map<String, String> headers) async {
-  final client = createVerifyClient();
+Future<ExtraHttpResponse> _defaultHttp(Uri uri, Map<String, String> headers,
+    {bool allowBadCert = false}) async {
+  final client = createVerifyClient(allowBadCert: allowBadCert);
   try {
     final resp =
         await client.get(uri, headers: headers).timeout(const Duration(seconds: 15));
@@ -513,7 +514,9 @@ Future<VerifyResult> verifyExtraBank(
         'https://transaction.amharabank.com.et/${Uri.encodeQueryComponent(reference)}'),
   };
 
-  final fetch = httpFn ?? _defaultHttp;
+  final fetch = httpFn ??
+      ((u, h) =>
+          _defaultHttp(u, h, allowBadCert: bank?.allowBadCertificate ?? false));
   final headers = <String, String>{
     'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
