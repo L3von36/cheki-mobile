@@ -134,10 +134,13 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
+          # Tag admin-v1.0.0 → version string v1.0.0 (avoids admin-admin-…)
+          SHORT=${TAG#admin-}
+          echo "short=${SHORT}" >> "$GITHUB_OUTPUT"
           OUT=build/app/outputs/flutter-apk
-          cp "$OUT/app-arm64-v8a-release.apk"   "mahtem-admin-${TAG}-arm64.apk"
-          cp "$OUT/app-armeabi-v7a-release.apk" "mahtem-admin-${TAG}-arm32.apk"
-          cp "$OUT/app-release.apk"             "mahtem-admin-${TAG}-universal.apk"
+          cp "$OUT/app-arm64-v8a-release.apk"   "mahtem-admin-${SHORT}-arm64.apk"
+          cp "$OUT/app-armeabi-v7a-release.apk" "mahtem-admin-${SHORT}-arm32.apk"
+          cp "$OUT/app-release.apk"             "mahtem-admin-${SHORT}-universal.apk"
           ls -la mahtem-admin-*.apk
 
       - name: Create GitHub Release with APKs
@@ -145,7 +148,7 @@ jobs:
         with:
           name: Mahtem Admin ${{ github.ref_name }}
           body: |
-            ## Mahtem Admin ${{ github.ref_name }}
+            ## Mahtem Admin ${{ steps.rename.outputs.short }}
 
             Owner-only analytics console for the Mahtem receipt verification
             network — every account, every synced scan, bank popularity and
@@ -167,17 +170,18 @@ jobs:
             encrypted; the console sees banks, outcomes and counts only.
 
             ### Install
-            1. Download **`mahtem-admin-${{ github.ref_name }}-arm64.apk`** (fits almost
-               every phone sold since 2016)
-            2. Very old phone? `mahtem-admin-${{ github.ref_name }}-arm32.apk`
-            3. Not sure? `mahtem-admin-${{ github.ref_name }}-universal.apk` works everywhere
+            1. Download **`mahtem-admin-${{ steps.rename.outputs.short }}-arm64.apk`**
+               (fits almost every phone sold since 2016)
+            2. Very old phone? `mahtem-admin-${{ steps.rename.outputs.short }}-arm32.apk`
+            3. Not sure? `mahtem-admin-${{ steps.rename.outputs.short }}-universal.apk`
+               works everywhere
             4. Allow "Install from unknown sources" if prompted
 
             This is the owner's tool — keep the APK and the ADMIN_KEY private.
           files: |
-            mahtem-admin-${{ github.ref_name }}-arm64.apk
-            mahtem-admin-${{ github.ref_name }}-arm32.apk
-            mahtem-admin-${{ github.ref_name }}-universal.apk
+            admin-app/mahtem-admin-*-arm64.apk
+            admin-app/mahtem-admin-*-arm32.apk
+            admin-app/mahtem-admin-*-universal.apk
           generate_release_notes: true
           draft: false
           prerelease: false
