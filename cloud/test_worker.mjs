@@ -204,6 +204,159 @@ async function run() {
   const bareRes = await worker.fetch(new Request('http://localhost/v1/health'), env);
   console.log('Missing header on /v1 (expected 400):', bareRes.status);
 
+  // ── v1.16.0: admin owner account (email + password) ──────────────────────
+  const st0 = await (
+    await worker.fetch(req('/v1/admin/auth/status'), env)
+  ).json();
+  if (st0.hasAdmin !== false) throw new Error('hasAdmin should start false');
+
+  const weak = await worker.fetch(
+    req('/v1/admin/auth/setup', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'short' } }),
+    env,
+  );
+  if (weak.status !== 400) throw new Error('weak password accepted!');
+
+  const badEmail = await worker.fetch(
+    req('/v1/admin/auth/setup', { method: 'POST', body: { email: 'not-an-email', password: 'long-enough-pass' } }),
+    env,
+  );
+  if (badEmail.status !== 400) throw new Error('bad email accepted!');
+
+  const setup = await (
+    await worker.fetch(
+      req('/v1/admin/auth/setup', {
+        method: 'POST',
+        body: { email: '  Owner@Mahtem.APP ', password: 'correct-horse-battery' },
+      }),
+      env,
+    )
+  ).json();
+  if (!setup.token) throw new Error('setup failed: ' + JSON.stringify(setup));
+
+  const dup = await worker.fetch(
+    req('/v1/admin/auth/setup', { method: 'POST', body: { email: 'other@mahtem.app', password: 'another-long-password' } }),
+    env,
+  );
+  if (dup.status !== 409) throw new Error('second setup should 409, got ' + dup.status);
+
+  const me = await (
+    await worker.fetch(req('/v1/admin/auth/me', { headers: { Authorization: `Bearer ${setup.token}` } }), env)
+  ).json();
+  if (me.email !== 'owner@mahtem.app') throw new Error('me should normalize the email, got ' + me.email);
+
+  const ovSess = await worker.fetch(
+    req('/v1/admin/overview', { headers: { Authorization: `Bearer ${setup.token}` } }),
+    env,
+  );
+  if (ovSess.status !== 200) throw new Error('overview with owner session failed: ' + ovSess.status);
+
+  const noAuth = await worker.fetch(req('/v1/admin/auth/me'), env);
+  if (noAuth.status !== 401) throw new Error('me without token should 401');
+
+  const badLogin = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'wrong-password-123' } }),
+    env,
+  );
+  if (badLogin.status !== 401) throw new Error('bad login should 401');
+
+  const wrongEmailLogin = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'someone@else.com', password: 'correct-horse-battery' } }),
+    env,
+  );
+  if (wrongEmailLogin.status !== 401) throw new Error('wrong-email login should 401');
+
+  const goodLogin = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'Owner@mahtem.app', password: 'correct-horse-battery' } }),
+    env,
+  );
+  if (goodLogin.status !== 200) throw new Error('good login failed: ' + JSON.stringify(await goodLogin.json()));
+
+  // change-password: wrong current → 401; correct → rotated session
+  const chWrong = await worker.fetch(
+    req('/v1/admin/auth/change-password', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${setup.token}` },
+      body: { currentPassword: 'nope-not-it-password', newPassword: 'brand-new-password-1' },
+    }),
+    env,
+  );
+  if (chWrong.status !== 401) throw new Error('change-password wrong current should 401');
+
+  const ch = await (
+    await worker.fetch(
+      req('/v1/admin/auth/change-password', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${setup.token}` },
+        body: { currentPassword: 'correct-horse-battery', newPassword: 'brand-new-password-1' },
+      }),
+      env,
+    )
+  ).json();
+  if (!ch.token) throw new Error('change-password failed: ' + JSON.stringify(ch));
+
+  const oldSess = await worker.fetch(
+    req('/v1/admin/overview', { headers: { Authorization: `Bearer ${setup.token}` } }),
+    env,
+  );
+  if (oldSess.status !== 401) throw new Error('rotation should kill the old session');
+
+  const reLogin = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'brand-new-password-1' } }),
+    env,
+  );
+  if (reLogin.status !== 200) throw new Error('login with new password failed');
+
+  const oldPw = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'correct-horse-battery' } }),
+    env,
+  );
+  if (oldPw.status !== 401) throw new Error('old password should be rejected');
+
+  // logout is idempotent and kills the session
+  const out = await worker.fetch(
+    req('/v1/admin/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${ch.token}` } }),
+    env,
+  );
+  if (out.status !== 200) throw new Error('logout failed');
+  const dead = await worker.fetch(
+    req('/v1/admin/overview', { headers: { Authorization: `Bearer ${ch.token}` } }),
+    env,
+  );
+  if (dead.status !== 401) throw new Error('session should be dead after logout');
+
+  // rate limit: 8 failures in the window → 429 even for the right password
+  for (let i = 0; i < 8; i++) {
+    await worker.fetch(
+      req('/v1/admin/auth/login', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'wrong-password-123' } }),
+      env,
+    );
+  }
+  const rl = await worker.fetch(
+    req('/v1/admin/auth/login', { method: 'POST', body: { email: 'owner@mahtem.app', password: 'brand-new-password-1' } }),
+    env,
+  );
+  if (rl.status !== 429) throw new Error('rate limit should 429, got ' + rl.status);
+
+  // legacy ADMIN_KEY still unlocks the overview (break-glass / old clients)
+  const legacy = await worker.fetch(
+    req('/v1/admin/overview', { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } }),
+    env,
+  );
+  if (legacy.status !== 200) throw new Error('legacy ADMIN_KEY path broke');
+
+  // break-glass reset removes the owner + sessions → first-run setup again
+  const reset = await worker.fetch(
+    req('/v1/admin/auth/reset', { method: 'POST', headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } }),
+    env,
+  );
+  if (reset.status !== 200) throw new Error('reset failed');
+  const resetNoKey = await worker.fetch(req('/v1/admin/auth/reset', { method: 'POST' }), env);
+  if (resetNoKey.status !== 401) throw new Error('reset without key should 401');
+  const st1 = await (await worker.fetch(req('/v1/admin/auth/status'), env)).json();
+  if (st1.hasAdmin !== false) throw new Error('reset should clear hasAdmin');
+
+  console.log('Admin auth scenarios (setup/login/me/change-password/logout/rate-limit/reset): OK');
+
   console.log('All worker tests passed successfully!');
 }
 

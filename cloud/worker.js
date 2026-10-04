@@ -23,12 +23,19 @@
  *   * Backwards Compatibility:
  *     - Existing legacy session tokens continue to be accepted during rollout.
  *
- * ADMIN DASHBOARD (v1.15.0):
+ * ADMIN (owner-only; v1.15.0 dashboard, v1.16.0 email+password sign-in):
  *   * GET /admin  — single-page owner dashboard (browser, no client header).
  *   * GET /v1/admin/overview — aggregates every account + vault: totals,
  *     bank popularity, 14-day scan series, per-account rows, recent scans.
- *   * Auth: `Authorization: Bearer <ADMIN_KEY>` (Workers secret), digest
- *     compared. Read-only: the dashboard can never touch vault ciphertext.
+ *   * Owner account: ONE owner record (email + PBKDF2-SHA-256 hash, 100k
+ *     iterations, per-record random salt — the password never touches
+ *     storage). First-run setup creates it; login mints opaque 32-byte
+ *     session tokens stored in KV (`adm_s:<token>`, 30-day TTL); login is
+ *     rate limited per email. Change-password rotates every session.
+ *     Break-glass: POST /v1/admin/auth/reset with the ADMIN_KEY removes
+ *     the owner + all sessions (forgotten-password recovery path).
+ *   * `/v1/admin/overview` accepts BOTH the legacy `Authorization: Bearer
+ *     <ADMIN_KEY>` (pre-v1.1.0 clients + break-glass) and owner sessions.
  *   * Analytics piggyback: vault PUTs may carry `stats` — bank-only events
  *     {b,n,t,v}. NO receipt contents, names, amounts or references exist
  *     outside the encrypted blob; zero-knowledge stays intact.
@@ -38,6 +45,15 @@ const CLIENT_HEADER = 'x-mahtem-client';
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600; // 30 days
 const LEGACY_SESSION_TTL_SECONDS = 90 * 24 * 3600; // 90 days
+
+// Admin owner account (email + password) — v1.16.0
+const ADMIN_OWNER_KEY = 'adm_owner';
+const ADMIN_SESSION_PREFIX = 'adm_s:';
+const ADMIN_SESSION_TTL_SECONDS = 30 * 24 * 3600; // 30 days
+const ADMIN_PBKDF2_ITERATIONS = 100_000;
+const ADMIN_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const ADMIN_LOGIN_MAX_ATTEMPTS = 8;
+const ADMIN_EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -264,19 +280,100 @@ async function requireSession(request, env) {
   return { ok: true, token, userId: session.userId, exp: session.exp };
 }
 
-// ── Admin (owner-only, v1.15.0) ─────────────────────────────────────────────
+// ── Admin (owner-only, v1.15.0; email+password v1.16.0) ─────────────────────
 
-async function requireAdmin(request, env) {
-  const expected = env.ADMIN_KEY;
-  if (!expected || typeof expected !== 'string' || expected.length < 16) {
-    return {
-      ok: false,
-      status: 503,
-      error: 'admin_disabled',
-      message:
-        'Admin access is not configured on this deployment (ADMIN_KEY secret missing).',
-    };
+function bytesToHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
+  return out;
+}
+
+/** Constant-time compare of two equal-length hex strings. */
+function timingSafeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/** PBKDF2-SHA-256 password hash (hex). Runs in Web Crypto — native code. */
+async function hashPassword(password, saltHex, iterations) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: hexToBytes(saltHex),
+      iterations,
+    },
+    keyMaterial,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+const normalizeEmail = (raw) =>
+  typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+
+const isValidEmail = (s) =>
+  typeof s === 'string' && s.length <= 254 && ADMIN_EMAIL_RE.test(s);
+
+const isValidPassword = (s) =>
+  typeof s === 'string' && s.length >= 10 && s.length <= 256;
+
+async function getOwner(env) {
+  const raw = await env.KV.get(ADMIN_OWNER_KEY);
+  if (!raw) return null;
+  try {
+    const r = JSON.parse(raw);
+    if (
+      r &&
+      typeof r.email === 'string' &&
+      typeof r.hash === 'string' &&
+      typeof r.salt === 'string'
+    ) {
+      return r;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function createAdminSession(env, email) {
+  const token = randomToken(32);
+  const now = Date.now();
+  const exp = now + ADMIN_SESSION_TTL_SECONDS * 1000;
+  await env.KV.put(
+    `${ADMIN_SESSION_PREFIX}${token}`,
+    JSON.stringify({
+      e: email,
+      iat: Math.floor(now / 1000),
+      exp: Math.floor(exp / 1000),
+    }),
+    { expirationTtl: ADMIN_SESSION_TTL_SECONDS },
+  );
+  return { token, email, expiresAt: exp };
+}
+
+/** Validates the Bearer token of an admin auth endpoint (sessions only). */
+async function requireAdminSession(request, env) {
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) {
@@ -284,20 +381,118 @@ async function requireAdmin(request, env) {
       ok: false,
       status: 401,
       error: 'admin_required',
-      message: 'Admin key required.',
+      message: 'Sign in required.',
     };
   }
-  // Digest comparison — no timing side channel on the secret.
-  const [a, b] = await Promise.all([sha256Hex(token), sha256Hex(expected)]);
-  if (a !== b) {
+  const raw = await env.KV.get(`${ADMIN_SESSION_PREFIX}${token}`);
+  if (!raw) {
+    return {
+      ok: false,
+      status: 401,
+      error: 'admin_session_expired',
+      message: 'Session expired — sign in again.',
+    };
+  }
+  let sess = null;
+  try {
+    sess = JSON.parse(raw);
+  } catch (_) {
+    sess = null;
+  }
+  if (!sess || !sess.e || (sess.exp || 0) * 1000 < Date.now()) {
+    return {
+      ok: false,
+      status: 401,
+      error: 'admin_session_expired',
+      message: 'Session expired — sign in again.',
+    };
+  }
+  return { ok: true, token, email: sess.e, exp: sess.exp };
+}
+
+async function checkLoginAllowed(env, email) {
+  const raw = await env.KV.get(`adm_rl:${email}`);
+  if (!raw) return true;
+  try {
+    const r = JSON.parse(raw);
+    return !(r && r.reset > Date.now() && (r.c || 0) >= ADMIN_LOGIN_MAX_ATTEMPTS);
+  } catch (_) {
+    return true;
+  }
+}
+
+async function recordLoginFailure(env, email) {
+  const key = `adm_rl:${email}`;
+  const raw = await env.KV.get(key);
+  let c = 0;
+  let reset = Date.now() + ADMIN_LOGIN_WINDOW_MS;
+  if (raw) {
+    try {
+      const r = JSON.parse(raw);
+      if (r && r.reset > Date.now()) {
+        c = r.c || 0;
+        reset = r.reset;
+      }
+    } catch (_) {
+      /* fresh window */
+    }
+  }
+  await env.KV.put(key, JSON.stringify({ c: c + 1, reset }), {
+    expirationTtl: Math.max(60, Math.ceil((reset - Date.now()) / 1000)),
+  });
+}
+
+/**
+ * Admin gate for /v1/admin/overview. Accepts, in order:
+ *   1. An owner session token (email+password sign-in, `adm_s:*` in KV).
+ *   2. The legacy ADMIN_KEY secret (pre-v1.1.0 clients + break-glass).
+ * 503 only when the deployment has neither an owner nor an ADMIN_KEY.
+ */
+async function requireAdmin(request, env) {
+  const auth = request.headers.get('Authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) {
     return {
       ok: false,
       status: 401,
       error: 'admin_required',
-      message: 'Invalid admin key.',
+      message: 'Sign in required.',
     };
   }
-  return { ok: true };
+  const raw = await env.KV.get(`${ADMIN_SESSION_PREFIX}${token}`);
+  if (raw) {
+    try {
+      const sess = JSON.parse(raw);
+      if (sess && sess.e && (sess.exp || 0) * 1000 >= Date.now()) {
+        return { ok: true, email: sess.e };
+      }
+    } catch (_) {
+      /* fall through to the legacy path */
+    }
+  }
+  const expected = env.ADMIN_KEY;
+  const keyConfigured =
+    typeof expected === 'string' && expected.length >= 16;
+  if (keyConfigured) {
+    // Digest comparison — no timing side channel on the secret.
+    const [a, b] = await Promise.all([sha256Hex(token), sha256Hex(expected)]);
+    if (a === b) return { ok: true, legacy: true };
+  }
+  if (!keyConfigured && !(await getOwner(env))) {
+    return {
+      ok: false,
+      status: 503,
+      error: 'admin_disabled',
+      message:
+        'Admin access is not configured on this deployment (no owner account, ADMIN_KEY secret missing).',
+    };
+  }
+  return {
+    ok: false,
+    status: 401,
+    error: 'admin_required',
+    message: 'Session expired — sign in again.',
+  };
 }
 
 async function listAllKeys(env, prefix) {
@@ -627,6 +822,192 @@ export default {
             },
           });
 
+        // ── admin owner account: email + password (v1.16.0) ───────────
+        case 'GET /v1/admin/auth/status': {
+          const owner = await getOwner(env);
+          return json({ hasAdmin: !!owner });
+        }
+
+        case 'POST /v1/admin/auth/setup': {
+          // First run only — creates THE owner account, then signs in.
+          if (await getOwner(env)) {
+            return err(
+              'exists',
+              409,
+              'An owner account already exists. Please sign in.',
+            );
+          }
+          const body = await readJson(request);
+          const email = normalizeEmail(body?.email);
+          if (!isValidEmail(email)) {
+            return err('bad_input', 400, 'Enter a valid email address.');
+          }
+          if (!isValidPassword(body?.password)) {
+            return err(
+              'weak_password',
+              400,
+              'Password must be at least 10 characters.',
+            );
+          }
+          const salt = randomToken(16);
+          const record = {
+            email,
+            hash: await hashPassword(
+              body.password,
+              salt,
+              ADMIN_PBKDF2_ITERATIONS,
+            ),
+            salt,
+            iter: ADMIN_PBKDF2_ITERATIONS,
+            createdAt: Date.now(),
+          };
+          await env.KV.put(ADMIN_OWNER_KEY, JSON.stringify(record));
+          const session = await createAdminSession(env, email);
+          return json({ ok: true, ...session });
+        }
+
+        case 'POST /v1/admin/auth/login': {
+          const body = await readJson(request);
+          const email = normalizeEmail(body?.email);
+          if (!isValidEmail(email) || typeof body?.password !== 'string') {
+            return err('bad_input', 400, 'Enter your email and password.');
+          }
+          if (!(await checkLoginAllowed(env, email))) {
+            return err(
+              'rate_limited',
+              429,
+              'Too many attempts. Try again in about 15 minutes.',
+            );
+          }
+          const owner = await getOwner(env);
+          if (!owner) {
+            return err(
+              'no_admin',
+              404,
+              'No owner account exists yet. Create one first.',
+            );
+          }
+          if (email !== owner.email) {
+            await recordLoginFailure(env, email);
+            return err('bad_credentials', 401, 'Wrong email or password.');
+          }
+          const candidate = await hashPassword(
+            body.password,
+            owner.salt,
+            owner.iter || ADMIN_PBKDF2_ITERATIONS,
+          );
+          if (!timingSafeEqualHex(candidate, owner.hash)) {
+            await recordLoginFailure(env, email);
+            return err('bad_credentials', 401, 'Wrong email or password.');
+          }
+          await env.KV.delete(`adm_rl:${email}`);
+          const session = await createAdminSession(env, owner.email);
+          return json({ ok: true, ...session });
+        }
+
+        case 'GET /v1/admin/auth/me': {
+          const s = await requireAdminSession(request, env);
+          if (!s.ok) return err(s.error, s.status, s.message);
+          const owner = await getOwner(env);
+          return json({
+            email: s.email,
+            expiresAt: s.exp ? s.exp * 1000 : null,
+            ownerCreatedAt: owner?.createdAt ?? null,
+          });
+        }
+
+        case 'POST /v1/admin/auth/logout': {
+          const s = await requireAdminSession(request, env);
+          if (s.ok) await env.KV.delete(`${ADMIN_SESSION_PREFIX}${s.token}`);
+          return json({ ok: true }); // idempotent — signing out is always fine
+        }
+
+        case 'POST /v1/admin/auth/change-password': {
+          const s = await requireAdminSession(request, env);
+          if (!s.ok) return err(s.error, s.status, s.message);
+          const owner = await getOwner(env);
+          if (!owner) {
+            return err('no_admin', 404, 'No owner account exists.');
+          }
+          const body = await readJson(request);
+          if (
+            typeof body?.currentPassword !== 'string' ||
+            typeof body?.newPassword !== 'string'
+          ) {
+            return err(
+              'bad_input',
+              400,
+              'Current and new password are required.',
+            );
+          }
+          const current = await hashPassword(
+            body.currentPassword,
+            owner.salt,
+            owner.iter || ADMIN_PBKDF2_ITERATIONS,
+          );
+          if (!timingSafeEqualHex(current, owner.hash)) {
+            return err('bad_credentials', 401, 'Current password is incorrect.');
+          }
+          if (!isValidPassword(body.newPassword)) {
+            return err(
+              'weak_password',
+              400,
+              'New password must be at least 10 characters.',
+            );
+          }
+          const salt = randomToken(16);
+          await env.KV.put(
+            ADMIN_OWNER_KEY,
+            JSON.stringify({
+              ...owner,
+              hash: await hashPassword(
+                body.newPassword,
+                salt,
+                ADMIN_PBKDF2_ITERATIONS,
+              ),
+              salt,
+              iter: ADMIN_PBKDF2_ITERATIONS,
+              passwordChangedAt: Date.now(),
+            }),
+          );
+          // Rotation: every existing session dies (lost phone, leaked
+          // session), this device gets a fresh token in the response.
+          for (const name of await listAllKeys(env, ADMIN_SESSION_PREFIX)) {
+            await env.KV.delete(name);
+          }
+          const session = await createAdminSession(env, owner.email);
+          return json({ ok: true, ...session });
+        }
+
+        case 'POST /v1/admin/auth/reset': {
+          // Break-glass: the ADMIN_KEY secret removes a forgotten owner
+          // account and all its sessions, restoring the first-run setup.
+          const expected = env.ADMIN_KEY;
+          const auth = request.headers.get('Authorization') || '';
+          const token = auth.startsWith('Bearer ')
+            ? auth.slice(7).trim()
+            : '';
+          if (
+            typeof expected !== 'string' ||
+            expected.length < 16 ||
+            !token
+          ) {
+            return err('admin_required', 401, 'Admin key required.');
+          }
+          const [a, b] = await Promise.all([
+            sha256Hex(token),
+            sha256Hex(expected),
+          ]);
+          if (a !== b) {
+            return err('admin_required', 401, 'Invalid admin key.');
+          }
+          await env.KV.delete(ADMIN_OWNER_KEY);
+          for (const name of await listAllKeys(env, ADMIN_SESSION_PREFIX)) {
+            await env.KV.delete(name);
+          }
+          return json({ ok: true });
+        }
+
         case 'GET /v1/admin/overview': {
           const admin = await requireAdmin(request, env);
           if (!admin.ok) return err(admin.error, admin.status, admin.message);
@@ -770,11 +1151,12 @@ function adminDashboardHtml() {
   .sub { color: var(--muted); font-size: 13px; }
   .spacer { flex: 1; }
   .keybox { display: flex; gap: 8px; align-items: center; }
-  input[type=password], input[type=text] {
+  input[type=password], input[type=text], input[type=email] {
     background: var(--panel2); border: 1px solid var(--line); color: var(--text);
     border-radius: 10px; padding: 9px 12px; font-size: 14px; width: 240px; outline: none;
   }
   input:focus { border-color: var(--brand); }
+  #authbox input { width: 100%; }
   button {
     background: var(--brand); border: 0; color: #fff; font-weight: 600;
     border-radius: 10px; padding: 9px 16px; font-size: 14px; cursor: pointer;
@@ -828,15 +1210,25 @@ function adminDashboardHtml() {
       <div class="sub">Cross-account scan analytics · read-only · zero-knowledge preserved</div>
     </div>
     <div class="spacer"></div>
-    <div class="keybox">
-      <input id="key" type="password" placeholder="Admin key" autocomplete="off">
-      <button id="go">Unlock</button>
-      <button id="forget" class="ghost" title="Forget the key on this device">Forget</button>
+    <div class="keybox" id="whoami" style="display:none">
+      <span class="sub" id="who"></span>
+      <button id="forget" class="ghost">Sign out</button>
     </div>
   </header>
 
   <div id="err" class="msg err"></div>
   <div id="info" class="msg info"></div>
+
+  <div id="authbox" class="panel" style="max-width:430px;margin:30px auto 0;display:none">
+    <h2 id="authTitle">Owner sign-in</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input id="email" type="email" placeholder="Email" autocomplete="username">
+      <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
+      <input id="pass2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none">
+      <button id="authGo">Sign in</button>
+    </div>
+    <div class="sub" id="authNote" style="margin-top:10px"></div>
+  </div>
 
   <div id="content" style="display:none">
     <div class="cards" id="cards"></div>
@@ -882,9 +1274,11 @@ function adminDashboardHtml() {
 <script>
 (function () {
   'use strict';
-  var KEY_STORE = 'mahtem_admin_key';
-  var key = '';
+  var TOK_STORE = 'mahtem_admin_tok';
+  var EMAIL_STORE = 'mahtem_admin_email';
+  var token = '';
   var timer = null;
+  var needsSetup = false;
 
   var el = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -909,20 +1303,129 @@ function adminDashboardHtml() {
   function showErr(msg) { el('err').textContent = msg; el('err').style.display = 'block'; }
   function hideMsgs() { el('err').style.display = 'none'; el('info').style.display = 'none'; }
 
-  function saveKey(k) { key = k; try { localStorage.setItem(KEY_STORE, k); } catch (e) {} }
-  function loadKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
-  function forgetKey() { key = ''; try { localStorage.removeItem(KEY_STORE); } catch (e) {} location.reload(); }
+  function saveAuth(tok, em) {
+    token = tok;
+    try {
+      localStorage.setItem(TOK_STORE, tok);
+      localStorage.setItem(EMAIL_STORE, em || '');
+    } catch (e) {}
+  }
+  function loadAuth() {
+    try {
+      return {
+        token: localStorage.getItem(TOK_STORE) || '',
+        email: localStorage.getItem(EMAIL_STORE) || '',
+      };
+    } catch (e) { return { token: '', email: '' }; }
+  }
+  function clearToken() {
+    token = '';
+    try { localStorage.removeItem(TOK_STORE); } catch (e) {}
+  }
+  function forgetAuth() {
+    if (token) {
+      fetch('/v1/admin/auth/logout', { method: 'POST', headers: authHeaders() })
+        .catch(function () {});
+    }
+    clearToken();
+    try { localStorage.removeItem(EMAIL_STORE); } catch (e) {}
+    location.reload();
+  }
+  function authHeaders() {
+    return { 'Authorization': 'Bearer ' + token, 'X-Mahtem-Client': 'mahtem-admin-dashboard' };
+  }
 
   function fetchOverview() {
     hideMsgs();
-    return fetch('/v1/admin/overview', {
-      headers: { 'Authorization': 'Bearer ' + key, 'X-Mahtem-Client': 'mahtem-admin-dashboard' }
-    }).then(function (r) {
-      if (r.status === 401) { throw new Error('Invalid admin key. Check the ADMIN_KEY and try again.'); }
-      if (r.status === 503) { throw new Error('Admin access is not configured on the Worker yet (ADMIN_KEY secret missing).'); }
+    return fetch('/v1/admin/overview', { headers: authHeaders() }).then(function (r) {
+      if (r.status === 401) {
+        clearToken();
+        throw new Error('Session expired — sign in again.');
+      }
+      if (r.status === 503) { throw new Error('Admin access is not configured on this deployment yet.'); }
       if (!r.ok) { throw new Error('Server error ' + r.status + '. Try again shortly.'); }
       return r.json();
     });
+  }
+
+  function postAuth(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Mahtem-Client': 'mahtem-admin-dashboard' },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json().then(function (j) { return { status: r.status, body: j }; });
+    });
+  }
+
+  function afterAuth(res) {
+    saveAuth(res.token, res.email);
+    el('who').textContent = res.email || 'owner';
+    el('whoami').style.display = 'flex';
+    el('authbox').style.display = 'none';
+    hideMsgs();
+    refresh();
+    schedule();
+  }
+
+  function showAuth(setup, prefillEmail) {
+    needsSetup = setup;
+    el('authbox').style.display = 'block';
+    el('pass2').style.display = setup ? 'block' : 'none';
+    el('authGo').textContent = setup ? 'Create owner account' : 'Sign in';
+    el('authTitle').textContent = setup ? 'First run — create the owner account' : 'Owner sign-in';
+    el('authNote').textContent = setup
+      ? 'One owner account only (yours). The password is hashed with PBKDF2 on the server and never stored in plain text.'
+      : 'Email + password sign-in. The session lasts 30 days on this device.';
+    if (prefillEmail) el('email').value = prefillEmail;
+  }
+
+  function submitAuth() {
+    var email = el('email').value.trim().toLowerCase();
+    var pass = el('pass').value;
+    if (!email || !pass) {
+      showErr(needsSetup ? 'Enter an email and a password (at least 10 characters).' : 'Enter your email and password.');
+      return;
+    }
+    if (needsSetup && pass !== el('pass2').value) {
+      showErr('Passwords do not match.');
+      return;
+    }
+    el('authGo').disabled = true;
+    postAuth(needsSetup ? '/v1/admin/auth/setup' : '/v1/admin/auth/login', { email: email, password: pass })
+      .then(function (res) {
+        el('authGo').disabled = false;
+        if (res.status === 200 && res.body && res.body.token) { afterAuth(res.body); return; }
+        if (res.status === 404) {
+          showAuth(true, email);
+          showErr('No owner account yet — create one below.');
+          return;
+        }
+        showErr((res.body && res.body.message) || 'Something went wrong. Try again.');
+      })
+      .catch(function () {
+        el('authGo').disabled = false;
+        showErr("Can't reach the Mahtem API. Check your connection.");
+      });
+  }
+
+  function boot() {
+    var stored = loadAuth();
+    if (stored.token) {
+      token = stored.token;
+      if (stored.email) el('who').textContent = stored.email;
+      el('whoami').style.display = 'flex';
+      refresh();
+      schedule();
+      return;
+    }
+    fetch('/v1/admin/auth/status', { headers: { 'X-Mahtem-Client': 'mahtem-admin-dashboard' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { showAuth(!j.hasAdmin, ''); })
+      .catch(function () {
+        showAuth(false, '');
+        showErr("Can't reach the Mahtem API. Check your connection.");
+      });
   }
 
   function render(d) {
@@ -988,37 +1491,30 @@ function adminDashboardHtml() {
     return fetchOverview().then(render).catch(function (e) {
       el('content').style.display = 'none';
       showErr(e.message || String(e));
+      if (!token) {
+        el('whoami').style.display = 'none';
+        boot();
+      }
     });
   }
 
   function schedule() {
     if (timer) clearInterval(timer);
     timer = setInterval(function () {
-      if (el('auto').checked && key) refresh();
+      if (el('auto').checked && token) refresh();
     }, 30000);
   }
 
-  el('go').addEventListener('click', function () {
-    var k = el('key').value.trim();
-    if (!k) { showErr('Enter the admin key first.'); return; }
-    saveKey(k);
-    el('key').value = '';
-    refresh();
-    schedule();
+  el('authGo').addEventListener('click', submitAuth);
+  el('pass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { if (needsSetup) { el('pass2').focus(); } else { submitAuth(); } }
   });
-  el('key').addEventListener('keydown', function (e) { if (e.key === 'Enter') el('go').click(); });
-  el('forget').addEventListener('click', forgetKey);
-  el('refresh').addEventListener('click', function () { if (key) refresh(); });
+  el('pass2').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitAuth(); });
+  el('email').addEventListener('keydown', function (e) { if (e.key === 'Enter') el('pass').focus(); });
+  el('forget').addEventListener('click', forgetAuth);
+  el('refresh').addEventListener('click', function () { if (token) refresh(); });
 
-  var stored = loadKey();
-  if (stored) {
-    key = stored;
-    el('key').placeholder = '•••••••• (stored)';
-    refresh();
-    schedule();
-  } else {
-    showErr('Enter the admin key to load the dashboard. It stays on this device only.');
-  }
+  boot();
 })();
 </script>
 </body>
