@@ -105,7 +105,8 @@ void main() {
     await tester.ensureVisible(signInLink);
     await tester.pump();
     await tester.tap(signInLink);
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.byType(SignInScreen), findsOneWidget);
     final signInFields = find.descendant(
       of: find.byType(SignInScreen),
       matching: find.byType(TextField),
