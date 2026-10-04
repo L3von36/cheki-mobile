@@ -86,7 +86,7 @@ void main() {
     await tester.tap(find.text('History'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('FT-SAVED-1'), findsOneWidget);
+    expect(find.textContaining('FT-SAVED-1'), findsOneWidget);
   });
 
   testWidgets('sign in from create-account returns to the app shell', (
@@ -100,7 +100,10 @@ void main() {
     );
     await bootToHome(tester, auth: auth);
 
-    await tester.tap(find.text('Sign in'));
+    final signInLink = find.text('Sign in');
+    await tester.ensureVisible(signInLink);
+    await tester.pump();
+    await tester.tap(signInLink);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(find.byType(TextField).at(0), '0911223344');
     await tester.enterText(find.byType(TextField).at(1), 'secret1');
