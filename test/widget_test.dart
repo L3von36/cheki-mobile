@@ -11,7 +11,6 @@ import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/auth_controller.dart';
 import 'package:mahtem/ui/screens/auth/create_account_screen.dart';
 import 'package:mahtem/ui/screens/auth/sign_in_screen.dart';
-import 'package:mahtem/ui/shell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// An auth controller wired to in-memory storage with a fast hasher, so
