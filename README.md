@@ -134,6 +134,16 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Much smaller downloads** (`v1.14.3`): the universal APK went from
+  ~100 MB to ~35 MB, and the arm64 APK most phones install from under
+  half its old size to ~22 MB. The old builds carried three complete
+  copies of every native library (Flutter engine, ML Kit OCR pipeline,
+  barcode engine, compiled Dart) — one per CPU architecture (32-bit
+  ARM, 64-bit ARM, and x86_64 for emulators) — stored uncompressed
+  inside the APK. Mahtem now ships ARM-only (100% of real phones),
+  compresses the native libraries inside the APK (the installer
+  extracts them once at install, so installed size is unchanged), and
+  drops the unused x86_64 copies and icon font. Zero features changed.
 - **Accounts survive restarts — resilient on-device account storage**
   (`v1.14.2`): fixes the reported bug where a freshly created account
   vanished after reopening the app ("No account found for this
@@ -251,9 +261,9 @@ Notes:
 
 Grab the latest APK from [Releases](https://github.com/L3von36/cheki-mobile/releases):
 1. Download **`mahtem-vX.Y.Z-arm64.apk`** — for almost every phone sold since
-   2016 (~2.5x smaller than the old universal APK)
-2. Very old phone? Use `mahtem-vX.Y.Z-arm32.apk`. Not sure?
-   `mahtem-vX.Y.Z-universal.apk` works on everything (larger download)
+   2016 (~22 MB, under half the old download)
+2. Very old phone? Use `mahtem-vX.Y.Z-arm32.apk` (~20 MB). Not sure?
+   `mahtem-vX.Y.Z-universal.apk` works on every Android phone (~35 MB)
 3. Allow "Install unknown apps" if prompted
 4. Install & stamp your first receipt as verified
 
