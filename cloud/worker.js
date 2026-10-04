@@ -475,6 +475,10 @@ export default {
           } catch (_) {
             return err('server', 500, 'Corrupt vault.');
           }
+          const since = url.searchParams.get('sinceRevision');
+          if (since !== null && Number(since) === Number(vault.revision)) {
+            return json({ notModified: true, revision: vault.revision });
+          }
           return json(vault);
         }
 

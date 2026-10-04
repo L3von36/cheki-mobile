@@ -58,6 +58,11 @@ class FakeCloudServer {
         if (request.method == 'GET' && path == '/v1/vault') {
           final v = vaults[_uid(request)];
           if (v == null) return http.Response(jsonEncode({'error': 'empty'}), 404);
+          final since = request.url.queryParameters['sinceRevision'];
+          if (since != null && int.tryParse(since) == v['revision']) {
+            return http.Response(
+                jsonEncode({'notModified': true, 'revision': v['revision']}), 200);
+          }
           return http.Response(jsonEncode(v), 200);
         }
         if (request.method == 'PUT' && path == '/v1/vault') {

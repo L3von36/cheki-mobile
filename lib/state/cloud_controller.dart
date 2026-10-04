@@ -59,13 +59,15 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     PasswordHasher? hasher,
     SharedPreferences? prefs,
     int Function()? revisionClock,
-    this.autoSyncDebounce = const Duration(seconds: 3),
+    this.autoSyncDebounce = const Duration(milliseconds: 500),
     this.autoSyncRetry = const Duration(minutes: 2),
     this.autoSyncBackoff = const Duration(minutes: 15),
     this.bootCatchUpDelay = const Duration(seconds: 5),
     this.maxAutoFailures = 3,
     this.autoArmRetries = 4,
     this.autoArmRetryDelay = const Duration(seconds: 20),
+    this.enableRealtimePolling = true,
+    this.realtimePollInterval = const Duration(seconds: 3),
   })  : _api = api ?? CloudApi(),
         _hasher = hasher ?? PasswordHasher(),
         _prefs = prefs,
@@ -90,6 +92,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   // backoffs after the initial attempt.
   final int autoArmRetries;
   final Duration autoArmRetryDelay;
+  final bool enableRealtimePolling;
+  final Duration realtimePollInterval;
 
   // Auto-arm retry state (ephemeral). The plaintext password lives here
   // ONLY while bounded retries are pending — never persisted, never
@@ -127,6 +131,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   int _autoFailures = 0;
   int? _nextAutoAttemptAt;
   bool _catchUpPending = false;
+  Timer? _realtimeTimer;
+  int? _lastRemoteRevision;
+  bool _isPulling = false;
 
   // ---------------------------------------------------------------- accessors
   bool get enabled => _enabled;
@@ -156,6 +163,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     _history?.removeListener(_onHistoryChanged);
     _history = history;
     history.addListener(_onHistoryChanged);
+    if (_enabled && hasSession && _autoSync) {
+      _startRealtimePolling();
+    }
     if (_catchUpPending) {
       if (_enabled && hasSession && _autoSync) {
         _catchUpPending = false;
@@ -170,6 +180,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _stopRealtimePolling();
       if (_enabled && _autoSync && hasSession && _dirty) {
         _scheduleAutoSync(Duration.zero);
       }
@@ -179,6 +190,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     final history = _history;
     if (_enabled && _autoSync && hasSession && history != null) {
       _scheduleAutoSync(Duration.zero);
+      _startRealtimePolling();
     }
   }
 
@@ -260,14 +272,91 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     if (_autoSync == on) return;
     _autoSync = on;
     if (on) {
+      _startRealtimePolling();
       if (_dirty) {
         _scheduleAutoSync(autoSyncDebounce);
       }
     } else {
+      _stopRealtimePolling();
       _autoTimer?.cancel();
     }
     _persistState();
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------- realtime sync
+  void _startRealtimePolling() {
+    _stopRealtimePolling();
+    if (!enableRealtimePolling || !_enabled || !hasSession || !_autoSync) return;
+    _realtimeTimer = Timer.periodic(realtimePollInterval, (_) {
+      _onRealtimeTick();
+    });
+  }
+
+  void _stopRealtimePolling() {
+    _realtimeTimer?.cancel();
+    _realtimeTimer = null;
+  }
+
+  Future<void> _onRealtimeTick() async {
+    if (!enableRealtimePolling ||
+        !_enabled ||
+        !hasSession ||
+        !_autoSync ||
+        isWorking ||
+        _isPulling) {
+      return;
+    }
+    final history = _history;
+    if (history == null) return;
+
+    if (_dirty) {
+      await _runAutoSync();
+      return;
+    }
+
+    await pollNow(history);
+  }
+
+  /// Pulls the latest changes from the cloud immediately.
+  /// Ultra-fast: checks sinceRevision so no bandwidth or decryption
+  /// happens if the vault hasn't changed.
+  Future<int> pollNow(VerifyHistory history) async {
+    if (!_enabled || !hasSession || isWorking || _isPulling) return 0;
+    _isPulling = true;
+    try {
+      final remote = await _api.getVault(
+        _sessionToken!,
+        sinceRevision: _lastRemoteRevision,
+      );
+      if (remote == null) return 0;
+      if (remote.notModified) {
+        _lastRemoteRevision = remote.revision;
+        return 0;
+      }
+      if (remote.revision == _lastRemoteRevision && _lastRemoteRevision != null) {
+        return 0;
+      }
+      _lastRemoteRevision = remote.revision;
+      if (remote.blob.isEmpty) return 0;
+      final key = hexToBytes(_vaultKeyHex!);
+      final incoming = await _decodeRemoteEntries(key, remote.blob);
+      final added = await history.mergeRemote(incoming);
+      if (added > 0) {
+        _lastSyncAt = _revisionClock();
+        _persistState();
+      }
+      return added;
+    } on CloudApiException catch (e) {
+      if (e.error == CloudApiError.unauthorized) {
+        _handleApiFailure(e);
+      }
+      return 0;
+    } catch (_) {
+      return 0;
+    } finally {
+      _isPulling = false;
+    }
   }
 
   // ---------------------------------------------------------------- auto-on
@@ -473,6 +562,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _nextAutoAttemptAt = null;
       _catchUpPending = false;
       _persistState();
+      _startRealtimePolling();
       return true;
     } on CloudApiException catch (e) {
       _enabled = false;
@@ -526,6 +616,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final remote = await _api.getVault(_sessionToken!);
       if (remote == null) return 0;
+      _lastRemoteRevision = remote.revision;
       final key = hexToBytes(_vaultKeyHex!);
       final incoming = await _decodeRemoteEntries(key, remote.blob);
       return history.mergeRemote(incoming);
@@ -557,6 +648,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
         } catch (_) {/* best effort */}
       }
     } finally {
+      _stopRealtimePolling();
       _dropArmCredentials();
       _autoTimer?.cancel();
       _enabled = false;
@@ -592,17 +684,19 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
         encodeVaultPayload(merged, account: _profile),
       );
 
+      final rev = _revisionClock();
       try {
         await _api.putVault(
           sessionToken: _sessionToken!,
           blob: blob,
-          revision: _revisionClock(),
+          revision: rev,
           baseRevision: remote?.revision,
         );
       } on CloudApiException catch (e) {
         if (e.error != CloudApiError.conflict || attempt == 1) rethrow;
         continue;
       }
+      _lastRemoteRevision = rev;
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       return;
     }
@@ -737,6 +831,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _stopRealtimePolling();
     WidgetsBinding.instance.removeObserver(this);
     _dropArmCredentials();
     _autoTimer?.cancel();

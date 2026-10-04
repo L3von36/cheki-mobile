@@ -5,7 +5,7 @@ description: >-
   Amhara, Zemen, CBE Birr, Siinqee and eBirr payment receipts in seconds.
   First 5 checks free, then activate Mahtem Pro.
 publish_to: "none"
-version: 1.14.8+46
+version: 1.14.9+47
 
 environment:
   sdk: ">=3.9.0 <4.0.0"

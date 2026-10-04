@@ -13,6 +13,7 @@ import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
+import '../../state/cloud_controller.dart';
 
 /// Status filter above the history list.
 enum _HistoryFilter { all, verified, failed }
@@ -37,6 +38,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final _searchCtrl = TextEditingController();
   bool _searchOpen = false;
   _HistoryFilter _filter = _HistoryFilter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final cloud = context.read<CloudController>();
+        final history = context.read<VerifyHistory>();
+        cloud.pollNow(history);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -253,42 +266,69 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
         ],
       ),
-      body: entries.isEmpty
-          ? _EmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: s.noChecksTitle,
-              body: s.noChecksBody,
-              ctaLabel: s.emptyCta,
-              onCta: () => context.read<AppTab>().switchTo(0),
-            )
-          : Column(
-              children: [
-                _StatsBar(entries: entries),
-                _FilterBar(
-                  filter: _filter,
-                  onSelected: (f) => setState(() => _filter = f),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final cloud = context.read<CloudController>();
+          final history = context.read<VerifyHistory>();
+          await cloud.pollNow(history);
+        },
+        child: entries.isEmpty
+            ? LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
+                    child: _EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: s.noChecksTitle,
+                      body: s.noChecksBody,
+                      ctaLabel: s.emptyCta,
+                      onCta: () => context.read<AppTab>().switchTo(0),
+                    ),
+                  ),
                 ),
-                Expanded(
-                  child: Builder(builder: (context) {
-                    final visible = _filtered(entries);
-                    if (visible.isEmpty) {
-                      return _EmptyState(
-                        icon: Icons.search_off_rounded,
-                        title: s.noMatchesTitle,
-                        body: s.noMatchesBody,
+              )
+            : Column(
+                children: [
+                  _StatsBar(entries: entries),
+                  _FilterBar(
+                    filter: _filter,
+                    onSelected: (f) => setState(() => _filter = f),
+                  ),
+                  Expanded(
+                    child: Builder(builder: (context) {
+                      final visible = _filtered(entries);
+                      if (visible.isEmpty) {
+                        return LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                  minHeight: constraints.maxHeight),
+                              child: _EmptyState(
+                                icon: Icons.search_off_rounded,
+                                title: s.noMatchesTitle,
+                                body: s.noMatchesBody,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      final rows = _buildRows(s, visible, history);
+                      return ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        itemCount: rows.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) => rows[index],
                       );
-                    }
-                    final rows = _buildRows(s, visible, history);
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                      itemCount: rows.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) => rows[index],
-                    );
-                  }),
-                ),
-              ],
-            ),
+                    }),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 

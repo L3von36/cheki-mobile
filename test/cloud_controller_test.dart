@@ -66,7 +66,7 @@ const _kArmDelay = Duration(milliseconds: 25);
 
 CloudController _tuned(FakeCloudServer server, PasswordHasher hasher,
         SharedPreferences prefs,
-        {int Function()? revisionClock}) =>
+        {int Function()? revisionClock, bool enableRealtimePolling = false}) =>
     CloudController(
       api: CloudApi(client: server.client()),
       hasher: hasher,
@@ -78,6 +78,7 @@ CloudController _tuned(FakeCloudServer server, PasswordHasher hasher,
       bootCatchUpDelay: _kCatchUp,
       autoArmRetries: 3,
       autoArmRetryDelay: _kArmDelay,
+      enableRealtimePolling: enableRealtimePolling,
     );
 
 Future<(CloudController, VerifyHistory)> _enabledSession(
@@ -787,5 +788,50 @@ void main() {
     expect(server.vaults.keys, containsAll(firstVaultKeys),
         reason: 'the previous account cloud copy must survive the switch');
     expect(server.vaults, hasLength(2)); // new account has its own vault
+  });
+
+  test('realtime polling pulls new entries from another device while open', () async {
+    // Use a shared monotonic counter so Device 2's enable() revision and
+    // Device 1's backupNow() revision are always strictly different —
+    // prevents the sinceRevision equality false-positive on the fake server
+    // that can occur when both calls happen within the same millisecond.
+    var _rev = 0;
+    int revClock() => ++_rev;
+
+    final prefs1 = await SharedPreferences.getInstance();
+    final first = _tuned(server, hasher, prefs1, revisionClock: revClock);
+    final h1 = VerifyHistory();
+    await first.enable(password: 'correct-horse', account: account, history: h1);
+    first.observe(h1);
+
+    final prefs2 = await SharedPreferences.getInstance();
+    final second = CloudController(
+      api: CloudApi(client: server.client()),
+      hasher: hasher,
+      prefs: prefs2,
+      revisionClock: revClock,
+      enableRealtimePolling: true,
+      realtimePollInterval: const Duration(milliseconds: 40),
+    );
+    await second.ensureLoaded();
+    final h2 = VerifyHistory();
+    await second.enable(password: 'correct-horse', account: account, history: h2);
+    second.observe(h2);
+
+    expect(h2.entries, isEmpty);
+
+    // Device 1 adds an entry and pushes
+    await h1.add(_entry('realtime-from-d1', verifiedAt: 5000));
+    await first.backupNow(h1);
+
+    // Device 2 is sitting open — realtime poller catches it automatically
+    final received = await _waitFor(
+      () => h2.entries.any((e) => e.id == 'realtime-from-d1'),
+      timeout: const Duration(seconds: 3),
+    );
+    expect(received, isTrue, reason: 'Device 2 should pull in realtime while open');
+
+    first.dispose();
+    second.dispose();
   });
 }

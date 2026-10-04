@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/verify_history.dart';
 import '../state/app_tab.dart';
+import '../state/cloud_controller.dart';
 import '../state/locale_controller.dart';
 import '../theme/mahtem_theme.dart';
 import 'flow.dart';
@@ -63,7 +64,12 @@ class _ShellScreenState extends State<ShellScreen> {
                   activeIcon: Icons.history_rounded,
                   label: strings.historyTab(history),
                   active: index == 1,
-                  onTap: () => context.read<AppTab>().switchTo(1),
+                  onTap: () {
+                    context.read<AppTab>().switchTo(1);
+                    context
+                        .read<CloudController>()
+                        .pollNow(context.read<VerifyHistory>());
+                  },
                   isDark: isDark,
                 ),
               ],

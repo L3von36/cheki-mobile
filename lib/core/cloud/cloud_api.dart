@@ -66,10 +66,13 @@ class CloudVaultRemote {
   final String blob;
   final int revision;
   final int updatedAtMs;
+  final bool notModified;
+
   const CloudVaultRemote({
     required this.blob,
     required this.revision,
     required this.updatedAtMs,
+    this.notModified = false,
   });
 }
 
@@ -91,10 +94,15 @@ class CloudApi {
     String path, {
     Map<String, dynamic>? body,
     String? bearer,
+    Map<String, String>? queryParameters,
   }) async {
     final http.Response resp;
     try {
-      final request = http.Request(method, baseUrl.replace(path: path))
+      final baseUri = baseUrl.replace(path: path);
+      final uri = queryParameters != null && queryParameters.isNotEmpty
+          ? baseUri.replace(queryParameters: queryParameters)
+          : baseUri;
+      final request = http.Request(method, uri)
         ..headers.addAll(_clientHeader);
       if (bearer != null) request.headers['Authorization'] = 'Bearer $bearer';
       if (body != null) {
@@ -249,9 +257,27 @@ class CloudApi {
       });
 
   /// Returns null when the server holds no vault yet (404 `empty`).
-  Future<CloudVaultRemote?> getVault(String sessionToken) async {
+  Future<CloudVaultRemote?> getVault(
+    String sessionToken, {
+    int? sinceRevision,
+  }) async {
     try {
-      final r = await _send('GET', '/v1/vault', bearer: sessionToken);
+      final r = await _send(
+        'GET',
+        '/v1/vault',
+        bearer: sessionToken,
+        queryParameters: sinceRevision != null
+            ? {'sinceRevision': '$sinceRevision'}
+            : null,
+      );
+      if (r['notModified'] == true) {
+        return CloudVaultRemote(
+          blob: '',
+          revision: (r['revision'] as num?)?.toInt() ?? sinceRevision ?? 0,
+          updatedAtMs: 0,
+          notModified: true,
+        );
+      }
       return CloudVaultRemote(
         blob: r['blob'] as String? ?? '',
         revision: (r['revision'] as num?)?.toInt() ?? 0,
