@@ -54,9 +54,16 @@ android {
     // ~2x bigger. With legacy packaging the installer extracts libs to disk
     // once, so installed size ends up roughly the same as before while the
     // DOWNLOAD drops by more than half.
+    //
+    // Also drop third-party x86_64 libs (ML Kit OCR pipeline, barcode
+    // engine, Sentry) at packaging time — Flutter's own x86_64 binaries
+    // already respect --target-platform, but bundled AARs otherwise still
+    // ship an x86_64 copy of every lib (~9 MB of dead weight, since an
+    // x86_64 device could never run the app without its engine anyway).
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            excludes += setOf("lib/x86_64/**")
         }
     }
 
