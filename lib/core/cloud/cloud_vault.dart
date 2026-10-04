@@ -10,14 +10,24 @@ library;
 
 import 'dart:convert';
 
+import '../auth/remote_account.dart';
 import '../verify_history.dart';
 
+// v1.14.4: the payload gained an OPTIONAL 'account' profile (display
+// name + identifier as typed) so a fresh device can restore the account
+// after a cloud sign-in. The format version STAYS 1 on purpose — already-
+// shipped v1.14.x clients reject unknown versions, but they do ignore
+// unknown FIELDS, so they keep decoding v1+profile payloads fine (they
+// just skip the profile; their next whole-payload upload drops it until
+// an upgraded device re-writes it).
 const int kVaultFormatVersion = 1;
 const int kVaultMaxEntries = 100;
 
 /// Serializes [entries] (already newest-first) into the plaintext vault
-/// JSON that [encryptVaultBlob] will encrypt.
-String encodeVaultPayload(List<HistoryEntry> entries) {
+/// JSON that [encryptVaultBlob] will encrypt. When [account] is given,
+/// the profile rides along inside the same encrypted blob (v1.14.4).
+String encodeVaultPayload(List<HistoryEntry> entries,
+    {RemoteAccountProfile? account}) {
   final capped = entries.length > kVaultMaxEntries
       ? entries.sublist(0, kVaultMaxEntries)
       : entries;
@@ -25,13 +35,28 @@ String encodeVaultPayload(List<HistoryEntry> entries) {
     'v': kVaultFormatVersion,
     'exportedAt': DateTime.now().millisecondsSinceEpoch,
     'entries': capped.map((e) => e.toJson()).toList(),
+    if (account != null) 'account': <String, dynamic>{
+      'identifier': account.identifier,
+      'displayName': account.displayName,
+      if (account.createdAtMs != null) 'createdAtMs': account.createdAtMs,
+    },
   });
 }
 
-/// Decodes a vault plaintext into entries (newest first). Throws
+/// A decoded vault: the history entries plus, when present, the account
+/// profile that lets a fresh device restore the account after a
+/// cloud-proven sign-in.
+class VaultDocument {
+  final List<HistoryEntry> entries;
+  final RemoteAccountProfile? account;
+  const VaultDocument({required this.entries, this.account});
+}
+
+/// Decodes a vault plaintext into a [VaultDocument]. Throws
 /// [FormatException] on malformed payloads; unknown/extra fields are
-/// ignored for forward compatibility.
-List<HistoryEntry> decodeVaultPayload(String plaintext) {
+/// ignored for forward compatibility, and a malformed 'account' profile
+/// is dropped rather than poisoning the entries (it is cosmetic).
+VaultDocument decodeVaultDocument(String plaintext) {
   final decoded = jsonDecode(plaintext);
   if (decoded is! Map<String, dynamic>) {
     throw const FormatException('vault payload is not an object');
@@ -49,8 +74,30 @@ List<HistoryEntry> decodeVaultPayload(String plaintext) {
       .where((e) => e.id.isNotEmpty)
       .toList();
   entries.sort((a, b) => b.verifiedAt.compareTo(a.verifiedAt));
-  return entries;
+
+  RemoteAccountProfile? account;
+  final rawAccount = decoded['account'];
+  if (rawAccount is Map<String, dynamic>) {
+    final identifier = rawAccount['identifier'];
+    final displayName = rawAccount['displayName'];
+    if (identifier is String &&
+        identifier.isNotEmpty &&
+        displayName is String &&
+        displayName.trim().isNotEmpty) {
+      account = RemoteAccountProfile(
+        identifier: identifier,
+        displayName: displayName.trim(),
+        createdAtMs: (rawAccount['createdAtMs'] as num?)?.toInt(),
+      );
+    }
+  }
+  return VaultDocument(entries: entries, account: account);
 }
+
+/// Decodes a vault plaintext into entries (newest first). Throws
+/// [FormatException] on malformed payloads.
+List<HistoryEntry> decodeVaultPayload(String plaintext) =>
+    decodeVaultDocument(plaintext).entries;
 
 String _signature(HistoryEntry e) =>
     '${e.bankId}|${e.reference}|${e.verifiedAt}|${e.status}';

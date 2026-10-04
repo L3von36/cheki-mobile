@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/auth/account.dart';
 import '../core/auth/account_store.dart';
 import '../core/auth/password_hasher.dart';
+import '../core/auth/remote_account.dart';
 import '../core/error_safety_net.dart';
 
 /// Why a sign-up / sign-in attempt was refused. The UI maps these to
@@ -18,6 +19,7 @@ enum AuthError {
   alreadyExists,
   accountNotFound,
   wrongPassword,
+  network,
   storageFailed,
 }
 
@@ -40,10 +42,17 @@ class AuthFailure extends AuthResult {
 /// sign-in, sign-out and the persisted session. Exposed app-wide via
 /// `provider`.
 ///
-/// Accounts are stored ON-DEVICE only (Android Keystore-encrypted secure
-/// storage) — passwords are PBKDF2-hashed and nothing is ever sent to a
-/// server. The [AccountKeyValue] store is injectable so a hosted backend
-/// can be swapped in later without touching the UI.
+/// Accounts are stored ON-DEVICE (Android Keystore-encrypted secure
+/// storage with a SharedPreferences mirror) — passwords are PBKDF2-
+/// hashed and the raw password is never sent anywhere. Since v1.14.4
+/// sign-in is no longer device-bound: when the identifier is unknown
+/// LOCALLY, the controller asks the [RemoteAccountDirectory] (the
+/// zero-knowledge cloud provisioned at sign-up by backup arming) to
+/// prove the credentials remotely; a confirmed match rebuilds the local
+/// account — display name rides back inside the encrypted vault — so
+/// clearing app data or switching phones no longer locks the user out.
+/// The [AccountKeyValue] store and the directory are both injectable so
+/// tests can run without platform secure storage or the network.
 ///
 /// Gating model: when a valid session exists the app boots straight into
 /// the shell; otherwise the auth gate shows sign-in (or create-account on
@@ -52,13 +61,16 @@ class AuthController extends ChangeNotifier {
   AuthController({
     AccountKeyValue? store,
     PasswordHasher? hasher,
+    RemoteAccountDirectory? remoteDirectory,
     DateTime Function()? now,
   }) : _store = store ?? ResilientAccountStore(),
        _hasher = hasher ?? PasswordHasher(),
+       _remoteDirectory = remoteDirectory,
        _now = now ?? (() => DateTime.now().toUtc());
 
   final AccountKeyValue _store;
   final PasswordHasher _hasher;
+  final RemoteAccountDirectory? _remoteDirectory;
   final DateTime Function() _now;
 
   static const String _kAccountsKey = 'accounts_v1';
@@ -203,6 +215,7 @@ class AuthController extends ChangeNotifier {
         passwordHash: hash,
         createdAtUtc: _now(),
       );
+      _makeRoomForNewAccount();
       _accounts.add(account);
       if (!await _persistAccounts()) {
         _accounts.remove(account);
@@ -218,6 +231,14 @@ class AuthController extends ChangeNotifier {
   /// Signs in with the identifier + password. The identifier is
   /// normalized the same way sign-up normalized it, so `0911223344`,
   /// `+251911223344` and `251911223344` all find the same account.
+  ///
+  /// v1.14.4 — two-tier lookup. Fast path: the account exists on this
+  /// device, the password is verified against the local PBKDF2 hash and
+  /// no network is touched. Fallback: the identifier is unknown locally
+  /// (fresh install, cleared app data, second phone) — the cloud
+  /// provisioned at sign-up is asked to prove the credentials instead;
+  /// a confirmed match rebuilds the account locally and signs in, so
+  /// the user's account follows them across devices.
   Future<AuthResult> signIn({
     required String identifier,
     required String password,
@@ -241,7 +262,30 @@ class AuthController extends ChangeNotifier {
         if (a.id == id) account = a;
       }
       if (account == null) {
-        return const AuthFailure(AuthError.accountNotFound);
+        final directory = _remoteDirectory;
+        if (directory == null) {
+          return const AuthFailure(AuthError.accountNotFound);
+        }
+        final RemoteAuthOutcome outcome;
+        try {
+          outcome = await directory.authenticate(
+            accountId: id,
+            password: password,
+          );
+        } catch (_) {
+          // The directory itself blew up — inconclusive, report it as a
+          // network problem rather than inventing "no account".
+          return const AuthFailure(AuthError.network);
+        }
+        return switch (outcome) {
+          RemoteAuthConfirmed(:final profile) =>
+            await _adoptCloudAccount(id, identifier.trim(), profile, password),
+          RemoteAuthUnknownAccount() =>
+            const AuthFailure(AuthError.accountNotFound),
+          RemoteAuthBadPassword() =>
+            const AuthFailure(AuthError.wrongPassword),
+          RemoteAuthUnreachable() => const AuthFailure(AuthError.network),
+        };
       }
       final ok = await _hasher.verifyEncoded(password, account.passwordHash);
       if (!ok) return const AuthFailure(AuthError.wrongPassword);
@@ -288,6 +332,84 @@ class AuthController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- internals
+
+  /// v1.14.4 — the cloud proved the identifier + password; rebuild the
+  /// account on this device and sign in. The display name and original
+  /// identifier come from the profile that rode inside the encrypted
+  /// vault; older vaults (or no vault yet) fall back to the normalized
+  /// identifier for display. The local password hash is minted fresh
+  /// from the just-proven password, so every later sign-in on this
+  /// device is offline-local again.
+  Future<AuthResult> _adoptCloudAccount(
+    String id,
+    String typedIdentifier,
+    RemoteAccountProfile? profile,
+    String password,
+  ) async {
+    final String hash;
+    try {
+      hash = (await _hasher.hash(password)).encode();
+    } catch (_) {
+      return const AuthFailure(AuthError.storageFailed);
+    }
+    // A local record appeared meanwhile (race) — treat it as the
+    // ordinary local sign-in instead of duplicating the account.
+    AccountRecord? existing;
+    for (final a in _accounts) {
+      if (a.id == id) existing = a;
+    }
+    if (existing != null) {
+      final ok = await _hasher.verifyEncoded(password, existing.passwordHash);
+      if (!ok) return const AuthFailure(AuthError.wrongPassword);
+      await _storeSession(existing.id);
+      _sessionId = existing.id;
+      notifyListeners();
+      return AuthSuccess(existing);
+    }
+    _makeRoomForNewAccount();
+    final profileName = profile?.displayName.trim() ?? '';
+    final profileIdentifier = profile?.identifier.trim() ?? '';
+    final account = AccountRecord(
+      id: id,
+      identifier: profileIdentifier.isNotEmpty
+          ? profileIdentifier
+          : typedIdentifier,
+      displayName:
+          (profileName.length >= _minNameLength && profileName.length <= 60)
+              ? profileName
+              : displayIdentifierFor(id),
+      passwordHash: hash,
+      createdAtUtc: profile?.createdAtMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              profile!.createdAtMs!,
+              isUtc: true,
+            )
+          : _now(),
+    );
+    _accounts.add(account);
+    if (!await _persistAccounts()) {
+      _accounts.remove(account);
+      return const AuthFailure(AuthError.storageFailed);
+    }
+    await _storeSession(account.id);
+    _sessionId = account.id;
+    // Observability without leaking the identifier into the trail.
+    DiagnosticsLog.I.record(
+      'auth: account restored via cloud sign-in',
+      StackTrace.current,
+    );
+    notifyListeners();
+    return AuthSuccess(account);
+  }
+
+  /// Keeps the persisted list within [_maxAccounts]: when the device is
+  /// full, the OLDEST record gives way. (Previously the newest account
+  /// was the one silently dropped at persist time — the worse loss.)
+  void _makeRoomForNewAccount() {
+    while (_accounts.length >= _maxAccounts) {
+      _accounts.removeAt(0);
+    }
+  }
 
   /// Runs a mutation while flagging [isBusy], so the UI can show spinners.
   Future<T> _guard<T>(Future<T> Function() action) async {

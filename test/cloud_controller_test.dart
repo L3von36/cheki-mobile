@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:mahtem/core/auth/account.dart';
 import 'package:mahtem/core/auth/password_hasher.dart';
 import 'package:mahtem/core/cloud/cloud_api.dart';
@@ -12,99 +10,7 @@ import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/cloud_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// In-memory twin of the deployed mahtem-api Worker: accounts, sessions
-/// and vaults with the same routes and status codes the real server uses.
-class FakeCloudServer {
-  final users = <String, Map<String, dynamic>>{};
-  final vaults = <String, Map<String, dynamic>>{};
-  int revisionBumps = 0;
-  int putAttempts = 0; // every vault PUT, successful or not
-  int requests = 0; // every request that reached the client at all
-  bool failVaultPut = false; // 500 on vault writes
-  bool unauthorizedVault = false; // 401 on vault writes
-  bool down = false; // when true the network itself is unreachable
-
-  http.Client client() => MockClient((request) async {
-        requests++;
-        if (down) throw http.ClientException('offline');
-        final path = request.url.path;
-        if (request.method == 'POST' && path == '/v1/accounts') {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final idh = body['identifierHash'] as String;
-          if (users.containsKey(idh)) {
-            return http.Response(jsonEncode({'error': 'exists'}), 409);
-          }
-          users[idh] = {
-            'id': 'u-${users.length}',
-            'authKey': body['authKey'],
-          };
-          return http.Response(jsonEncode({'userId': users[idh]!['id']}), 201);
-        }
-        if (request.method == 'POST' && path == '/v1/accounts/lookup') {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          return http.Response(
-              jsonEncode({'exists': users.containsKey(body['identifierHash'])}),
-              200);
-        }
-        if (request.method == 'POST' && path == '/v1/session') {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final user = users[body['identifierHash'] as String];
-          if (user == null) {
-            return http.Response(jsonEncode({'error': 'no_account'}), 404);
-          }
-          if (user['authKey'] != body['authKey']) {
-            return http.Response(jsonEncode({'error': 'bad_credentials'}), 401);
-          }
-          return http.Response(jsonEncode({
-            'sessionToken': 'tok-${user['id']}',
-            'userId': user['id'],
-            'expiresAt': 9999999999999,
-          }), 200);
-        }
-        if (request.method == 'GET' && path == '/v1/vault') {
-          final v = vaults[_uid(request)];
-          if (v == null) return http.Response(jsonEncode({'error': 'empty'}), 404);
-          return http.Response(jsonEncode(v), 200);
-        }
-        if (request.method == 'PUT' && path == '/v1/vault') {
-          putAttempts++;
-          if (unauthorizedVault) {
-            return http.Response(jsonEncode({'error': 'unauthorized'}), 401);
-          }
-          if (failVaultPut) {
-            return http.Response(jsonEncode({'error': 'internal'}), 500);
-          }
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final existing = vaults[_uid(request)];
-          if (existing != null &&
-              body['baseRevision'] != null &&
-              (existing['revision'] as int) > (body['baseRevision'] as int)) {
-            return http.Response(jsonEncode({
-              'error': 'conflict',
-              'revision': existing['revision'],
-            }), 409);
-          }
-          revisionBumps++;
-          vaults[_uid(request)] = body;
-          return http.Response(jsonEncode({'ok': true}), 200);
-        }
-        if (request.method == 'DELETE' && path == '/v1/vault') {
-          vaults.remove(_uid(request));
-          return http.Response(jsonEncode({'ok': true}), 200);
-        }
-        if (request.method == 'DELETE' && path == '/v1/session') {
-          return http.Response(jsonEncode({'ok': true}), 200);
-        }
-        return http.Response(jsonEncode({'error': 'not_found'}), 404);
-      });
-
-  final Map<String, String> _tokens = {};
-  String _uid(http.Request request) {
-    final token =
-        (request.headers['Authorization'] ?? '').replaceAll('Bearer ', '');
-    return _tokens.putIfAbsent(token, () => token.replaceAll('tok-', 'u-'));
-  }
-}
+import 'fixtures/fake_cloud_server.dart';
 
 Future<AccountRecord> _account(PasswordHasher hasher) async {
   final hash = await hasher.hash('correct-horse');
@@ -266,6 +172,48 @@ void main() {
     // State persists for the next boot.
     expect(prefs.getBool('cloud.enabled'), isTrue);
     expect(prefs.getString('cloud.sessionToken'), isNotNull);
+  });
+
+  test('enable writes the account profile into the vault (v1.14.4)',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = CloudController(
+      api: CloudApi(client: server.client()),
+      hasher: hasher,
+      prefs: prefs,
+      revisionClock: () => 12345,
+    );
+    final history = VerifyHistory();
+    await history.add(_entry('h1'));
+
+    final ok = await controller.enable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    expect(ok, isTrue);
+
+    // The profile is inside the ENCRYPTED blob, never as plaintext.
+    final blob = server.vaults.values.single['blob'] as String;
+    expect(blob, isNot(contains('Test User')));
+    final doc = decodeVaultDocument(
+      await decryptVaultBlob(
+        await deriveVaultKey('correct-horse', 'user@example.com'),
+        blob,
+      ),
+    );
+    expect(doc.account, isNotNull);
+    expect(doc.account!.displayName, 'Test User');
+    expect(doc.account!.identifier, 'user@example.com');
+
+    // The profile persists so auto-sync keeps writing it after a reboot.
+    expect(prefs.getString('cloud.accountProfile'), isNotNull);
+    expect(prefs.getString('cloud.accountProfile')!, contains('Test User'));
+
+    // Turning the backup off clears the stored profile too.
+    await controller.disable();
+    expect(prefs.getString('cloud.accountProfile'), isNull);
   });
 
   test('backupNow merges remote + local and uploads the union', () async {

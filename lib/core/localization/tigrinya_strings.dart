@@ -158,9 +158,9 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      'ሕሳብኩም ኣብዚ ተሌፎን እዚ ጥራይ ይቐመጥ — ናብ ወጻኢ ኣይሓድግን። '
-      'መጠባበቂያ ታሪኽ ምርግጋጽ ብመስቕሊ ጥራይ ይሓልፍ — ብተምሲል ቃል '
-      'ሕደጋኹም ጥራይ ዚኽፈት።';
+      'ሕሳብኩም ኣብዚ ተሌፎን እዚ ተመሂሩ ይቐመጥ — ተምሲል ቃልኩም ግን ናብ ወጻኢ '
+      'ኣይሓልፍን። ኣብ ሓድሽ ተሌፎን ምእታይ ብሓንሳባዊ ቁልፊ እዩ ዝርግግጥ፤ '
+      'መጠባበቂያ ታሪኽ ድማ ብመስቕሊ ጥራይ ይሓልፍ።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -182,6 +182,9 @@ final class TigrinyaStrings extends AppStrings {
           'ሕሳብ ክፉቱ።',
     AuthError.wrongPassword =>
       'እቲ መሕለፊ ቃል ጌጋ እዩ። ደጊምኩም ፈትሹ።',
+    AuthError.network =>
+      'ነቲ ኣገልግሎት መሕሳብ ክረኽብ ኣይከኣለን። ምርኻብ ኢንተርኔትኩም '
+          'ኣረጋግጹ ደጊምኩም ፈትሹ።',
     AuthError.storageFailed =>
       'ሕሳብ ምዕቃብ ኣይተኻእለን። ደጊምኩም ፈትሹ።',
   };

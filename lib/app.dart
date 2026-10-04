@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/auth/account_store.dart';
 import 'core/auth/password_hasher.dart';
+import 'core/cloud/cloud_account_directory.dart';
 import 'core/error_safety_net.dart';
 import 'core/localization/am_material_localizations.dart';
 import 'core/localization/app_strings.dart';
@@ -82,10 +83,19 @@ class MahtemApp extends StatelessWidget {
         ),
         // Accounts load from secure storage in the background — the gate
         // shows a branded splash until then. (ensureLoaded is idempotent
-        // and safe on a pre-seeded test controller.)
+        // and safe on a pre-seeded test controller.) The cloud directory
+        // (v1.14.4) backs up the local lookup: when sign-in meets an
+        // identifier this device has never seen (cleared data, new
+        // phone), the zero-knowledge cloud proves the credentials and
+        // the account is rebuilt locally.
         ChangeNotifierProvider<AuthController>(
           create: (_) =>
-              (auth ?? AuthController(store: authStore, hasher: hasher))
+              (auth ??
+                  AuthController(
+                    store: authStore,
+                    hasher: hasher,
+                    remoteDirectory: CloudAccountDirectory(),
+                  ))
                 ..ensureLoaded(),
         ),
       ],

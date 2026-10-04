@@ -152,9 +152,9 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      'Accounts live only on this device — encrypted, and never sent '
-      'anywhere. History backups travel only as ciphertext, sealed with '
-      'your password.';
+      'Accounts live on this device, encrypted — your password never '
+      'leaves it. New-device sign-ins prove themselves with a one-way '
+      'key, and history backups travel only as ciphertext.';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -171,6 +171,8 @@ final class EnglishStrings extends AppStrings {
     AuthError.accountNotFound =>
       'No account found for this phone/email — create one first.',
     AuthError.wrongPassword => 'Wrong password. Try again.',
+    AuthError.network =>
+      "Can't reach the account service. Check your internet and try again.",
     AuthError.storageFailed =>
       'Could not save the account on this device. Try again.',
   };

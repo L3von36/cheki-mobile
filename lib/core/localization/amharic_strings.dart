@@ -154,9 +154,9 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ብቻ ይቀመጣል — ወደ ውጭ በጭራሽ አይላክም። '
-      'የማረጋገጫ ታሪክ መጠባበቂያዎች ተመስጥረው ብቻ ይላካሉ — በመግቢያ ቃልዎ ብቻ '
-      'ይከፈታሉ።';
+      'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ይቀመጣል — የይለፍ ቃልዎ ግን ወደ ውጭ አይላክም። '
+      'በአዲስ መሣሪያ ላይ ሲገቡ ከይለፍ ቃልዎ የተሰራ አንድ-አቅጣጫ ቁልፍ ብቻ ይላካል፤ '
+      'የማረጋገጫ ታሪክ መጠባበቂያዎችም ተመስጥረው ብቻ ይላካሉ።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -170,6 +170,8 @@ final class AmharicStrings extends AppStrings {
     AuthError.accountNotFound =>
       'በዚህ ስልክ/ኢሜይል መለያ አልተገኘም — መጀመሪያ መለያ ይክፈቱ።',
     AuthError.wrongPassword => 'የይለፍ ቃሉ ተሳስቷል። እንደገና ይሞክሩ።',
+    AuthError.network =>
+      'የመለያ አገልግሎቱን ማግኘት አልተቻለም። የበይነመረብ ግንኙነትዎን ያረጋግጡ።',
     AuthError.storageFailed => 'መለያውን ማስቀመጥ አልተቻለም። እንደገና ይሞክሩ።',
   };
 

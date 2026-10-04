@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mahtem/core/auth/remote_account.dart';
 import 'package:mahtem/core/cloud/cloud_vault.dart';
 import 'package:mahtem/core/verify_history.dart';
 
@@ -51,6 +52,59 @@ void main() {
         () => decodeVaultPayload('[1,2,3]'),
         throwsA(isA<FormatException>()),
       );
+    });
+  });
+
+  group('account profile (v1.14.4)', () {
+    test('round-trips an optional profile through the payload', () {
+      const profile = RemoteAccountProfile(
+        identifier: '+251911223344',
+        displayName: 'Abebe Kebede',
+        createdAtMs: 1700000000000,
+      );
+      final doc = decodeVaultDocument(
+        encodeVaultPayload([_entry(id: 'a')], account: profile),
+      );
+      expect(doc.entries, hasLength(1));
+      expect(doc.account, isNotNull);
+      expect(doc.account!.identifier, '+251911223344');
+      expect(doc.account!.displayName, 'Abebe Kebede');
+      expect(doc.account!.createdAtMs, 1700000000000);
+    });
+
+    test('payloads without a profile decode with a null account', () {
+      // v1.14.3 clients wrote exactly this shape.
+      final doc = decodeVaultDocument(encodeVaultPayload([_entry(id: 'a')]));
+      expect(doc.entries, hasLength(1));
+      expect(doc.account, isNull);
+    });
+
+    test('legacy raw v1 JSON still decodes (forward compatibility)', () {
+      final doc = decodeVaultDocument(
+        '{"v":1,"exportedAt":1,"entries":[{"id":"a","bankId":"cbe",'
+        '"bankName":"CBE","reference":"FT1","verifiedAt":1000,'
+        '"status":"verified"}]}',
+      );
+      expect(doc.entries, hasLength(1));
+      expect(doc.account, isNull);
+    });
+
+    test('malformed profile is dropped, entries survive', () {
+      final doc = decodeVaultDocument(
+        '{"v":1,"entries":[{"id":"a","bankId":"cbe","bankName":"CBE",'
+        '"reference":"FT1","verifiedAt":1000,"status":"verified"}],'
+        '"account":{"identifier":"","displayName":"  "}}',
+      );
+      expect(doc.entries, hasLength(1));
+      expect(doc.account, isNull);
+    });
+
+    test('profile displayName is trimmed on decode', () {
+      final doc = decodeVaultDocument(
+        '{"v":1,"entries":[],"account":'
+        '{"identifier":"a@b.co","displayName":"  Abebe  "}}',
+      );
+      expect(doc.account!.displayName, 'Abebe');
     });
   });
 

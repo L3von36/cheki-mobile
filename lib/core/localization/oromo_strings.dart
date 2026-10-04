@@ -161,9 +161,10 @@ final class OromoStrings extends AppStrings {
 
   @override
   String get authPrivacyNote =>
-      'Herregoonni meeshaa kana irratti qofa jiraatu — iccitii ta\u2019ee '
-      'bakka kamiyyuu hin eramamu. Backup seenaa mirkaneessaa haramoo '
-      'ta\u2019ee qofa erama — jecha icciti keetiin qofa kan bana.';
+      'Herregoonni meeshaa kana irratti iccitii ta\u2019ee jiraatu — jechi '
+      'icciti kee bakka kamiyyuu hin ba’u. Meeshaa haaraa irratti '
+      'galchuuf furmaata tokko-qabu kan jecha icciti kee irraa uumame '
+      'qofa ni erama; backup seenaa haramoo ta\u2019ee qofa erama.';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -184,6 +185,9 @@ final class OromoStrings extends AppStrings {
           'uumaa.',
     AuthError.wrongPassword =>
       'Jechi icciitii dogoggora dha. Irra deebi\u2019anii yaalaa.',
+    AuthError.network =>
+      'Tajaajila herrega arguu hin dandeenye. Interneetii kee '
+          'mirkaneessii irra deebi\u2019ii yaalaa.',
     AuthError.storageFailed =>
       'Herregi meeshaa kana irratti olkaa\u2019amu hin dandeenye. Irra '
           'deebi\u2019anii yaalaa.',

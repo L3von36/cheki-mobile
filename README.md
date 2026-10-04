@@ -134,6 +134,20 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **Sign in from anywhere — accounts follow you across devices**
+  (`v1.14.4`): fixes the reported dead end where clearing app data (or
+  using a second phone) made sign-in answer "No account found for this
+  phone/email — create one first" even though the account existed.
+  Sign-in now has a second tier: when the identifier is unknown to the
+  device, the zero-knowledge cloud (provisioned automatically at
+  sign-up) proves the phone/email + password remotely — the password
+  itself never leaves the device, only a one-way derived key — and the
+  account is rebuilt on the spot, display name included (it travels
+  back inside the encrypted history vault). The rebuilt account is
+  stored locally, so every later sign-in on that device works offline
+  exactly as before. Wrong passwords, genuinely unknown accounts and
+  offline states now each get their own truthful message instead of a
+  blanket "no account found".
 - **Much smaller downloads** (`v1.14.3`): the universal APK went from
   ~100 MB to ~35 MB, and the arm64 APK most phones install from under
   half its old size to ~22 MB. The old builds carried three complete

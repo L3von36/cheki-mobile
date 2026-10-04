@@ -33,12 +33,14 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/auth/account.dart';
 import '../core/auth/password_hasher.dart';
+import '../core/auth/remote_account.dart';
 import '../core/cloud/cloud_api.dart';
 import '../core/cloud/cloud_keys.dart';
 import '../core/cloud/cloud_vault.dart';
@@ -104,6 +106,12 @@ class CloudController extends ChangeNotifier {
   int? _sessionExpiresAt;
   bool _autoSync = true;
   bool _dirty = false;
+
+  /// v1.14.4 — the signed-in account's profile (name + identifier as
+  /// typed). Written into every vault upload so a fresh device can
+  /// rebuild the account after a cloud-proven sign-in; restored from
+  /// prefs so auto-sync keeps it alive across reboots.
+  RemoteAccountProfile? _profile;
 
   // ephemeral state
   CloudStep _step = CloudStep.idle;
@@ -357,6 +365,7 @@ class CloudController extends ChangeNotifier {
     _lastSyncAt = prefs.getInt(_kLastSync);
     _autoSync = prefs.getBool(_kAutoSync) ?? true;
     _dirty = prefs.getBool(_kDirty) ?? false;
+    _profile = _profileFromPrefs(prefs);
     // Boot catch-up: push anything that never made it (app killed
     // mid-debounce) and pull when the last sync is stale (changes from
     // another device). Consumed once a history store is attached.
@@ -402,6 +411,10 @@ class CloudController extends ChangeNotifier {
       final identifierHash = await cloudIdentifierHash(account.id);
       final authKey = await deriveCloudAuthKey(password);
       final vaultKey = await deriveVaultKey(password, account.id);
+
+      // v1.14.4 — the profile rides inside the encrypted vault so sign-in
+      // on a cleared device / second phone can restore the display name.
+      _profile = RemoteAccountProfile.fromAccount(account);
 
       // Link: create when the cloud doesn't know this identifier yet.
       final exists = await _api.lookupAccount(identifierHash: identifierHash);
@@ -522,6 +535,7 @@ class CloudController extends ChangeNotifier {
       _autoFailures = 0;
       _nextAutoAttemptAt = null;
       _dirty = false;
+      _profile = null;
       _persistState();
       _setWorking(false);
     }
@@ -550,7 +564,10 @@ class CloudController extends ChangeNotifier {
       merged = history.entries.toList();
     }
 
-    final blob = await encryptVaultBlob(key, encodeVaultPayload(merged));
+    final blob = await encryptVaultBlob(
+      key,
+      encodeVaultPayload(merged, account: _profile),
+    );
 
     // One optimistic attempt; on conflict take the server's revision,
     // re-merge nothing (our payload already includes the union we saw —
@@ -616,6 +633,33 @@ class CloudController extends ChangeNotifier {
   static const String _kLastSync = 'cloud.lastSyncAt';
   static const String _kAutoSync = 'cloud.autoSync';
   static const String _kDirty = 'cloud.dirty';
+  static const String _kProfile = 'cloud.accountProfile';
+
+  /// Parses the persisted profile; malformed payloads are dropped (the
+  /// next vault upload from a signed-in session re-writes it).
+  static RemoteAccountProfile? _profileFromPrefs(SharedPreferences prefs) {
+    final raw = prefs.getString(_kProfile);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final map = jsonDecode(raw);
+      if (map is! Map<String, dynamic>) return null;
+      final identifier = map['identifier'];
+      final displayName = map['displayName'];
+      if (identifier is! String ||
+          identifier.isEmpty ||
+          displayName is! String ||
+          displayName.trim().isEmpty) {
+        return null;
+      }
+      return RemoteAccountProfile(
+        identifier: identifier,
+        displayName: displayName.trim(),
+        createdAtMs: (map['createdAtMs'] as num?)?.toInt(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   void _persistState() {
     final prefs = _prefs;
@@ -639,6 +683,19 @@ class CloudController extends ChangeNotifier {
         prefs.remove(_kLastSync);
       } else {
         prefs.setInt(_kLastSync, sync);
+      }
+      final profile = _profile;
+      if (profile == null) {
+        prefs.remove(_kProfile);
+      } else {
+        prefs.setString(
+          _kProfile,
+          jsonEncode(<String, dynamic>{
+            'identifier': profile.identifier,
+            'displayName': profile.displayName,
+            if (profile.createdAtMs != null) 'createdAtMs': profile.createdAtMs,
+          }),
+        );
       }
       prefs.setBool(_kAutoSync, _autoSync);
       prefs.setBool(_kDirty, _dirty);
