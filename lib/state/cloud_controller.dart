@@ -16,8 +16,9 @@
 ///
 /// The server stores only ciphertext + digests — see cloud_keys.dart.
 /// After arming, auto-sync (v1.13.1) keeps the mirror live: every local
-/// change is pushed debounced, boots catch up unsynced/stale state, and
-/// failures retry with backoff. Turning the feature OFF deletes both the
+/// change is merged and pushed debounced, and each app boot catches up
+/// changes from other devices. Transient failures retry with backoff.
+/// Turning the feature OFF deletes both the
 /// session and the cloud copy (privacy-safe default); the next sign-in
 /// arms it again.
 ///
@@ -36,6 +37,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/auth/account.dart';
@@ -51,7 +53,7 @@ enum CloudStep { idle, working }
 /// What went wrong last, mapped 1:1 to localized strings in the UI.
 enum CloudFailure { none, wrongPassword, network, server, sessionExpired, decrypt }
 
-class CloudController extends ChangeNotifier {
+class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   CloudController({
     CloudApi? api,
     PasswordHasher? hasher,
@@ -67,7 +69,9 @@ class CloudController extends ChangeNotifier {
   })  : _api = api ?? CloudApi(),
         _hasher = hasher ?? PasswordHasher(),
         _prefs = prefs,
-        _revisionClock = revisionClock ?? (() => DateTime.now().millisecondsSinceEpoch);
+        _revisionClock = revisionClock ?? (() => DateTime.now().millisecondsSinceEpoch) {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   final CloudApi _api;
   final PasswordHasher _hasher;
@@ -123,7 +127,6 @@ class CloudController extends ChangeNotifier {
   int _autoFailures = 0;
   int? _nextAutoAttemptAt;
   bool _catchUpPending = false;
-  static const int _kStaleSyncMs = 24 * 60 * 60 * 1000;
 
   // ---------------------------------------------------------------- accessors
   bool get enabled => _enabled;
@@ -163,6 +166,15 @@ class CloudController extends ChangeNotifier {
 
   bool _observes(VerifyHistory history) =>
       _history != null && identical(_history, history);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final history = _history;
+    if (_enabled && _autoSync && hasSession && history != null) {
+      _scheduleAutoSync(Duration.zero);
+    }
+  }
 
   // ---------------------------------------------------------------- auto-sync
   void _onHistoryChanged() {
@@ -215,6 +227,8 @@ class CloudController extends ChangeNotifier {
         _failure = _failureFor(e);
         _noteAutoFailure();
       }
+    } on VaultDecryptException {
+      _failure = CloudFailure.decrypt;
     } catch (_) {
       _failure = CloudFailure.network;
       _noteAutoFailure();
@@ -270,15 +284,29 @@ class CloudController extends ChangeNotifier {
     required AccountRecord account,
     required VerifyHistory history,
   }) async {
-    if (isWorking) return;
     // Already syncing THIS exact account (re-sign-in)? Everything is
-    // live — a second session would only burn server writes. Also
-    // cancels any retry window still pending for this same account.
+    // live — refresh the local history without creating another session.
     if (_enabled &&
         hasSession &&
         _identifierHash != null &&
         _identifierHash == await cloudIdentifierHash(account.id)) {
-      _dropArmCredentials();
+      if (isWorking) {
+        _armPassword = password;
+        _armAccount = account;
+        _armHistory = history;
+        _armAttempts = 0;
+        _scheduleArm(_armRecheckDelay);
+      } else {
+        await restore(history);
+      }
+      return;
+    }
+    if (isWorking) {
+      _armPassword = password;
+      _armAccount = account;
+      _armHistory = history;
+      _armAttempts = 0;
+      _scheduleArm(_armRecheckDelay);
       return;
     }
     // Account SWITCH (another device account): re-link to that cloud
@@ -312,6 +340,7 @@ class CloudController extends ChangeNotifier {
           _identifierHash == await cloudIdentifierHash(account.id);
       if (armedForSame) {
         _dropArmCredentials();
+        await restore(history);
         return;
       }
     }
@@ -366,13 +395,8 @@ class CloudController extends ChangeNotifier {
     _autoSync = prefs.getBool(_kAutoSync) ?? true;
     _dirty = prefs.getBool(_kDirty) ?? false;
     _profile = _profileFromPrefs(prefs);
-    // Boot catch-up: push anything that never made it (app killed
-    // mid-debounce) and pull when the last sync is stale (changes from
-    // another device). Consumed once a history store is attached.
-    final sync = _lastSyncAt;
-    final stale = sync == null ||
-        DateTime.now().millisecondsSinceEpoch - sync > _kStaleSyncMs;
-    _catchUpPending = _dirty || stale;
+    // Boot catch-up pushes pending changes and pulls changes from other
+    // devices. It is consumed once a history store is attached.
     if (_enabled &&
         (_sessionToken == null ||
             _vaultKeyHex == null ||
@@ -385,6 +409,9 @@ class CloudController extends ChangeNotifier {
       _failure = CloudFailure.sessionExpired;
       _persistState();
     }
+    // Every app boot checks for entries written by another device, even
+    // when this device's last upload was recent.
+    _catchUpPending = _enabled;
     notifyListeners();
   }
 
@@ -472,6 +499,8 @@ class CloudController extends ChangeNotifier {
       return true;
     } on CloudApiException catch (e) {
       _handleApiFailure(e);
+    } on VaultDecryptException {
+      _failure = CloudFailure.decrypt;
     } catch (_) {
       _failure = CloudFailure.network;
     } finally {
@@ -492,8 +521,7 @@ class CloudController extends ChangeNotifier {
       final remote = await _api.getVault(_sessionToken!);
       if (remote == null) return 0;
       final key = hexToBytes(_vaultKeyHex!);
-      final plaintext = await decryptVaultBlob(key, remote.blob);
-      final incoming = decodeVaultPayload(plaintext);
+      final incoming = await _decodeRemoteEntries(key, remote.blob);
       return history.mergeRemote(incoming);
     } on CloudApiException catch (e) {
       _handleApiFailure(e);
@@ -543,51 +571,48 @@ class CloudController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- internals
   Future<void> _mergeUpload(VerifyHistory history) async {
+    await history.ensureLoaded();
     final key = hexToBytes(_vaultKeyHex!);
-    final remote = await _api.getVault(_sessionToken!);
-    List<HistoryEntry> merged;
-    int? baseRevision;
-    if (remote != null) {
-      List<HistoryEntry> remoteEntries;
-      try {
-        remoteEntries = decodeVaultPayload(await decryptVaultBlob(key, remote.blob));
-      } on VaultDecryptException {
-        // The cloud copy is unreadable with THIS key (e.g. the password
-        // changed on another device). Local is the source of truth for
-        // this key — upload local alone; baseRevision still matches the
-        // stored revision so the overwrite is clean, not a conflict.
-        remoteEntries = const [];
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final remote = await _api.getVault(_sessionToken!);
+      List<HistoryEntry> remoteEntries = const [];
+      if (remote != null) {
+        remoteEntries = await _decodeRemoteEntries(key, remote.blob);
+        await history.mergeRemote(remoteEntries);
       }
-      merged = mergeHistoryEntries(history.entries, remoteEntries);
-      baseRevision = remote.revision;
-    } else {
-      merged = history.entries.toList();
+      final merged = mergeHistoryEntries(history.entries, remoteEntries);
+      final blob = await encryptVaultBlob(
+        key,
+        encodeVaultPayload(merged, account: _profile),
+      );
+
+      try {
+        await _api.putVault(
+          sessionToken: _sessionToken!,
+          blob: blob,
+          revision: _revisionClock(),
+          baseRevision: remote?.revision,
+        );
+      } on CloudApiException catch (e) {
+        if (e.error != CloudApiError.conflict || attempt == 1) rethrow;
+        continue;
+      }
+      _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
+      return;
     }
+  }
 
-    final blob = await encryptVaultBlob(
-      key,
-      encodeVaultPayload(merged, account: _profile),
-    );
-
-    // One optimistic attempt; on conflict take the server's revision,
-    // re-merge nothing (our payload already includes the union we saw —
-    // a blind overwrite is safe for a fresh merge) and retry once.
+  Future<List<HistoryEntry>> _decodeRemoteEntries(
+    List<int> key,
+    String blob,
+  ) async {
     try {
-      await _api.putVault(
-        sessionToken: _sessionToken!,
-        blob: blob,
-        revision: _revisionClock(),
-        baseRevision: baseRevision,
-      );
-    } on CloudApiException catch (e) {
-      if (e.error != CloudApiError.conflict) rethrow;
-      await _api.putVault(
-        sessionToken: _sessionToken!,
-        blob: blob,
-        revision: _revisionClock(),
-      );
+      return decodeVaultPayload(await decryptVaultBlob(key, blob));
+    } on VaultDecryptException {
+      rethrow;
+    } catch (_) {
+      throw const VaultDecryptException('invalid cloud vault payload');
     }
-    _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
   }
 
   void _handleApiFailure(CloudApiException e) {
@@ -706,6 +731,7 @@ class CloudController extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dropArmCredentials();
     _autoTimer?.cancel();
     _history?.removeListener(_onHistoryChanged);

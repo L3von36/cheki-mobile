@@ -16,6 +16,7 @@ class FakeCloudServer {
   bool failVaultPut = false; // 500 on vault writes
   bool unauthorizedVault = false; // 401 on vault writes
   bool down = false; // when true the network itself is unreachable
+  Map<String, dynamic>? vaultBeforeNextPut;
 
   http.Client client() => MockClient((request) async {
         requests++;
@@ -68,7 +69,14 @@ class FakeCloudServer {
             return http.Response(jsonEncode({'error': 'internal'}), 500);
           }
           final body = jsonDecode(request.body) as Map<String, dynamic>;
-          final existing = vaults[_uid(request)];
+          final uid = _uid(request);
+          final concurrentVault = vaultBeforeNextPut;
+          if (concurrentVault != null) {
+            vaults[uid] = concurrentVault;
+            vaultBeforeNextPut = null;
+            revisionBumps++;
+          }
+          final existing = vaults[uid];
           if (existing != null &&
               body['baseRevision'] != null &&
               (existing['revision'] as int) > (body['baseRevision'] as int)) {
@@ -78,7 +86,7 @@ class FakeCloudServer {
             }), 409);
           }
           revisionBumps++;
-          vaults[_uid(request)] = body;
+          vaults[uid] = body;
           return http.Response(jsonEncode({'ok': true}), 200);
         }
         if (request.method == 'DELETE' && path == '/v1/vault') {

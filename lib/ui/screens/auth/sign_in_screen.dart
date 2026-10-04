@@ -206,8 +206,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       GestureDetector(
                         onTap: auth.isBusy
                             ? null
-                            : () => Navigator.of(context)
-                                  .pushReplacement<void, void>(
+                            : () => Navigator.of(context).push<void>(
                                     MaterialPageRoute<void>(
                                       builder: (_) =>
                                           const CreateAccountScreen(),

@@ -121,6 +121,7 @@ class VerifyHistory extends ChangeNotifier {
 
   final List<HistoryEntry> _entries = [];
   bool _loaded = false;
+  Future<void>? _loadFuture;
 
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
@@ -133,9 +134,12 @@ class VerifyHistory extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _ensureLoaded() async {
-    if (_loaded) return;
-    _loaded = true;
+  Future<void> ensureLoaded() {
+    if (_loaded) return Future<void>.value();
+    return _loadFuture ??= _load();
+  }
+
+  Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_key);
@@ -149,13 +153,16 @@ class VerifyHistory extends ChangeNotifier {
       }
     } catch (_) {
       // Corrupt storage — start fresh rather than crash.
+    } finally {
+      _loaded = true;
+      _loadFuture = null;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// Prepends a new entry and persists.
   Future<void> add(HistoryEntry entry) async {
-    await _ensureLoaded();
+    await ensureLoaded();
     _entries.insert(0, entry);
     if (_entries.length > _maxEntries) _entries.removeRange(_maxEntries, _entries.length);
     notifyListeners();
@@ -177,7 +184,7 @@ class VerifyHistory extends ChangeNotifier {
       ));
 
   Future<void> remove(String id) async {
-    await _ensureLoaded();
+    await ensureLoaded();
     _entries.removeWhere((e) => e.id == id);
     notifyListeners();
     await _persist();
@@ -187,7 +194,7 @@ class VerifyHistory extends ChangeNotifier {
   /// index is whatever position the entry had before it was deleted
   /// (clamped, since concurrent edits may have shifted the list).
   Future<void> insert(int index, HistoryEntry entry) async {
-    await _ensureLoaded();
+    await ensureLoaded();
     var i = index;
     if (i < 0) i = 0;
     if (i > _entries.length) i = _entries.length;
@@ -204,7 +211,7 @@ class VerifyHistory extends ChangeNotifier {
   /// Returns how many NEW entries were added. No-op when offline-safe
   /// storage fails — a restore must never wipe local data.
   Future<int> mergeRemote(Iterable<HistoryEntry> incoming) async {
-    await _ensureLoaded();
+    await ensureLoaded();
     final existingIds = _entries.map((e) => e.id).toSet();
     final existingSigs = _entries
         .map((e) => '${e.bankId}|${e.reference}|${e.verifiedAt}|${e.status}')
@@ -267,7 +274,7 @@ class VerifyHistory extends ChangeNotifier {
   }
 
   Future<void> clear() async {
-    await _ensureLoaded();
+    await ensureLoaded();
     _entries.clear();
     notifyListeners();
     await _persist();

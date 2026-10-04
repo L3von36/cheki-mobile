@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/core/auth/account.dart';
 import 'package:mahtem/core/auth/password_hasher.dart';
@@ -266,6 +267,44 @@ void main() {
     expect(baseRevision, greaterThan(0));
   });
 
+  test('a revision conflict re-reads and preserves concurrent cloud data',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs, revisionClock: () => 21000);
+    final history = VerifyHistory();
+    await history.add(_entry('local-1', verifiedAt: 5000));
+    await controller.enable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+
+    final key = await deriveVaultKey('correct-horse', account.id);
+    final existing = server.vaults.values.single;
+    server.vaultBeforeNextPut = {
+      'blob': await encryptVaultBlob(
+        key,
+        encodeVaultPayload([
+          _entry('local-1', verifiedAt: 5000),
+          _entry('concurrent-1', verifiedAt: 7000),
+        ]),
+      ),
+      'revision': (existing['revision'] as int) + 1,
+      'updatedAt': 22000,
+    };
+    await history.add(_entry('local-2', verifiedAt: 6000));
+
+    expect(await controller.backupNow(history), isTrue);
+    final merged = decodeVaultPayload(
+      await decryptVaultBlob(key, server.vaults.values.single['blob'] as String),
+    );
+    expect(
+      merged.map((entry) => entry.id),
+      containsAll(['local-1', 'local-2', 'concurrent-1']),
+    );
+  });
+
   test('restore merges cloud entries into local history', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -457,6 +496,62 @@ void main() {
     expect(merged.map((e) => e.id), contains('lost-1'));
   });
 
+  test('boot catch-up pulls recent changes from another device', () async {
+    final (first, _) = await _enabledSession(server, hasher, account);
+    final key = await deriveVaultKey('correct-horse', account.id);
+    server.vaults.values.single['blob'] = await encryptVaultBlob(
+      key,
+      encodeVaultPayload([_entry('from-other-device', verifiedAt: 9000)]),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final second = _tuned(server, hasher, prefs);
+    await second.ensureLoaded();
+    final history = VerifyHistory();
+    second.observe(history);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(history.entries.map((entry) => entry.id),
+        contains('from-other-device'));
+    first.dispose();
+    second.dispose();
+  });
+
+  test('resuming the app pulls changes made on another device', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    final key = await deriveVaultKey('correct-horse', account.id);
+    server.vaults.values.single['blob'] = await encryptVaultBlob(
+      key,
+      encodeVaultPayload([_entry('from-resumed-device', verifiedAt: 9000)]),
+    );
+
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(history.entries.map((entry) => entry.id),
+        contains('from-resumed-device'));
+    controller.dispose();
+  });
+
+  test('unreadable remote vault is not overwritten by local history', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await history.add(_entry('local-safe', verifiedAt: 1000));
+    await controller.enable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    server.vaults.values.single['blob'] = 'unreadable-ciphertext';
+
+    expect(await controller.backupNow(history), isFalse);
+    expect(controller.failure, CloudFailure.decrypt);
+    expect(server.vaults.values.single['blob'], 'unreadable-ciphertext');
+    controller.dispose();
+  });
+
   // ------------------------------------------- auto-enable (v1.14.0)
 
   test('autoEnable arms backup at sign-up with no manual step', () async {
@@ -514,10 +609,16 @@ void main() {
         reason: 'the cloud copy must come down with no manual restore');
   });
 
-  test('autoEnable is a no-op when this account already syncs', () async {
+  test('autoEnable refreshes remote history when this account already syncs',
+      () async {
     final (controller, history) = await _enabledSession(server, hasher, account);
     final putsBefore = server.putAttempts;
     final usersBefore = server.users.length;
+    final key = await deriveVaultKey('correct-horse', account.id);
+    server.vaults.values.single['blob'] = await encryptVaultBlob(
+      key,
+      encodeVaultPayload([_entry('from-second-device', verifiedAt: 9000)]),
+    );
 
     await controller.autoEnable(
       password: 'correct-horse',
@@ -526,8 +627,10 @@ void main() {
     );
 
     expect(controller.enabled, isTrue);
-    expect(server.putAttempts, putsBefore); // no second session/upload churn
+    expect(server.putAttempts, putsBefore); // refresh must not upload/churn
     expect(server.users.length, usersBefore);
+    expect(history.entries.map((entry) => entry.id),
+      contains('from-second-device'));
   });
 
   test('autoEnable retries an offline sign-up and arms when the net returns',

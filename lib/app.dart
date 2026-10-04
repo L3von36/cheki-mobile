@@ -57,7 +57,9 @@ class MahtemApp extends StatelessWidget {
         // Batch checker owns its state — rows from the last paste, run
         // results. Fresh instance per app boot (nothing persists).
         ChangeNotifierProvider(create: (_) => BatchController()),
-        ChangeNotifierProvider(create: (_) => VerifyHistory()),
+        ChangeNotifierProvider(
+          create: (_) => VerifyHistory()..ensureLoaded(),
+        ),
         // Cloud backup (v1.13.0; auto-sync v1.13.1; self-arming v1.14.0)
         // — zero-knowledge history backup. The auth screens arm it at
         // sign-up/sign-in (CloudController.autoEnable); the proxy wiring
