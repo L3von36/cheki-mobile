@@ -98,7 +98,7 @@ class _BootErrorScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Your admin key is still stored on this device. '
+                'Your session is still stored on this device. '
                 'Check your connection and try again.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, height: 1.5, color: AdminColors.muted),

@@ -80,17 +80,17 @@ void main() {
       expect(overview.recent.last.userId, '1a972d49');
     });
 
-    test('401 maps to badKey', () async {
+    test('401 maps to sessionExpired (overview rejects dead sessions)', () async {
       final api = AdminApi(
         client: MockClient((_) async => http.Response(
             jsonEncode({'error': 'admin_required', 'message': 'Invalid admin key.'}), 401),
         ),
       );
       await expectLater(
-        api.overview('wrong-key-value-123456'),
+        api.overview('stale-token-1234567890'),
         throwsA(
           isA<AdminException>()
-              .having((e) => e.type, 'type', AdminErrorType.badKey)
+              .having((e) => e.type, 'type', AdminErrorType.sessionExpired)
               .having((e) => e.status, 'status', 401),
         ),
       );
@@ -190,6 +190,233 @@ void main() {
       expect(overview.days.length, 1);
       expect(overview.accounts.length, 1);
       expect(overview.recent.length, 1);
+    });
+  });
+
+  group('AdminApi.auth', () {
+    test('hasAdmin() reads the status endpoint', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode({'hasAdmin': true}), 200);
+        }),
+      );
+
+      expect(await api.hasAdmin(), isTrue);
+      expect(captured.method, 'GET');
+      expect(captured.url.path, '/v1/admin/auth/status');
+      expect(captured.headers['X-Mahtem-Client'], 'mahtem-admin-app');
+    });
+
+    test('signIn() posts credentials and parses the session', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'token': 'tok-abc123',
+              'email': 'owner@mahtem.app',
+              'expiresAt': 1799000000000,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final session = await api.signIn('Owner@Mahtem.App', 'long-pass-1234');
+
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/v1/admin/auth/login');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['email'], 'Owner@Mahtem.App');
+      expect(sent['password'], 'long-pass-1234');
+
+      expect(session.token, 'tok-abc123');
+      expect(session.email, 'owner@mahtem.app');
+      expect(session.expiresAt, 1799000000000);
+    });
+
+    test('signIn() 401 bad_credentials maps to badCredentials', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'bad_credentials', 'message': 'Wrong email or password.'}),
+            401)),
+      );
+      await expectLater(
+        api.signIn('owner@mahtem.app', 'wrong'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.badCredentials)
+            .having((e) => e.message, 'message', 'Wrong email or password.')),
+      );
+    });
+
+    test('signIn() 429 maps to rateLimited', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'rate_limited'}), 429)),
+      );
+      await expectLater(
+        api.signIn('owner@mahtem.app', 'whatever'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.rateLimited)),
+      );
+    });
+
+    test('signIn() 404 no_admin maps to noAdmin', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'no_admin'}), 404)),
+      );
+      await expectLater(
+        api.signIn('owner@mahtem.app', 'whatever'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.noAdmin)),
+      );
+    });
+
+    test('signUpOwner() posts to setup; 409 maps to alreadyExists', () async {
+      late http.Request captured;
+      var call = 0;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          call++;
+          if (call == 1) {
+            return http.Response(
+              jsonEncode({
+                'ok': true,
+                'token': 'tok-first',
+                'email': 'me@mahtem.app',
+                'expiresAt': 1799000000000,
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({'error': 'exists', 'message': 'An owner account already exists.'}),
+            409,
+          );
+        }),
+      );
+
+      final session = await api.signUpOwner('me@mahtem.app', 'first-password-1');
+      expect(captured.url.path, '/v1/admin/auth/setup');
+      expect(session.token, 'tok-first');
+
+      await expectLater(
+        api.signUpOwner('someone@else.app', 'another-password'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.alreadyExists)),
+      );
+    });
+
+    test('signUpOwner() 400 weak_password maps to badInput', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'weak_password', 'message': 'Password must be at least 10 characters.'}),
+            400)),
+      );
+      await expectLater(
+        api.signUpOwner('me@mahtem.app', 'short'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.badInput)),
+      );
+    });
+
+    test('me() parses the profile; 401 maps to sessionExpired', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          if (captured.headers['Authorization'] == 'Bearer tok-live') {
+            return http.Response(
+              jsonEncode({'email': 'owner@mahtem.app', 'expiresAt': 1}),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({'error': 'admin_session_expired'}),
+            401,
+          );
+        }),
+      );
+
+      final me = await api.me('tok-live');
+      expect(captured.url.path, '/v1/admin/auth/me');
+      expect(me.email, 'owner@mahtem.app');
+
+      await expectLater(
+        api.me('tok-dead'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.sessionExpired)),
+      );
+    });
+
+    test('logout() posts and accepts 200', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }),
+      );
+
+      await api.logout('tok-xyz');
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/v1/admin/auth/logout');
+      expect(captured.headers['Authorization'], 'Bearer tok-xyz');
+    });
+
+    test('changePassword() posts and parses the rotated session', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'token': 'tok-rotated',
+              'email': 'owner@mahtem.app',
+              'expiresAt': 1799500000000,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final session = await api.changePassword('tok-live', 'old-pass', 'new-pass-9876');
+      expect(captured.url.path, '/v1/admin/auth/change-password');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['currentPassword'], 'old-pass');
+      expect(sent['newPassword'], 'new-pass-9876');
+      expect(session.token, 'tok-rotated');
+    });
+
+    test('changePassword() 401 maps to badCredentials', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'bad_credentials', 'message': 'Current password is incorrect.'}),
+            401)),
+      );
+      await expectLater(
+        api.changePassword('tok-live', 'nope', 'new-pass-9876'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.badCredentials)),
+      );
+    });
+
+    test('network failures map to network for auth endpoints too', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => throw const SocketException('offline')),
+      );
+      await expectLater(
+        api.signIn('owner@mahtem.app', 'whatever'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.network)),
+      );
     });
   });
 }

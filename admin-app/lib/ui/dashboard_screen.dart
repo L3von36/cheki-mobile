@@ -47,10 +47,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: AdminColors.border),
         ),
-        title: const Text('Lock console?', style: TextStyle(fontSize: 17)),
+        title: const Text('Sign out?', style: TextStyle(fontSize: 17)),
         content: const Text(
-          'The admin key will be removed from this device. '
-          'You will need it again to view analytics.',
+          'This device keeps no credentials after sign-out. '
+          'Sign back in with the owner email and password.',
           style: TextStyle(fontSize: 13.5, height: 1.45, color: AdminColors.muted),
         ),
         actions: [
@@ -60,12 +60,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Lock', style: TextStyle(color: AdminColors.rose)),
+            child: const Text('Sign out', style: TextStyle(color: AdminColors.rose)),
           ),
         ],
       ),
     );
     if (yes == true) await widget.controller.signOut();
+  }
+
+  Future<void> _showChangePassword() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _ChangePasswordDialog(controller: widget.controller),
+    );
+    if (changed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AdminColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          content: const Text(
+            'Password changed. Other devices were signed out.',
+            style: TextStyle(fontSize: 13),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -118,8 +141,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : const Icon(Icons.refresh_rounded, size: 22, color: AdminColors.muted),
           ),
           IconButton(
+            onPressed: controller.busy ? null : _showChangePassword,
+            tooltip: 'Change password',
+            icon: const Icon(Icons.lock_reset_outlined,
+                size: 21, color: AdminColors.muted),
+          ),
+          IconButton(
             onPressed: _confirmSignOut,
-            tooltip: 'Lock & sign out',
+            tooltip: 'Sign out',
             icon: const Icon(Icons.logout_rounded, size: 20, color: AdminColors.muted),
           ),
           const SizedBox(width: 4),
@@ -1117,6 +1146,168 @@ class _PrivacyCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Change-password dialog. On success the Worker rotates every session and
+/// returns a fresh token for this device (handled by [AdminController]).
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.controller});
+
+  final AdminController controller;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _obscure = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_next.text != _confirm.text) {
+      setState(() => _error = 'New passwords do not match.');
+      return;
+    }
+    final ok = await widget.controller.changePassword(_current.text, _next.text);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() => _error = widget.controller.error);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AdminColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AdminColors.border),
+      ),
+      title: const Text('Change password', style: TextStyle(fontSize: 17)),
+      content: ListenableBuilder(
+        listenable: widget.controller,
+        builder: (context, _) {
+          final busy = widget.controller.busy;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _current,
+                obscureText: _obscure,
+                autofocus: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                textInputAction: TextInputAction.next,
+                style: const TextStyle(fontSize: 13.5),
+                decoration: const InputDecoration(
+                  hintText: 'Current password',
+                  prefixIcon: Icon(Icons.lock_outline_rounded,
+                      size: 19, color: AdminColors.faint),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _next,
+                obscureText: _obscure,
+                autocorrect: false,
+                enableSuggestions: false,
+                textInputAction: TextInputAction.next,
+                style: const TextStyle(fontSize: 13.5),
+                decoration: const InputDecoration(
+                  hintText: 'New password (10+ characters)',
+                  prefixIcon: Icon(Icons.lock_reset_outlined,
+                      size: 19, color: AdminColors.faint),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _confirm,
+                obscureText: _obscure,
+                autocorrect: false,
+                enableSuggestions: false,
+                onSubmitted: (_) {
+                  if (!busy) _submit();
+                },
+                style: const TextStyle(fontSize: 13.5),
+                decoration: InputDecoration(
+                  hintText: 'Repeat new password',
+                  prefixIcon: const Icon(Icons.lock_person_rounded,
+                      size: 19, color: AdminColors.faint),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 19,
+                      color: AdminColors.faint,
+                    ),
+                    tooltip: _obscure ? 'Show passwords' : 'Hide passwords',
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AdminColors.rose),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+      actions: [
+        ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            final busy = widget.controller.busy;
+            return TextButton(
+              onPressed: busy ? null : () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: AdminColors.muted)),
+            );
+          },
+        ),
+        ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            final busy = widget.controller.busy;
+            return FilledButton(
+              onPressed: busy ? null : _submit,
+              child: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: Color(0xFF052E22)),
+                    )
+                  : const Text('Change'),
+            );
+          },
+        ),
+      ],
     );
   }
 }

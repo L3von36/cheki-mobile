@@ -163,8 +163,11 @@ jobs:
             - Per-account overview with CSV-style details
 
             ### Sign-in
-            Enter the **ADMIN_KEY** (the Worker secret) once — it stays on
-            this device and is only used to authorize read-only analytics.
+            Real owner account — **email + password** (v1.1.0+). On the very
+            first launch the app asks you to create the one owner account;
+            after that the same credentials work on any device. The device
+            keeps only a 30-day session token; passwords are hashed with
+            PBKDF2 server-side.
 
             Read-only · Zero-knowledge preserved: receipt contents stay
             encrypted; the console sees banks, outcomes and counts only.
@@ -177,7 +180,7 @@ jobs:
                works everywhere
             4. Allow "Install from unknown sources" if prompted
 
-            This is the owner's tool — keep the APK and the ADMIN_KEY private.
+            This is the owner's tool — keep the APK and your password private.
           files: |
             admin-app/mahtem-admin-*-arm64.apk
             admin-app/mahtem-admin-*-arm32.apk

@@ -5,53 +5,73 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_api.dart';
 
-/// Drives the whole console: key persistence, unlock, refresh, live
-/// auto-refresh and sign-out. UI listens via ChangeNotifier.
+/// Drives the whole console: owner session persistence, sign-in / first-run
+/// setup, refresh, live auto-refresh, password change and sign-out.
+/// UI listens via ChangeNotifier.
 class AdminController extends ChangeNotifier {
   AdminController({AdminApiClient? api, Future<SharedPreferences>? prefs})
       : api = api ?? AdminApi(),
         _prefsFuture = prefs ?? SharedPreferences.getInstance();
 
-  static const _keyPref = 'mahtem.admin.key';
+  static const _tokenPref = 'mahtem.admin.token';
+  static const _emailPref = 'mahtem.admin.email';
   static const _autoPref = 'mahtem.admin.autorefresh';
+
+  /// v1.0.0 stored a static ADMIN_KEY — sessions replace it; retired on boot.
+  static const _legacyKeyPref = 'mahtem.admin.key';
 
   /// The app always sends this header so the Worker can distinguish it.
   static const clientHeader = 'mahtem-admin-app';
 
+  static final RegExp _emailRe = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
+
   final AdminApiClient api;
   final Future<SharedPreferences> _prefsFuture;
 
-  /// null while the key is being restored from storage.
+  /// null while the session is being restored from storage.
   bool? unlocked;
   bool busy = false;
   String? error;
 
-  /// True when a boot restore failed for a non-key reason (network/server):
-  /// the shell shows a retry screen instead of an endless splash.
+  /// Machine-readable twin of [error] — used by [restore] to decide
+  /// between "stale session" (sign in again) and "network blip" (retry).
+  AdminErrorType? lastErrorType;
+
+  /// True when a boot restore failed for a non-auth reason (network /
+  /// server): the shell shows a retry screen instead of an endless splash.
   bool restoreFailed = false;
   AdminOverview? overview;
   int? lastUpdatedMs;
   bool autoRefresh = true;
 
-  String? _key;
+  /// The signed-in owner's email (null on the login screen).
+  String? email;
+
+  String? _token;
   Timer? _timer;
 
-  /// Restore a persisted session at boot. A stale key that the API
-  /// rejects is removed (the user lands on the login screen). A network
-  /// or server failure keeps the key and surfaces [restoreFailed] so the
-  /// user can retry — it never logs the owner out.
+  /// Restore a persisted session at boot. A session the API no longer
+  /// accepts is removed (the owner lands on the sign-in screen). A network
+  /// or server failure keeps the session and surfaces [restoreFailed] so
+  /// the user can retry — it never logs the owner out.
   Future<void> restore() async {
     final prefs = await _prefsFuture;
-    final stored = prefs.getString(_keyPref);
     final storedAuto = prefs.getBool(_autoPref);
     if (storedAuto != null) autoRefresh = storedAuto;
 
+    // v1.0.0 upgrades: the static admin key is no longer used.
+    if (prefs.getString(_legacyKeyPref) != null) {
+      await prefs.remove(_legacyKeyPref);
+    }
+
+    final stored = prefs.getString(_tokenPref);
     if (stored == null || stored.isEmpty) {
       unlocked = false;
       notifyListeners();
       return;
     }
-    _key = stored;
+    _token = stored;
+    email = prefs.getString(_emailPref);
     unlocked = null; // deciding…
     restoreFailed = false;
     notifyListeners();
@@ -59,8 +79,9 @@ class AdminController extends ChangeNotifier {
     final ok = await _load(stored, silent: true);
     if (ok) {
       unlocked = true;
-    } else if (error?.contains('Invalid admin key') == true) {
-      await _clearKey(prefs);
+    } else if (lastErrorType == AdminErrorType.sessionExpired ||
+        lastErrorType == AdminErrorType.disabled) {
+      await _clearSession(prefs);
       unlocked = false;
     } else {
       restoreFailed = true;
@@ -70,7 +91,7 @@ class AdminController extends ChangeNotifier {
 
   /// Retry a failed boot restore.
   Future<void> retryRestore() async {
-    if (_key == null) {
+    if (_token == null) {
       unlocked = false;
       notifyListeners();
       return;
@@ -80,17 +101,28 @@ class AdminController extends ChangeNotifier {
     await restore();
   }
 
-  /// Unlock with a typed key. Returns true on success; on failure [error]
-  /// explains why and a bad key is NOT persisted.
-  Future<bool> unlock(String key) async {
-    final trimmed = key.trim();
-    if (trimmed.isEmpty) {
-      error = 'Enter the admin key to continue.';
+  /// Whether an owner account already exists server-side. Null when the
+  /// answer is unknown (offline) — the login screen then shows sign-in and
+  /// lets setup fail with the server's own message if it comes to that.
+  Future<bool?> fetchHasAdmin() async {
+    try {
+      return await api.hasAdmin();
+    } on AdminException catch (e) {
+      return e.type == AdminErrorType.disabled ? false : null;
+    }
+  }
+
+  /// Sign in with the owner's email + password. Returns true on success;
+  /// on failure [error] explains why and nothing is persisted.
+  Future<bool> signIn(String emailInput, String password) async {
+    final normalized = emailInput.trim().toLowerCase();
+    if (normalized.isEmpty || password.isEmpty) {
+      error = 'Enter your email and password to continue.';
       notifyListeners();
       return false;
     }
-    if (trimmed.length < 16) {
-      error = "That doesn't look like a valid ADMIN_KEY (too short).";
+    if (!_emailRe.hasMatch(normalized)) {
+      error = 'That does not look like a valid email address.';
       notifyListeners();
       return false;
     }
@@ -98,43 +130,112 @@ class AdminController extends ChangeNotifier {
     busy = true;
     notifyListeners();
 
-    final ok = await _load(trimmed);
-    busy = false;
-    if (ok) {
-      _key = trimmed;
-      final prefs = await _prefsFuture;
-      await prefs.setString(_keyPref, trimmed);
+    try {
+      final session = await api.signIn(normalized, password);
+      await _adoptSession(session);
+      busy = false;
       unlocked = true;
       _ensureTimer();
-    } else if (error?.contains('Invalid admin key') == true) {
-      _key = null;
-      unlocked = false;
+      notifyListeners();
+      return true;
+    } on AdminException catch (e) {
+      busy = false;
+      error = e.message;
+      lastErrorType = e.type;
+      notifyListeners();
+      return false;
     }
+  }
+
+  /// First run: create THE owner account and sign in with it.
+  Future<bool> signUpOwner(String emailInput, String password) async {
+    final normalized = emailInput.trim().toLowerCase();
+    if (!_emailRe.hasMatch(normalized)) {
+      error = 'Enter a valid email address — this becomes the owner account.';
+      notifyListeners();
+      return false;
+    }
+    if (password.length < 10) {
+      error = 'Choose a password of at least 10 characters.';
+      notifyListeners();
+      return false;
+    }
+    error = null;
+    busy = true;
     notifyListeners();
-    return ok;
+
+    try {
+      final session = await api.signUpOwner(normalized, password);
+      await _adoptSession(session);
+      busy = false;
+      unlocked = true;
+      _ensureTimer();
+      notifyListeners();
+      return true;
+    } on AdminException catch (e) {
+      busy = false;
+      error = e.message;
+      lastErrorType = e.type;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Change the owner password. The Worker rotates every session and
+  /// returns a fresh one for this device; other devices must sign in again.
+  Future<bool> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final token = _token;
+    if (token == null) return false;
+    if (newPassword.length < 10) {
+      error = 'New password must be at least 10 characters.';
+      notifyListeners();
+      return false;
+    }
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final session = await api.changePassword(token, currentPassword, newPassword);
+      _token = session.token;
+      final prefs = await _prefsFuture;
+      await prefs.setString(_tokenPref, session.token);
+      busy = false;
+      notifyListeners();
+      return true;
+    } on AdminException catch (e) {
+      busy = false;
+      error = e.message;
+      lastErrorType = e.type;
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Manual or silent refresh of the overview. Returns true on success.
   /// On failure the previous snapshot is kept and [error] explains why.
   Future<bool> refresh({bool silent = false}) async {
-    final key = _key;
-    if (key == null) return false;
-    return _load(key, silent: silent);
+    final token = _token;
+    if (token == null) return false;
+    return _load(token, silent: silent);
   }
 
-  Future<bool> _load(String key, {bool silent = false}) async {
+  Future<bool> _load(String token, {bool silent = false}) async {
     if (!silent) {
       busy = true;
       error = null;
       notifyListeners();
     }
     try {
-      overview = await api.overview(key);
+      overview = await api.overview(token);
       lastUpdatedMs = DateTime.now().millisecondsSinceEpoch;
       _ensureTimer();
       return true;
     } on AdminException catch (e) {
       error = e.message;
+      lastErrorType = e.type;
       return false;
     } finally {
       if (!silent) {
@@ -146,6 +247,17 @@ class AdminController extends ChangeNotifier {
     }
   }
 
+  Future<void> _adoptSession(AdminSession session) async {
+    _token = session.token;
+    email = session.email;
+    error = null;
+    lastErrorType = null;
+    final prefs = await _prefsFuture;
+    await prefs.setString(_tokenPref, session.token);
+    await prefs.setString(_emailPref, session.email);
+    await _load(session.token, silent: true);
+  }
+
   /// Toggle the 30s live auto-refresh; the preference persists.
   Future<void> setAutoRefresh(bool on) async {
     autoRefresh = on;
@@ -155,18 +267,24 @@ class AdminController extends ChangeNotifier {
     _ensureTimer();
   }
 
-  /// Sign out: forget the key and the snapshot, return to login.
+  /// Sign out: revoke the session server-side (best effort), forget
+  /// everything local and return to the sign-in screen.
   Future<void> signOut() async {
-    _timer?.cancel();
-    _timer = null;
-    _key = null;
+    _clearTimer();
+    final token = _token;
+    if (token != null) {
+      unawaited(api.logout(token).catchError((_) {}));
+    }
+    _token = null;
+    email = null;
     overview = null;
     lastUpdatedMs = null;
     error = null;
+    lastErrorType = null;
     restoreFailed = false;
     unlocked = false;
     final prefs = await _prefsFuture;
-    await _clearKey(prefs);
+    await _clearSession(prefs);
     notifyListeners();
   }
 
@@ -176,7 +294,7 @@ class AdminController extends ChangeNotifier {
   }
 
   void _ensureTimer() {
-    if (!autoRefresh || _key == null || overview == null) {
+    if (!autoRefresh || _token == null || overview == null) {
       _clearTimer();
       return;
     }
@@ -187,8 +305,9 @@ class AdminController extends ChangeNotifier {
     );
   }
 
-  Future<void> _clearKey(SharedPreferences prefs) async {
-    await prefs.remove(_keyPref);
+  Future<void> _clearSession(SharedPreferences prefs) async {
+    await prefs.remove(_tokenPref);
+    await prefs.remove(_emailPref);
   }
 
   @override

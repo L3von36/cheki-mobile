@@ -6,13 +6,20 @@ import 'package:http/http.dart' as http;
 
 /// Typed client for the Mahtem Worker admin API.
 ///
-///   GET https://mahtem-api.mahtem.workers.dev/v1/admin/overview
-///   Authorization: Bearer `ADMIN_KEY`
-///   X-Mahtem-Client: mahtem-admin-app
+/// Auth (v1.1.0): a real owner account — email + password.
 ///
-/// The Worker answers 401 for a wrong key, 503 when the ADMIN_KEY secret
-/// is not configured, and otherwise a JSON overview document (see
-/// cloud/worker.js → buildAdminOverview). Native HTTP — no CORS involved.
+///   GET  /v1/admin/auth/status          → {hasAdmin}           (no auth)
+///   POST /v1/admin/auth/setup           → AdminSession         (first run)
+///   POST /v1/admin/auth/login           → AdminSession
+///   GET  /v1/admin/auth/me              → {email,…}            (session)
+///   POST /v1/admin/auth/logout          → {ok}                 (session)
+///   POST /v1/admin/auth/change-password → AdminSession (rotated)
+///   GET  /v1/admin/overview             → overview document    (session)
+///
+/// Authenticated calls carry `Authorization: Bearer <session token>` plus
+/// the `X-Mahtem-Client` bot-screen header. Native HTTP — no CORS involved.
+/// The password is only ever sent to the auth endpoints; the Worker stores
+/// it as a salted PBKDF2-SHA-256 hash and nothing reversible ever exists.
 
 // ── Models ──────────────────────────────────────────────────────────────────
 
@@ -160,9 +167,81 @@ class AdminOverview {
       );
 }
 
+/// Returned by setup, login and change-password. The token is the session
+/// credential sent as `Authorization: Bearer <token>` afterwards.
+class AdminSession {
+  const AdminSession({
+    required this.token,
+    required this.email,
+    required this.expiresAt,
+  });
+
+  final String token;
+  final String email;
+
+  /// Epoch ms.
+  final int expiresAt;
+
+  factory AdminSession.fromJson(Map<String, dynamic> j) => AdminSession(
+        token: _str(j['token']),
+        email: _str(j['email']),
+        expiresAt: _intOrNull(j['expiresAt']) ?? 0,
+      );
+}
+
+class AdminMe {
+  const AdminMe({
+    required this.email,
+    required this.expiresAt,
+    this.ownerCreatedAt,
+  });
+
+  final String email;
+
+  /// Epoch ms, when this session dies.
+  final int? expiresAt;
+  final int? ownerCreatedAt;
+
+  factory AdminMe.fromJson(Map<String, dynamic> j) => AdminMe(
+        email: _str(j['email']),
+        expiresAt: _intOrNull(j['expiresAt']),
+        ownerCreatedAt: _intOrNull(j['ownerCreatedAt']),
+      );
+}
+
 // ── Errors ──────────────────────────────────────────────────────────────────
 
-enum AdminErrorType { badKey, disabled, network, server, invalidResponse }
+enum AdminErrorType {
+  /// Overview rejected the stored session — sign in again.
+  sessionExpired,
+
+  /// Wrong email or password on login / change-password.
+  badCredentials,
+
+  /// Too many failed logins for this email (429).
+  rateLimited,
+
+  /// The owner account already exists (setup).
+  alreadyExists,
+
+  /// No owner account exists yet (login / me-ish operations).
+  noAdmin,
+
+  /// Password shorter than 10 chars or invalid email shape.
+  badInput,
+
+  /// Admin never configured on this deployment (503).
+  disabled,
+
+  /// Socket / timeout / unreachable.
+  network,
+
+  /// 5xx from the Worker.
+  server,
+
+  /// 2xx but not the JSON document we expect.
+  invalidResponse,
+}
 
 class AdminException implements Exception {
   const AdminException(this.type, this.status, this.message);
@@ -178,34 +257,51 @@ class AdminException implements Exception {
 // ── Client ──────────────────────────────────────────────────────────────────
 
 abstract class AdminApiClient {
-  Future<AdminOverview> overview(String key);
+  Future<AdminOverview> overview(String token);
+
+  Future<bool> hasAdmin();
+
+  Future<AdminSession> signIn(String email, String password);
+
+  Future<AdminSession> signUpOwner(String email, String password);
+
+  Future<AdminMe> me(String token);
+
+  Future<void> logout(String token);
+
+  Future<AdminSession> changePassword(
+    String token,
+    String currentPassword,
+    String newPassword,
+  );
 }
 
 class AdminApi implements AdminApiClient {
   AdminApi({http.Client? client, Uri? baseUri})
       : _client = client ?? http.Client(),
-        base = baseUri ??
-            Uri.parse('https://mahtem-api.mahtem.workers.dev/v1/admin/overview');
+        base = baseUri ?? Uri.parse('https://mahtem-api.mahtem.workers.dev');
 
   final http.Client _client;
+
+  /// Root of the Worker deployment — auth + data endpoints hang off it.
   final Uri base;
 
   static const timeout = Duration(seconds: 25);
   static const clientHeader = 'mahtem-admin-app';
 
-  @override
-  Future<AdminOverview> overview(String key) async {
-    final http.Response res;
+  Uri _uri(String path) => base.replace(path: path);
+
+  Map<String, String> _headers({String? token}) {
+    final h = <String, String>{'X-Mahtem-Client': clientHeader};
+    if (token != null && token.isNotEmpty) {
+      h['Authorization'] = 'Bearer $token';
+    }
+    return h;
+  }
+
+  Future<http.Response> _send(Future<http.Response> Function() fn) async {
     try {
-      res = await _client
-          .get(
-            base,
-            headers: {
-              'Authorization': 'Bearer $key',
-              'X-Mahtem-Client': clientHeader,
-            },
-          )
-          .timeout(timeout);
+      return await fn().timeout(timeout);
     } on TimeoutException {
       throw const AdminException(
         AdminErrorType.network,
@@ -225,45 +321,113 @@ class AdminApi implements AdminApiClient {
         "Can't reach the Mahtem API. Check your connection and try again.",
       );
     }
+  }
 
-    if (res.statusCode == 401) {
-      throw const AdminException(
-        AdminErrorType.badKey,
-        401,
-        'Invalid admin key. Check the ADMIN_KEY and try again.',
-      );
-    }
-    if (res.statusCode == 503) {
-      throw const AdminException(
-        AdminErrorType.disabled,
-        503,
-        'Admin access is not configured on this deployment '
-        '(ADMIN_KEY secret missing).',
-      );
-    }
-    if (res.statusCode != 200) {
-      throw AdminException(
-        AdminErrorType.server,
-        res.statusCode,
-        'Mahtem API error (HTTP ${res.statusCode}). Try again shortly.',
-      );
-    }
-
-    final Map<String, dynamic> body;
+  Future<Map<String, dynamic>> _safeBody(http.Response res) async {
     try {
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('expected a JSON object');
-      }
-      body = decoded;
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {
+      /* fall through — non-JSON error body */
+    }
+    return const <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> _readJson(http.Response res) async {
+    try {
+      final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+      if (decoded is Map<String, dynamic>) return decoded;
     } on FormatException {
-      throw const AdminException(
-        AdminErrorType.invalidResponse,
-        200,
-        'Unexpected response from the Mahtem API.',
+      /* fall through */
+    }
+    throw const AdminException(
+      AdminErrorType.invalidResponse,
+      200,
+      'Unexpected response from the Mahtem API.',
+    );
+  }
+
+  AdminErrorType _typeFor(int status, Map<String, dynamic> body) {
+    switch (body['error']) {
+      case 'weak_password':
+        return AdminErrorType.badInput;
+      case 'bad_input':
+        return AdminErrorType.badInput;
+      case 'bad_credentials':
+        return AdminErrorType.badCredentials;
+      case 'admin_session_expired':
+        return AdminErrorType.sessionExpired;
+      case 'rate_limited':
+        return AdminErrorType.rateLimited;
+      case 'exists':
+        return AdminErrorType.alreadyExists;
+      case 'no_admin':
+        return AdminErrorType.noAdmin;
+      case 'admin_disabled':
+        return AdminErrorType.disabled;
+      case 'admin_required':
+        return status == 503
+            ? AdminErrorType.disabled
+            : AdminErrorType.sessionExpired;
+      default:
+        return AdminErrorType.server;
+    }
+  }
+
+  Never _throwHttp(
+    int status,
+    Map<String, dynamic> body,
+    AdminErrorType fallback,
+  ) {
+    final type = status == 200 ? fallback : _typeFor(status, body);
+    var message = (body['message'] as String?)?.trim() ?? '';
+    if (message.isEmpty) message = _defaultMessage(type, status);
+    throw AdminException(type, status, message);
+  }
+
+  String _defaultMessage(AdminErrorType type, int status) {
+    switch (type) {
+      case AdminErrorType.sessionExpired:
+        return 'Session expired — sign in again.';
+      case AdminErrorType.badCredentials:
+        return 'Wrong email or password.';
+      case AdminErrorType.rateLimited:
+        return 'Too many attempts. Try again in a few minutes.';
+      case AdminErrorType.alreadyExists:
+        return 'An owner account already exists. Please sign in.';
+      case AdminErrorType.noAdmin:
+        return 'No owner account exists yet. Create one first.';
+      case AdminErrorType.badInput:
+        return 'Check the fields and try again.';
+      case AdminErrorType.disabled:
+        return 'Admin access is not configured on this deployment.';
+      case AdminErrorType.network:
+        return "Can't reach the Mahtem API.";
+      case AdminErrorType.invalidResponse:
+        return 'Unexpected response from the Mahtem API.';
+      case AdminErrorType.server:
+        return 'Mahtem API error (HTTP $status). Try again shortly.';
+    }
+  }
+
+  // ── data ────────────────────────────────────────────────────────────────
+
+  @override
+  Future<AdminOverview> overview(String token) async {
+    final res = await _send(
+      () => _client.get(_uri('/v1/admin/overview'), headers: _headers(token: token)),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(
+        res.statusCode,
+        await _safeBody(res),
+        res.statusCode == 401
+            ? AdminErrorType.sessionExpired
+            : AdminErrorType.server,
       );
     }
 
+    final body = await _readJson(res);
     try {
       _validateShape(body);
       return AdminOverview.fromJson(body);
@@ -293,6 +457,127 @@ class AdminApi implements AdminApiClient {
         'Unexpected response from the Mahtem API.',
       );
     }
+  }
+
+  // ── auth ────────────────────────────────────────────────────────────────
+
+  @override
+  Future<bool> hasAdmin() async {
+    final res = await _send(
+      () => _client.get(_uri('/v1/admin/auth/status'), headers: _headers()),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(res.statusCode, await _safeBody(res), AdminErrorType.server);
+    }
+    final body = await _readJson(res);
+    return body['hasAdmin'] == true;
+  }
+
+  @override
+  Future<AdminSession> signIn(String email, String password) async {
+    final res = await _send(
+      () => _client.post(
+        _uri('/v1/admin/auth/login'),
+        headers: {..._headers(), 'Content-Type': 'application/json'},
+        body: jsonEncode(<String, String>{'email': email, 'password': password}),
+      ),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(res.statusCode, await _safeBody(res), AdminErrorType.server);
+    }
+    final body = await _readJson(res);
+    final session = AdminSession.fromJson(body);
+    if (session.token.isEmpty) {
+      throw const AdminException(
+        AdminErrorType.invalidResponse,
+        200,
+        'Unexpected response from the Mahtem API.',
+      );
+    }
+    return session;
+  }
+
+  @override
+  Future<AdminSession> signUpOwner(String email, String password) async {
+    final res = await _send(
+      () => _client.post(
+        _uri('/v1/admin/auth/setup'),
+        headers: {..._headers(), 'Content-Type': 'application/json'},
+        body: jsonEncode(<String, String>{'email': email, 'password': password}),
+      ),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(res.statusCode, await _safeBody(res), AdminErrorType.server);
+    }
+    final body = await _readJson(res);
+    final session = AdminSession.fromJson(body);
+    if (session.token.isEmpty) {
+      throw const AdminException(
+        AdminErrorType.invalidResponse,
+        200,
+        'Unexpected response from the Mahtem API.',
+      );
+    }
+    return session;
+  }
+
+  @override
+  Future<AdminMe> me(String token) async {
+    final res = await _send(
+      () => _client.get(_uri('/v1/admin/auth/me'), headers: _headers(token: token)),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(
+        res.statusCode,
+        await _safeBody(res),
+        AdminErrorType.sessionExpired,
+      );
+    }
+    return AdminMe.fromJson(await _readJson(res));
+  }
+
+  @override
+  Future<void> logout(String token) async {
+    final res = await _send(
+      () => _client.post(
+        _uri('/v1/admin/auth/logout'),
+        headers: _headers(token: token),
+      ),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(res.statusCode, await _safeBody(res), AdminErrorType.server);
+    }
+  }
+
+  @override
+  Future<AdminSession> changePassword(
+    String token,
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final res = await _send(
+      () => _client.post(
+        _uri('/v1/admin/auth/change-password'),
+        headers: {..._headers(token: token), 'Content-Type': 'application/json'},
+        body: jsonEncode(<String, String>{
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        }),
+      ),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(res.statusCode, await _safeBody(res), AdminErrorType.server);
+    }
+    final body = await _readJson(res);
+    final session = AdminSession.fromJson(body);
+    if (session.token.isEmpty) {
+      throw const AdminException(
+        AdminErrorType.invalidResponse,
+        200,
+        'Unexpected response from the Mahtem API.',
+      );
+    }
+    return session;
   }
 }
 
