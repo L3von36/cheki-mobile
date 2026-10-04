@@ -115,17 +115,44 @@ class HistoryEntry {
 }
 
 /// ChangeNotifier that persists the last 100 verifications locally.
+///
+/// v1.15.0 — also owns the cloud ANALYTICS queue: every scan recorded
+/// through [add] (and only [add] — remote merges and undo-reinserts never
+/// double-report) lands in a small pending list that the cloud controller
+/// piggybacks onto vault uploads as bank-only metadata. [ackPendingReport]
+/// drops the queue entries after a successful upload.
 class VerifyHistory extends ChangeNotifier {
   static const String _key = 'mahtem.history.v1';
+  static const String _pendingKey = 'mahtem.history.pendingReport.v1';
   static const int _maxEntries = 100;
+  static const int _maxPending = 200;
 
   final List<HistoryEntry> _entries = [];
+  final List<HistoryEntry> _pendingReport = [];
   bool _loaded = false;
   Future<void>? _loadFuture;
 
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
   int get length => _entries.length;
+
+  /// Scans recorded locally but not yet acknowledged by a cloud upload.
+  int get pendingReportCount => _pendingReport.length;
+
+  /// The unreported local scans (oldest first). The cloud controller maps
+  /// these to bank-only stats events and acks them after the upload lands.
+  List<HistoryEntry> peekPendingReport() => List.unmodifiable(_pendingReport);
+
+  /// Removes the first [count] pending entries after a successful upload.
+  void ackPendingReport(int count) {
+    if (count <= 0) return;
+    if (count >= _pendingReport.length) {
+      _pendingReport.clear();
+    } else {
+      _pendingReport.removeRange(0, count);
+    }
+    _persistPending();
+  }
 
   HistoryEntry? getById(String id) {
     for (final e in _entries) {
@@ -151,6 +178,15 @@ class VerifyHistory extends ChangeNotifier {
               .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
               .toList());
       }
+      final pendingRaw = prefs.getString(_pendingKey);
+      if (pendingRaw != null && pendingRaw.isNotEmpty) {
+        final list = jsonDecode(pendingRaw) as List;
+        _pendingReport
+          ..clear()
+          ..addAll(list
+              .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
+              .toList());
+      }
     } catch (_) {
       // Corrupt storage — start fresh rather than crash.
     } finally {
@@ -160,13 +196,19 @@ class VerifyHistory extends ChangeNotifier {
     }
   }
 
-  /// Prepends a new entry and persists.
+  /// Prepends a new entry and persists. Local scans enter the analytics
+  /// pending queue here — the single choke point for user-driven checks.
   Future<void> add(HistoryEntry entry) async {
     await ensureLoaded();
     _entries.insert(0, entry);
     if (_entries.length > _maxEntries) _entries.removeRange(_maxEntries, _entries.length);
+    _pendingReport.add(entry);
+    if (_pendingReport.length > _maxPending) {
+      _pendingReport.removeRange(0, _pendingReport.length - _maxPending);
+    }
     notifyListeners();
     await _persist();
+    _persistPending();
   }
 
   /// Convenience: record straight from a stylepos [VerifyResult].
@@ -276,8 +318,10 @@ class VerifyHistory extends ChangeNotifier {
   Future<void> clear() async {
     await ensureLoaded();
     _entries.clear();
+    _pendingReport.clear();
     notifyListeners();
     await _persist();
+    _persistPending();
   }
 
   Future<void> _persist() async {
@@ -289,6 +333,19 @@ class VerifyHistory extends ChangeNotifier {
       );
     } catch (_) {
       // Storage full/unavailable — keep the in-memory list working.
+    }
+  }
+
+  void _persistPending() {
+    try {
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setString(
+          _pendingKey,
+          jsonEncode(_pendingReport.map((e) => e.toJson()).toList()),
+        );
+      });
+    } catch (_) {
+      // Storage hiccup — the in-memory queue stays authoritative.
     }
   }
 }

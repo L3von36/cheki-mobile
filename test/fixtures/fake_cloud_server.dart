@@ -13,10 +13,23 @@ class FakeCloudServer {
   int putAttempts = 0; // every vault PUT, successful or not
   int requests = 0; // every request that reached the client at all
   int sessionDeletes = 0; // hygiene: throwaway sessions dropped
+  int refreshCalls = 0; // /v1/session/refresh hits
   bool failVaultPut = false; // 500 on vault writes
   bool unauthorizedVault = false; // 401 on vault writes
   bool down = false; // when true the network itself is unreachable
   Map<String, dynamic>? vaultBeforeNextPut;
+
+  /// Access-token expiry handed out by /v1/session (ms epoch).
+  int sessionExpiresAt = 9999999999999;
+
+  /// When true, /v1/session/refresh answers 401 invalid_grant.
+  bool rejectRefresh = false;
+
+  /// refresh token -> userId; rotated on every refresh.
+  final Map<String, String> refreshTokens = {};
+
+  /// The most recent vault PUT body that reached the server.
+  Map<String, dynamic>? lastVaultPut;
 
   http.Client client() => MockClient((request) async {
         requests++;
@@ -49,9 +62,34 @@ class FakeCloudServer {
           if (user['authKey'] != body['authKey']) {
             return http.Response(jsonEncode({'error': 'bad_credentials'}), 401);
           }
+          final refresh = 'ref-${user['id']}-${refreshTokens.length}';
+          refreshTokens[refresh] = user['id'] as String;
           return http.Response(jsonEncode({
             'sessionToken': 'tok-${user['id']}',
+            'refreshToken': refresh,
             'userId': user['id'],
+            'expiresAt': sessionExpiresAt,
+          }), 200);
+        }
+        if (request.method == 'POST' && path == '/v1/session/refresh') {
+          refreshCalls++;
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final token = body['refreshToken'] as String?;
+          final uid = refreshTokens[token];
+          if (rejectRefresh || token == null || uid == null) {
+            refreshTokens.remove(token);
+            return http.Response(
+                jsonEncode({'error': 'invalid_grant'}), 401);
+          }
+          // Single-use rotation: burn the old grant, issue a fresh pair.
+          refreshTokens.remove(token);
+          final refresh = 'ref-$uid-${refreshTokens.length}';
+          refreshTokens[refresh] = uid;
+          return http.Response(jsonEncode({
+            'accessToken': 'tok-$uid',
+            'refreshToken': refresh,
+            'sessionToken': 'tok-$uid',
+            'userId': uid,
             'expiresAt': 9999999999999,
           }), 200);
         }
@@ -67,13 +105,15 @@ class FakeCloudServer {
         }
         if (request.method == 'PUT' && path == '/v1/vault') {
           putAttempts++;
+          final parsed = jsonDecode(request.body) as Map<String, dynamic>;
+          lastVaultPut = parsed;
           if (unauthorizedVault) {
             return http.Response(jsonEncode({'error': 'unauthorized'}), 401);
           }
           if (failVaultPut) {
             return http.Response(jsonEncode({'error': 'internal'}), 500);
           }
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final body = parsed;
           final uid = _uid(request);
           final concurrentVault = vaultBeforeNextPut;
           if (concurrentVault != null) {

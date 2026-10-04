@@ -22,6 +22,16 @@
  *     - Explicit logout revokes the refresh token from KV immediately.
  *   * Backwards Compatibility:
  *     - Existing legacy session tokens continue to be accepted during rollout.
+ *
+ * ADMIN DASHBOARD (v1.15.0):
+ *   * GET /admin  — single-page owner dashboard (browser, no client header).
+ *   * GET /v1/admin/overview — aggregates every account + vault: totals,
+ *     bank popularity, 14-day scan series, per-account rows, recent scans.
+ *   * Auth: `Authorization: Bearer <ADMIN_KEY>` (Workers secret), digest
+ *     compared. Read-only: the dashboard can never touch vault ciphertext.
+ *   * Analytics piggyback: vault PUTs may carry `stats` — bank-only events
+ *     {b,n,t,v}. NO receipt contents, names, amounts or references exist
+ *     outside the encrypted blob; zero-knowledge stays intact.
  */
 
 const CLIENT_HEADER = 'x-mahtem-client';
@@ -182,6 +192,18 @@ const isHex64 = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
 const isBase64 = (s) =>
   typeof s === 'string' && s.length > 16 && s.length <= 4_000_000;
 
+const MAX_STATS_EVENTS = 1000; // per-vault cap, newest kept
+
+/** Canonicalizes one analytics piggyback event; null when malformed. */
+function canonStatEvent(e) {
+  if (!e || typeof e !== 'object') return null;
+  const b = typeof e.b === 'string' ? e.b.trim().slice(0, 40) : '';
+  const n = typeof e.n === 'string' ? e.n.trim().slice(0, 60) : '';
+  const t = Number(e.t);
+  if (!b || !Number.isFinite(t) || t <= 0) return null;
+  return { b, n, t: Math.floor(t), v: e.v === 1 || e.v === true ? 1 : 0 };
+}
+
 async function readJson(request) {
   try {
     return await request.json();
@@ -242,6 +264,172 @@ async function requireSession(request, env) {
   return { ok: true, token, userId: session.userId, exp: session.exp };
 }
 
+// ── Admin (owner-only, v1.15.0) ─────────────────────────────────────────────
+
+async function requireAdmin(request, env) {
+  const expected = env.ADMIN_KEY;
+  if (!expected || typeof expected !== 'string' || expected.length < 16) {
+    return {
+      ok: false,
+      status: 503,
+      error: 'admin_disabled',
+      message:
+        'Admin access is not configured on this deployment (ADMIN_KEY secret missing).',
+    };
+  }
+  const auth = request.headers.get('Authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      error: 'admin_required',
+      message: 'Admin key required.',
+    };
+  }
+  // Digest comparison — no timing side channel on the secret.
+  const [a, b] = await Promise.all([sha256Hex(token), sha256Hex(expected)]);
+  if (a !== b) {
+    return {
+      ok: false,
+      status: 401,
+      error: 'admin_required',
+      message: 'Invalid admin key.',
+    };
+  }
+  return { ok: true };
+}
+
+async function listAllKeys(env, prefix) {
+  const names = [];
+  let cursor;
+  do {
+    const page = await env.KV.list(
+      cursor ? { prefix, cursor } : { prefix },
+    );
+    for (const k of page.keys) names.push(k.name);
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return names;
+}
+
+async function buildAdminOverview(env) {
+  const now = Date.now();
+  const dayMs = 24 * 3600 * 1000;
+  const todayStart = Math.floor(now / dayMs) * dayMs;
+
+  // Accounts (identifier hashes + creation dates).
+  const accounts = [];
+  for (const name of await listAllKeys(env, 'user:')) {
+    const raw = await env.KV.get(name);
+    if (!raw) continue;
+    try {
+      const r = JSON.parse(raw);
+      accounts.push({
+        id: typeof r.id === 'string' ? r.id : name.slice(5),
+        hash: name.slice(5, 13), // 8-hex prefix — never the full digest
+        createdAt: r.createdAt ?? null,
+      });
+    } catch (_) {
+      /* skip corrupt record */
+    }
+  }
+  const createdOf = new Map(accounts.map((a) => [a.id, a.createdAt]));
+
+  // Vaults + piggybacked analytics events.
+  const perBank = new Map();
+  const perDay = new Map();
+  const accountRows = [];
+  const recent = [];
+  let vaultCount = 0;
+  let totalScans = 0;
+  let verifiedScans = 0;
+  let scansToday = 0;
+  let scans7d = 0;
+
+  for (const name of await listAllKeys(env, 'vault:')) {
+    const raw = await env.KV.get(name);
+    if (!raw) continue;
+    let v;
+    try {
+      v = JSON.parse(raw);
+    } catch (_) {
+      continue;
+    }
+    vaultCount++;
+    const uid = name.slice(6);
+    const events = Array.isArray(v.stats) ? v.stats : [];
+    let lastScanAt = null;
+    let topBank = null;
+    let topCount = 0;
+    const bankCount = new Map();
+    for (const ev of events) {
+      totalScans++;
+      if (ev.v === 1) verifiedScans++;
+      if (ev.t >= todayStart) scansToday++;
+      if (ev.t >= now - 7 * dayMs) scans7d++;
+      const day = new Date(ev.t).toISOString().slice(0, 10);
+      perDay.set(day, (perDay.get(day) || 0) + 1);
+      const bk = perBank.get(ev.b) || { id: ev.b, name: ev.b, count: 0 };
+      bk.count++;
+      if (ev.n) bk.name = ev.n;
+      perBank.set(ev.b, bk);
+      const bc = (bankCount.get(ev.b) || 0) + 1;
+      bankCount.set(ev.b, bc);
+      if (bc > topCount) {
+        topCount = bc;
+        topBank = ev.n || ev.b;
+      }
+      if (lastScanAt === null || ev.t > lastScanAt) lastScanAt = ev.t;
+      recent.push({
+        t: ev.t,
+        b: ev.b,
+        n: ev.n || ev.b,
+        v: ev.v === 1 ? 1 : 0,
+        u: uid.slice(0, 8),
+      });
+    }
+    accountRows.push({
+      id: uid.slice(0, 8),
+      createdAt: createdOf.get(uid) ?? null,
+      revision: v.revision ?? null,
+      updatedAt: v.updatedAt ?? null,
+      scans: events.length,
+      lastScanAt,
+      topBank,
+    });
+  }
+  accountRows.sort(
+    (a, b) => b.scans - a.scans || (b.updatedAt || 0) - (a.updatedAt || 0),
+  );
+  const banks = [...perBank.values()].sort((a, b) => b.count - a.count);
+  recent.sort((a, b) => b.t - a.t);
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(todayStart - i * dayMs).toISOString().slice(0, 10);
+    days.push({ day: d, count: perDay.get(d) || 0 });
+  }
+
+  return {
+    generatedAt: now,
+    totals: {
+      accounts: accounts.length,
+      vaults: vaultCount,
+      scans: totalScans,
+      verified: verifiedScans,
+      scansToday,
+      scans7d,
+      scanningAccounts7d: accountRows.filter(
+        (r) => r.lastScanAt && r.lastScanAt >= now - 7 * dayMs,
+      ).length,
+    },
+    banks: banks.slice(0, 24),
+    days,
+    accounts: accountRows.slice(0, 500),
+    recent: recent.slice(0, 100),
+  };
+}
+
 // ── Refresh Token Management ────────────────────────────────────────────────
 
 async function issueSessionTokens(userId, env) {
@@ -278,8 +466,13 @@ export default {
     const url = new URL(request.url);
     const route = `${request.method} ${url.pathname}`;
 
-    // Cheap bot screen — the app always sends this header.
-    if (request.headers.get(CLIENT_HEADER) === null) {
+    // Cheap bot screen — the app always sends this header. The /admin
+    // dashboard is opened in a plain browser, so it is exempt.
+    if (
+      request.headers.get(CLIENT_HEADER) === null &&
+      url.pathname !== '/admin' &&
+      url.pathname !== '/admin/'
+    ) {
       return err('client_required', 400, 'Missing X-Mahtem-Client header.');
     }
 
@@ -422,7 +615,24 @@ export default {
           return json({ userId: session.userId, exp: session.exp, ok: true });
         }
 
-        // ── vault (encrypted history backup) ────────────────────────────
+        // ── admin dashboard (owner-only, v1.15.0) ────────────────────
+        case 'GET /admin':
+        case 'GET /admin/':
+          return new Response(adminDashboardHtml(), {
+            status: 200,
+            headers: {
+              'content-type': 'text/html; charset=utf-8',
+              'cache-control': 'no-store',
+              ...CORS_HEADERS,
+            },
+          });
+
+        case 'GET /v1/admin/overview': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          return json(await buildAdminOverview(env));
+        }
+
         case 'PUT /v1/vault': {
           const session = await requireSession(request, env);
           if (!session.ok) {
@@ -436,16 +646,22 @@ export default {
           }
           const key = `vault:${session.userId}`;
           const raw = await env.KV.get(key);
-
-          // Optimistic concurrency check
-          if (raw && body?.baseRevision !== undefined && body?.baseRevision !== null) {
-            let existing;
+          let existing = null;
+          if (raw) {
             try {
               existing = JSON.parse(raw);
             } catch (_) {
               existing = null;
             }
-            if (existing && Number(existing.revision) > Number(body.baseRevision)) {
+          }
+
+          // Optimistic concurrency check
+          if (
+            existing &&
+            body?.baseRevision !== undefined &&
+            body?.baseRevision !== null
+          ) {
+            if (Number(existing.revision) > Number(body.baseRevision)) {
               return json(
                 { error: 'conflict', revision: existing.revision, updatedAt: existing.updatedAt },
                 409,
@@ -454,9 +670,27 @@ export default {
           }
 
           const updatedAt = Date.now();
+          // v1.15.0 — analytics piggyback: merge bank-only events from the
+          // upload into the stored list (newest first, hard cap, deduped).
+          // The encrypted blob itself is never touched.
+          const incoming = Array.isArray(body?.stats) ? body.stats : [];
+          const stored = Array.isArray(existing?.stats) ? existing.stats : [];
+          const seen = new Set(stored.map((e) => `${e.t}:${e.b}`));
+          const merged = stored.slice();
+          for (const rawEvent of incoming) {
+            const ev = canonStatEvent(rawEvent);
+            if (!ev) continue;
+            const dedupe = `${ev.t}:${ev.b}`;
+            if (seen.has(dedupe)) continue;
+            seen.add(dedupe);
+            merged.push(ev);
+          }
+          merged.sort((a, b) => b.t - a.t);
+          const stats = merged.slice(0, MAX_STATS_EVENTS);
+
           await env.KV.put(
             key,
-            JSON.stringify({ blob, revision, updatedAt }),
+            JSON.stringify({ blob, revision, updatedAt, stats }),
             { expirationTtl: 365 * 24 * 3600 },
           );
           return json({ ok: true, revision, updatedAt });
@@ -499,3 +733,294 @@ export default {
     }
   },
 };
+
+// ── Admin Dashboard HTML (v1.15.0) ──────────────────────────────────────────
+// Single self-contained page: no external assets, no frameworks. The owner
+// enters the ADMIN_KEY once (kept in localStorage); every refresh pulls
+// GET /v1/admin/overview and re-renders. Read-only by design.
+
+function adminDashboardHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Mahtem — Admin</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #121a30; --panel2: #0e1526; --line: #223052;
+    --text: #e8eefc; --muted: #8fa0c2; --brand: #4f7cff; --brand2: #7aa2ff;
+    --ok: #2fbf71; --bad: #ff5d5d; --amber: #ffb454;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 80% -10%, #16224a 0%, var(--bg) 55%);
+    color: var(--text); min-height: 100vh; padding: 28px 20px 60px;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, var(--brand), #9b5cff);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .spacer { flex: 1; }
+  .keybox { display: flex; gap: 8px; align-items: center; }
+  input[type=password], input[type=text] {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 9px 12px; font-size: 14px; width: 240px; outline: none;
+  }
+  input:focus { border-color: var(--brand); }
+  button {
+    background: var(--brand); border: 0; color: #fff; font-weight: 600;
+    border-radius: 10px; padding: 9px 16px; font-size: 14px; cursor: pointer;
+  }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  button.ghost:hover { color: var(--text); border-color: var(--brand); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .card .v { font-size: 26px; font-weight: 750; margin-top: 4px; }
+  .card .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .panel h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--brand2); letter-spacing: .3px; }
+  .barrow { display: grid; grid-template-columns: 130px 1fr 84px; gap: 10px; align-items: center; margin: 7px 0; }
+  .barrow .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 13px; }
+  .barrow .track { background: var(--panel2); border-radius: 6px; height: 10px; overflow: hidden; }
+  .barrow .fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--brand), #9b5cff); }
+  .barrow .num { text-align: right; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .chart { display: flex; align-items: flex-end; gap: 6px; height: 130px; padding-top: 6px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; height: 100%; }
+  .chart .bar { width: 100%; max-width: 34px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--brand2), var(--brand)); min-height: 2px; }
+  .chart .lbl { font-size: 10px; color: var(--muted); transform: rotate(-45deg); white-space: nowrap; }
+  .chart .val { font-size: 10.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--panel2); font-variant-numeric: tabular-nums; }
+  tr:hover td { background: var(--panel2); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; }
+  .ok { background: var(--ok); } .bad { background: var(--bad); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); }
+  .feed { max-height: 320px; overflow-y: auto; }
+  .feedrow { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--panel2); font-size: 13px; }
+  .feedrow .t { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+  .feedrow .u { margin-left: auto; }
+  .msg { padding: 14px 16px; border-radius: 12px; margin: 10px 0; font-size: 14px; display: none; }
+  .msg.err { background: rgba(255,93,93,.12); border: 1px solid rgba(255,93,93,.4); color: #ffb3b3; }
+  .msg.info { background: rgba(79,124,255,.12); border: 1px solid rgba(79,124,255,.4); color: #c3d3ff; }
+  footer { margin-top: 26px; color: var(--muted); font-size: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  label.tog { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; user-select: none; }
+  .skel { color: var(--muted); padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">M</div>
+    <div>
+      <h1>Mahtem Admin</h1>
+      <div class="sub">Cross-account scan analytics · read-only · zero-knowledge preserved</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="keybox">
+      <input id="key" type="password" placeholder="Admin key" autocomplete="off">
+      <button id="go">Unlock</button>
+      <button id="forget" class="ghost" title="Forget the key on this device">Forget</button>
+    </div>
+  </header>
+
+  <div id="err" class="msg err"></div>
+  <div id="info" class="msg info"></div>
+
+  <div id="content" style="display:none">
+    <div class="cards" id="cards"></div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Bank popularity</h2>
+        <div id="banks"></div>
+      </div>
+      <div class="panel">
+        <h2>Scans per day — last 14 days (UTC)</h2>
+        <div class="chart" id="chart"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>Accounts</h2>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Account</th><th>Created</th><th>Revision</th><th>Vault updated</th>
+            <th>Scans</th><th>Last scan</th><th>Top bank</th>
+          </tr></thead>
+          <tbody id="accounts"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>Recent scans — every account</h2>
+      <div class="feed" id="feed"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span id="gen"></span>
+    <label class="tog"><input id="auto" type="checkbox" checked> auto-refresh 30s</label>
+    <button id="refresh" class="ghost">Refresh now</button>
+    <span>Bank-only metadata — receipt contents stay encrypted per account.</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY_STORE = 'mahtem_admin_key';
+  var key = '';
+  var timer = null;
+
+  var el = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+  function dt(ms) {
+    if (!ms) return '—';
+    var d = new Date(ms);
+    return d.toISOString().slice(0, 10) + ' ' + d.toISOString().slice(11, 16);
+  }
+  function ago(ms) {
+    if (!ms) return 'never';
+    var s = Math.max(0, (Date.now() - ms) / 1000);
+    if (s < 60) return Math.floor(s) + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+  function showErr(msg) { el('err').textContent = msg; el('err').style.display = 'block'; }
+  function hideMsgs() { el('err').style.display = 'none'; el('info').style.display = 'none'; }
+
+  function saveKey(k) { key = k; try { localStorage.setItem(KEY_STORE, k); } catch (e) {} }
+  function loadKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+  function forgetKey() { key = ''; try { localStorage.removeItem(KEY_STORE); } catch (e) {} location.reload(); }
+
+  function fetchOverview() {
+    hideMsgs();
+    return fetch('/v1/admin/overview', {
+      headers: { 'Authorization': 'Bearer ' + key, 'X-Mahtem-Client': 'mahtem-admin-dashboard' }
+    }).then(function (r) {
+      if (r.status === 401) { throw new Error('Invalid admin key. Check the ADMIN_KEY and try again.'); }
+      if (r.status === 503) { throw new Error('Admin access is not configured on the Worker yet (ADMIN_KEY secret missing).'); }
+      if (!r.ok) { throw new Error('Server error ' + r.status + '. Try again shortly.'); }
+      return r.json();
+    });
+  }
+
+  function render(d) {
+    var t = d.totals || {};
+    var cards = [
+      ['Accounts', fmt(t.accounts), 'registered'],
+      ['Cloud vaults', fmt(t.vaults), 'backing up now'],
+      ['Total scans', fmt(t.scans), fmt(t.verified) + ' verified'],
+      ['Scans today', fmt(t.scansToday), 'UTC day'],
+      ['Scans 7 days', fmt(t.scans7d), 'rolling'],
+      ['Active 7 days', fmt(t.scanningAccounts7d), 'accounts scanning'],
+    ];
+    el('cards').innerHTML = cards.map(function (c) {
+      return '<div class="card"><div class="k">' + esc(c[0]) + '</div><div class="v">' +
+        esc(c[1]) + '</div><div class="d">' + esc(c[2]) + '</div></div>';
+    }).join('');
+
+    var banks = d.banks || [];
+    var maxB = banks.length ? banks[0].count : 1;
+    el('banks').innerHTML = banks.length ? banks.map(function (b) {
+      var pct = Math.max(2, Math.round(100 * b.count / maxB));
+      var share = t.scans ? Math.round(100 * b.count / t.scans) : 0;
+      return '<div class="barrow"><div class="name" title="' + esc(b.id) + '">' + esc(b.name || b.id) +
+        '</div><div class="track"><div class="fill" style="width:' + pct + '%"></div></div>' +
+        '<div class="num">' + fmt(b.count) + ' · ' + share + '%</div></div>';
+    }).join('') : '<div class="skel">No scan analytics yet — data arrives with the next vault upload from the app (v1.15.0+).</div>';
+
+    var days = d.days || [];
+    var maxD = 1;
+    days.forEach(function (x) { if (x.count > maxD) maxD = x.count; });
+    el('chart').innerHTML = days.map(function (x) {
+      var h = Math.max(2, Math.round(100 * x.count / maxD));
+      return '<div class="col" title="' + esc(x.day) + ': ' + x.count + ' scans">' +
+        '<div class="val">' + (x.count || '') + '</div>' +
+        '<div class="bar" style="height:' + h + '%"></div>' +
+        '<div class="lbl">' + esc(x.day.slice(5)) + '</div></div>';
+    }).join('');
+
+    var accs = d.accounts || [];
+    el('accounts').innerHTML = accs.length ? accs.map(function (a) {
+      return '<tr><td class="mono">' + esc(a.id) + '…</td>' +
+        '<td>' + esc(dt(a.createdAt).slice(0, 10)) + '</td>' +
+        '<td>' + esc(fmt(a.revision)) + '</td>' +
+        '<td>' + esc(ago(a.updatedAt)) + '</td>' +
+        '<td><b>' + esc(fmt(a.scans)) + '</b></td>' +
+        '<td>' + esc(ago(a.lastScanAt)) + '</td>' +
+        '<td>' + esc(a.topBank || '—') + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="skel">No vaults stored yet.</td></tr>';
+
+    var feed = d.recent || [];
+    el('feed').innerHTML = feed.length ? feed.map(function (r) {
+      return '<div class="feedrow"><span class="dot ' + (r.v ? 'ok' : 'bad') + '"></span>' +
+        '<span class="t">' + esc(dt(r.t)) + '</span>' +
+        '<span>' + esc(r.n || r.b) + '</span>' +
+        '<span class="u mono">' + esc(r.u) + '…</span></div>';
+    }).join('') : '<div class="skel">No scans reported yet.</div>';
+
+    el('gen').textContent = 'Updated ' + new Date(d.generatedAt || Date.now()).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    el('content').style.display = 'block';
+  }
+
+  function refresh() {
+    return fetchOverview().then(render).catch(function (e) {
+      el('content').style.display = 'none';
+      showErr(e.message || String(e));
+    });
+  }
+
+  function schedule() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(function () {
+      if (el('auto').checked && key) refresh();
+    }, 30000);
+  }
+
+  el('go').addEventListener('click', function () {
+    var k = el('key').value.trim();
+    if (!k) { showErr('Enter the admin key first.'); return; }
+    saveKey(k);
+    el('key').value = '';
+    refresh();
+    schedule();
+  });
+  el('key').addEventListener('keydown', function (e) { if (e.key === 'Enter') el('go').click(); });
+  el('forget').addEventListener('click', forgetKey);
+  el('refresh').addEventListener('click', function () { if (key) refresh(); });
+
+  var stored = loadKey();
+  if (stored) {
+    key = stored;
+    el('key').placeholder = '•••••••• (stored)';
+    refresh();
+    schedule();
+  } else {
+    showErr('Enter the admin key to load the dashboard. It stays on this device only.');
+  }
+})();
+</script>
+</body>
+</html>`;
+}

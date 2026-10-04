@@ -31,6 +31,22 @@
 /// non-transient reason, the window expires, the feature is disabled or
 /// the controller dies. After that the Settings sheet remains the manual
 /// fallback and the next sign-in re-arms.
+///
+/// v1.15.0 — SESSION CONTINUITY FIX: the OAuth upgrade (v1.14.5) made
+/// access tokens 15-minute JWTs, but the 30-day refresh token was never
+/// persisted — so every session silently died a quarter hour after sign-in
+/// and realtime polling / auto-sync / boot catch-up all stopped. The
+/// refresh token is now stored and rotated like the server expects:
+/// whenever the access token is missing or about to expire, sync operations
+/// transparently refresh it first ([_ensureFreshSession]), a 401 mid-flight
+/// triggers exactly one refresh-and-continue, and a dead refresh token is
+/// the only thing that still forces a re-sign-in.
+///
+/// v1.15.0 — ANALYTICS PIGGYBACK: local scans queued by [VerifyHistory]
+/// ride on vault uploads as plaintext bank-only metadata (bank id/name,
+/// timestamp, pass/fail) so the owner's /admin dashboard can show usage
+/// and bank popularity WITHOUT any receipt content ever leaving the
+/// encrypted blob. No session → no uploads → no analytics.
 library;
 
 import 'dart:async';
@@ -109,6 +125,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   bool _enabled = false;
   int? _lastSyncAt;
   String? _sessionToken;
+  String? _refreshToken;
   String? _identifierHash;
   String? _vaultKeyHex;
   int? _sessionExpiresAt;
@@ -124,6 +141,11 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   // ephemeral state
   CloudStep _step = CloudStep.idle;
   CloudFailure _failure = CloudFailure.none;
+
+  // Session-continuity state (v1.15.0). The in-flight refresh future
+  // serializes concurrent callers — the server rotates refresh tokens
+  // single-use, so two parallel refreshes would burn one.
+  Future<bool>? _refreshFuture;
 
   // auto-sync engine state (ephemeral)
   VerifyHistory? _history;
@@ -141,12 +163,21 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   CloudFailure get failure => _failure;
   int? get lastSyncAt => _lastSyncAt;
 
-  /// Restore/backup only make sense with a live session.
+  /// The JWT access token is still valid (or expiry unknown — legacy).
+  bool get _accessLive =>
+      _sessionExpiresAt == null ||
+      _sessionExpiresAt! > DateTime.now().millisecondsSinceEpoch;
+
+  /// A rotating refresh token is stored, so an expired access token can
+  /// be renewed transparently instead of ending the session.
+  bool get _refreshable => (_refreshToken ?? '').isNotEmpty;
+
+  /// Restore/backup only make sense with a live session. v1.15.0: a
+  /// refreshable session counts too — sync paths refresh before syncing.
   bool get hasSession =>
       _enabled &&
       _sessionToken != null &&
-      (_sessionExpiresAt == null ||
-          _sessionExpiresAt! > DateTime.now().millisecondsSinceEpoch);
+      (_accessLive || _refreshable);
 
   /// Whether local changes push to the cloud automatically (v1.13.1).
   bool get autoSyncEnabled => _autoSync;
@@ -230,6 +261,15 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     _failure = CloudFailure.none;
     _setWorking(true);
     try {
+      if (!await _ensureFreshSession()) {
+        // Deterministic refresh failure already disabled us (failure =
+        // sessionExpired); a network-level failure is retried as usual.
+        if (_enabled && _failure == CloudFailure.none) {
+          _failure = CloudFailure.network;
+          _noteAutoFailure();
+        }
+        return;
+      }
       await _mergeUpload(history);
       _dirty = false;
       _autoFailures = 0;
@@ -284,6 +324,68 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------- session continuity
+  /// v1.15.0 — makes sure the access token is usable before a sync
+  /// operation, silently rotating it via the stored refresh token when it
+  /// is expired or about to expire. Returns false only when no usable
+  /// session can be established.
+  Future<bool> _ensureFreshSession() async {
+    if (!_enabled || _sessionToken == null) return false;
+    if (_accessLive) return true;
+    if (!_refreshable) return false;
+    return _refreshSession();
+  }
+
+  /// Serialized wrapper: concurrent callers share one in-flight refresh
+  /// (the server rotates refresh tokens single-use).
+  Future<bool> _refreshSession() async {
+    final inFlight = _refreshFuture;
+    if (inFlight != null) return inFlight;
+    final token = _refreshToken ?? '';
+    if (token.isEmpty) return false;
+    final fut = _performRefresh(token);
+    _refreshFuture = fut;
+    try {
+      return await fut;
+    } finally {
+      if (identical(_refreshFuture, fut)) _refreshFuture = null;
+    }
+  }
+
+  Future<bool> _performRefresh(String refreshToken) async {
+    try {
+      final session = await _api.refreshSession(refreshToken);
+      if (session.sessionToken.isEmpty) return false;
+      _sessionToken = session.sessionToken;
+      // The server always rotates; keep the old token only as a fallback
+      // if a future server build stops returning one.
+      _refreshToken = (session.refreshToken ?? '').isNotEmpty
+          ? session.refreshToken
+          : refreshToken;
+      _sessionExpiresAt =
+          session.expiresAtMs != 0 ? session.expiresAtMs : _sessionExpiresAt;
+      _autoFailures = 0;
+      _nextAutoAttemptAt = null;
+      _persistState();
+      return true;
+    } on CloudApiException catch (e) {
+      if (e.error == CloudApiError.unauthorized ||
+          e.error == CloudApiError.badInput ||
+          e.error == CloudApiError.badCredentials) {
+        // The refresh grant is dead (used / revoked / expired) — nothing
+        // left to renew. Drop to the re-sign-in path.
+        _enabled = false;
+        _failure = CloudFailure.sessionExpired;
+        _persistState();
+        notifyListeners();
+      }
+      return false;
+    } catch (_) {
+      // Network-level — tokens stay put; the next tick retries.
+      return false;
+    }
+  }
+
   // ---------------------------------------------------------------- realtime sync
   void _startRealtimePolling() {
     _stopRealtimePolling();
@@ -307,6 +409,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
         _isPulling) {
       return;
     }
+    if (!await _ensureFreshSession()) return;
     final history = _history;
     if (history == null) return;
 
@@ -323,6 +426,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// happens if the vault hasn't changed.
   Future<int> pollNow(VerifyHistory history) async {
     if (!_enabled || !hasSession || isWorking || _isPulling) return 0;
+    if (!await _ensureFreshSession()) return 0;
     _isPulling = true;
     try {
       final remote = await _api.getVault(
@@ -483,6 +587,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     if (prefs == null) return;
     _enabled = prefs.getBool(_kEnabled) ?? false;
     _sessionToken = prefs.getString(_kToken);
+    _refreshToken = prefs.getString(_kRefreshToken);
     _identifierHash = prefs.getString(_kIdentifierHash);
     _vaultKeyHex = prefs.getString(_kVaultKey);
     _sessionExpiresAt = prefs.getInt(_kExpiresAt);
@@ -497,9 +602,12 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
             _vaultKeyHex == null ||
             _identifierHash == null ||
             !hasSession)) {
-      // Stale/expired session — require a fresh enable (re-enter
-      // password). The server copy, if any, is untouched; the user can
-      // re-enable and merge it.
+      // v1.15.0 — an expired JWT no longer kills the session here: when a
+      // refresh token is stored, hasSession stays true and the first sync
+      // silently renews the access token. Without a refresh token there is
+      // nothing to renew — require a fresh enable (re-enter password). The
+      // server copy, if any, is untouched; the user can re-enable and
+      // merge it.
       _enabled = false;
       _failure = CloudFailure.sessionExpired;
       _persistState();
@@ -550,6 +658,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
       _enabled = true;
       _sessionToken = session.sessionToken;
+      _refreshToken = session.refreshToken;
       _identifierHash = identifierHash;
       _vaultKeyHex = bytesToHex(vaultKey);
       _sessionExpiresAt = session.expiresAtMs;
@@ -584,6 +693,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// history and uploads the union. Safe to run repeatedly.
   Future<bool> backupNow(VerifyHistory history) async {
     if (!hasSession || isWorking) return false;
+    if (!await _ensureFreshSession()) return false;
     _failure = CloudFailure.none;
     _setWorking(true);
     try {
@@ -611,6 +721,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// (-1 on failure).
   Future<int> restore(VerifyHistory history) async {
     if (!hasSession || isWorking) return -1;
+    if (!await _ensureFreshSession()) return -1;
     _failure = CloudFailure.none;
     _setWorking(true);
     try {
@@ -653,6 +764,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _autoTimer?.cancel();
       _enabled = false;
       _sessionToken = null;
+      _refreshToken = null;
       _identifierHash = null;
       _vaultKeyHex = null;
       _sessionExpiresAt = null;
@@ -671,6 +783,16 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _mergeUpload(VerifyHistory history) async {
     await history.ensureLoaded();
     final key = hexToBytes(_vaultKeyHex!);
+    // v1.15.0 analytics: local scans queued by the history store ride
+    // along as bank-only plaintext metadata. Peeked BEFORE the write and
+    // acked only AFTER it succeeds, so a failed upload never loses them.
+    final pendingStats = history.peekPendingReport();
+    final stats = pendingStats.map((e) => <String, Object>{
+          'b': e.bankId,
+          'n': e.bankName,
+          't': e.verifiedAt,
+          'v': e.isVerified ? 1 : 0,
+        }).toList();
     for (var attempt = 0; attempt < 2; attempt++) {
       final remote = await _api.getVault(_sessionToken!);
       List<HistoryEntry> remoteEntries = const [];
@@ -691,6 +813,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
           blob: blob,
           revision: rev,
           baseRevision: remote?.revision,
+          stats: stats.isEmpty ? null : stats,
         );
       } on CloudApiException catch (e) {
         if (e.error != CloudApiError.conflict || attempt == 1) rethrow;
@@ -698,6 +821,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       }
       _lastRemoteRevision = rev;
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
+      if (pendingStats.isNotEmpty) {
+        history.ackPendingReport(pendingStats.length);
+      }
       return;
     }
   }
@@ -717,8 +843,16 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _handleApiFailure(CloudApiException e) {
     if (e.error == CloudApiError.unauthorized) {
-      // Session died server-side — drop to disabled; the next enable
-      // re-links and merges whatever is still on the server.
+      // v1.15.0 — a 401 mid-flight usually means the access token expired
+      // while the operation ran. One refresh revives the session and the
+      // caller's normal retry schedule takes over; only a dead refresh
+      // grant actually ends the session.
+      if (_refreshable) {
+        // Run asynchronously so this handler stays sync-safe for every
+        // caller; the next scheduled sync uses the renewed token.
+        _refreshSession();
+        return;
+      }
       _enabled = false;
       _failure = CloudFailure.sessionExpired;
       _persistState();
@@ -752,6 +886,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
   static const String _kEnabled = 'cloud.enabled';
   static const String _kToken = 'cloud.sessionToken';
+  static const String _kRefreshToken = 'cloud.refreshToken';
   static const String _kIdentifierHash = 'cloud.identifierHash';
   static const String _kVaultKey = 'cloud.vaultKey';
   static const String _kExpiresAt = 'cloud.expiresAt';
@@ -794,11 +929,18 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       final token = _sessionToken;
       if (token == null) {
         prefs.remove(_kToken);
+        prefs.remove(_kRefreshToken);
         prefs.remove(_kIdentifierHash);
         prefs.remove(_kVaultKey);
         prefs.remove(_kExpiresAt);
       } else {
         prefs.setString(_kToken, token);
+        final refresh = _refreshToken;
+        if (refresh == null || refresh.isEmpty) {
+          prefs.remove(_kRefreshToken);
+        } else {
+          prefs.setString(_kRefreshToken, refresh);
+        }
         prefs.setString(_kIdentifierHash, _identifierHash ?? '');
         prefs.setString(_kVaultKey, _vaultKeyHex ?? '');
         prefs.setInt(_kExpiresAt, _sessionExpiresAt ?? 0);

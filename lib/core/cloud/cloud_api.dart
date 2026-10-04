@@ -244,16 +244,23 @@ class CloudApi {
   /// Uploads the encrypted vault. When [baseRevision] is given the write
   /// is optimistic: a newer stored revision raises
   /// [CloudApiError.conflict] (with `serverRevision`).
+  ///
+  /// [stats] rides alongside the blob as PLAINTEXT metadata for the admin
+  /// analytics dashboard (v1.15.0): `{b: bankId, n: bankName, t: epochMs,
+  /// v: 1|0}`. Deliberately tiny and non-sensitive — no references, names,
+  /// amounts or receipt contents ever leave the encrypted blob.
   Future<void> putVault({
     required String sessionToken,
     required String blob,
     required int revision,
     int? baseRevision,
+    List<Map<String, Object?>>? stats,
   }) =>
       _send('PUT', '/v1/vault', bearer: sessionToken, body: {
         'blob': blob,
         'revision': revision,
         if (baseRevision != null) 'baseRevision': baseRevision,
+        'stats': ?stats,
       });
 
   /// Returns null when the server holds no vault yet (404 `empty`).

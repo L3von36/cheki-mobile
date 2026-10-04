@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/app_tab.dart';
+import 'package:mahtem/state/cloud_controller.dart';
 import 'package:mahtem/state/locale_controller.dart';
 import 'package:mahtem/state/theme_controller.dart';
 import 'package:mahtem/state/verify_controller.dart';
@@ -82,6 +83,9 @@ Widget _harness({
         value: history ?? VerifyHistory(),
       ),
       ChangeNotifierProvider<AppTab>.value(value: tab ?? AppTab()),
+      // HistoryScreen reads the cloud controller for the backup row — a
+      // prefs-less instance is the neutral (disabled) state in tests.
+      ChangeNotifierProvider<CloudController>.value(value: CloudController()),
       ChangeNotifierProvider<ThemeController>(
         create: (_) => ThemeController(prefs: null)..ensureLoaded(),
       ),

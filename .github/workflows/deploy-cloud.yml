@@ -35,7 +35,9 @@ jobs:
           KV_NAMESPACE_ID: "f317f08d8e384fc4ae23c9ed62cd9471"
         run: |
           set -euo pipefail
-          printf '{"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":[{"type":"kv_namespace","name":"KV","namespace_id":"%s"}]}' \
+          # keep_bindings preserves secret bindings (e.g. ADMIN_KEY) across
+          # module uploads — metadata.bindings alone would drop them.
+          printf '{"main_module":"worker.js","compatibility_date":"2026-09-01","keep_bindings":["secret_text"],"bindings":[{"type":"kv_namespace","name":"KV","namespace_id":"%s"}]}' \
             "$KV_NAMESPACE_ID" > metadata.json
           http=$(curl -sS -o result.json -w "%{http_code}" -X PUT \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -55,19 +57,30 @@ jobs:
           print("Worker uploaded:", d["result"]["id"])
           PY
 
-      - name: Smoke test live endpoint
+      - name: Smoke test live endpoints
         run: |
           set -euo pipefail
           sleep 5
+          ok=0
           for i in 1 2 3; do
             if curl -fsS -H "X-Mahtem-Client: ci-deploy" https://mahtem-api.mahtem.workers.dev/v1/health \
               | tee health.json | grep -q '"ok":true'; then
               echo "Live health check passed:"
               cat health.json
-              exit 0
+              ok=1
+              break
             fi
             echo "Attempt $i failed, retrying..."
             sleep 10
           done
-          echo "Health check failed after 3 attempts"
-          exit 1
+          if [ "$ok" != "1" ]; then
+            echo "Health check failed after 3 attempts"
+            exit 1
+          fi
+          # Admin dashboard must serve its HTML page (no client header needed).
+          code=$(curl -s -o /dev/null -w "%{http_code}" https://mahtem-api.mahtem.workers.dev/admin)
+          if [ "$code" != "200" ]; then
+            echo "Admin dashboard smoke test failed: HTTP $code"
+            exit 1
+          fi
+          echo "Admin dashboard smoke test passed: HTTP 200"

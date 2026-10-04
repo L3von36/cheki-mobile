@@ -466,6 +466,9 @@ void main() {
   test('expired session stops auto-sync until re-enable', () async {
     final (controller, history) = await _enabledSession(server, hasher, account);
     server.unauthorizedVault = true;
+    // v1.15.0 — a 401 now triggers exactly one refresh-and-continue, so the
+    // session only truly dies when the refresh grant is dead too.
+    server.rejectRefresh = true;
 
     await history.add(_entry('x1', verifiedAt: 6000));
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -477,6 +480,25 @@ void main() {
     await history.add(_entry('x2', verifiedAt: 6100));
     await Future<void>.delayed(const Duration(milliseconds: 120));
     expect(server.putAttempts, deadAttempts); // no pushes while dead
+  });
+
+  test('a 401 mid-flight refreshes and keeps syncing (v1.15.0)', () async {
+    final (controller, history) = await _enabledSession(server, hasher, account);
+    server.unauthorizedVault = true; // access token rejected server-side
+
+    await history.add(_entry('y1', verifiedAt: 6200));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(controller.enabled, isTrue,
+        reason: 'refreshable sessions survive a 401');
+    expect(server.refreshCalls, 1, reason: 'one silent refresh after the 401');
+    expect(controller.failure, isNot(CloudFailure.sessionExpired));
+
+    // Access token works again → the next change pushes normally.
+    server.unauthorizedVault = false;
+    await history.add(_entry('y2', verifiedAt: 6300));
+    await _waitFor(() => server.putAttempts >= 2);
+    expect(server.putAttempts, greaterThanOrEqualTo(2));
   });
 
   test('boot catch-up pushes changes lost mid-debounce', () async {
@@ -833,5 +855,155 @@ void main() {
 
     first.dispose();
     second.dispose();
+  });
+
+  // ── v1.15.0 — session continuity (refresh tokens) ────────────────────────
+
+  test('enable stores the refresh token and persists it across boots', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+
+    expect(controller.hasSession, isTrue);
+    expect(prefs.getString('cloud.refreshToken'), isNotNull);
+    expect(prefs.getString('cloud.refreshToken'), startsWith('ref-'));
+
+    // Fresh controller on a "reboot" restores the refreshable session.
+    final reborn = _tuned(server, hasher, prefs);
+    await reborn.ensureLoaded();
+    expect(reborn.enabled, isTrue, reason: 'refresh token keeps the session alive across boots');
+    reborn.dispose();
+  });
+
+  test('an expired access token is silently refreshed before sync', () async {
+    // Hand out an already-expired access token, like a JWT would be 15
+    // minutes after sign-in.
+    server.sessionExpiresAt = DateTime.now().millisecondsSinceEpoch - 1000;
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+    expect(server.refreshCalls, 0);
+
+    await history.add(_entry('after-expiry', verifiedAt: 2000));
+    final ok = await controller.backupNow(history);
+
+    expect(ok, isTrue, reason: 'backup must succeed via the refresh path');
+    expect(server.refreshCalls, 1, reason: 'exactly one refresh before the upload');
+    expect(controller.enabled, isTrue);
+    expect(controller.failure, CloudFailure.none);
+    expect(server.lastVaultPut, isNotNull);
+  });
+
+  test('a dead refresh grant ends the session with sessionExpired', () async {
+    server.sessionExpiresAt = DateTime.now().millisecondsSinceEpoch - 1000;
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+
+    server.rejectRefresh = true;
+    final ok = await controller.backupNow(history);
+
+    expect(ok, isFalse);
+    expect(controller.enabled, isFalse, reason: 'nothing left to renew');
+    expect(controller.failure, CloudFailure.sessionExpired);
+  });
+
+  test('boot catch-up refreshes an expired JWT without disabling', () async {
+    server.sessionExpiresAt = DateTime.now().millisecondsSinceEpoch + 50;
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs, revisionClock: () => 60000);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+
+    // Simulate the JWT expiring while the app is closed, then "reboot"
+    // with a fresh controller on the same prefs.
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    final reborn = _tuned(server, hasher, prefs, revisionClock: () => 60001);
+    await reborn.ensureLoaded();
+    expect(reborn.enabled, isTrue, reason: 'refreshable sessions survive boots');
+
+    final h2 = VerifyHistory();
+    reborn.observe(h2);
+    final added = await reborn.restore(h2);
+    expect(added, isNot(-1), reason: 'restore works after silent refresh');
+    expect(server.refreshCalls, greaterThanOrEqualTo(1));
+    reborn.dispose();
+  });
+
+  // ── v1.15.0 — analytics piggyback ────────────────────────────────────────
+
+  test('local scans ride the vault upload as stats and get acked', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+    // The first enable-upload carries the historical queue only if scans
+    // existed before arming; nothing scanned yet here.
+    expect(history.pendingReportCount, 0);
+
+    await history.add(_entry('scan-1', verifiedAt: 3000));
+    await history.add(_entry('scan-2', verifiedAt: 4000));
+    expect(history.pendingReportCount, 2);
+
+    await controller.backupNow(history);
+
+    final stats = server.lastVaultPut?['stats'] as List<dynamic>?;
+    expect(stats, isNotNull, reason: 'stats must ride the upload');
+    expect(stats!.length, 2);
+    final first = stats.first as Map<dynamic, dynamic>;
+    expect(first['b'], 'cbe');
+    expect(first['n'], 'CBE');
+    expect(first['v'], anyOf(0, 1));
+    expect(history.pendingReportCount, 0, reason: 'acked after a successful upload');
+
+    // A follow-up upload with no new scans carries NO stats field.
+    await controller.backupNow(history);
+    expect(server.lastVaultPut?.containsKey('stats'), isFalse);
+  });
+
+  test('a failed upload keeps the stats queue for the next push', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+
+    await history.add(_entry('kept-1', verifiedAt: 5000));
+    server.failVaultPut = true;
+    await controller.backupNow(history);
+    expect(history.pendingReportCount, 1, reason: 'queue survives a failed upload');
+
+    server.failVaultPut = false;
+    await controller.backupNow(history);
+    expect(history.pendingReportCount, 0);
+    expect(server.lastVaultPut?['stats'], isNotNull);
+  });
+
+  test('remote merges do not enter the stats queue (no double counting)', () async {
+    // Another device uploads a vault with one entry.
+    final other = VerifyHistory();
+    await other.add(_entry('from-device-b', verifiedAt: 7000));
+    final otherKey = await deriveVaultKey('correct-horse', account.id);
+    final otherBlob = await encryptVaultBlob(
+      otherKey,
+      encodeVaultPayload(other.entries),
+    );
+    server.vaults['u-0'] = {
+      'blob': otherBlob,
+      'revision': 60000,
+      'updatedAt': 1,
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    final controller = _tuned(server, hasher, prefs);
+    final history = VerifyHistory();
+    await controller.enable(password: 'correct-horse', account: account, history: history);
+    await controller.restore(history);
+
+    expect(history.entries.any((e) => e.id == 'from-device-b'), isTrue);
+    expect(history.pendingReportCount, 0,
+        reason: 'entries merged from the cloud were already reported by their device');
   });
 }
