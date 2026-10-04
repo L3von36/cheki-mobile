@@ -39,6 +39,26 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Ship ARM only. 100% of the phones Mahtem serves run armeabi-v7a or
+        // arm64-v8a; x86_64 exists for emulators and rare Intel devices and
+        // was adding ~37 MB to the universal APK. Each ABI carries its own
+        // copy of the Flutter engine + ML Kit OCR + barcode native libs.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    // Deflate native libraries inside the APK instead of storing them raw.
+    // AGP's default keeps .so uncompressed so Android can mmap them straight
+    // from the APK — that made the download (what users pay mobile data for)
+    // ~2x bigger. With legacy packaging the installer extracts libs to disk
+    // once, so installed size ends up roughly the same as before while the
+    // DOWNLOAD drops by more than half.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -61,8 +81,8 @@ android {
             }
 
             // Shrink the Java/Kotlin side with R8 and drop unused resources.
-            // (Dart code is already AOT-compiled; the big win comes from the
-            // per-ABI APK splits done by `flutter build apk --split-per-abi`.)
+            // (Dart code is already AOT-compiled; the big wins come from the
+            // ARM-only ABI filter + legacy packaging above.)
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

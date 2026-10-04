@@ -1,0 +1,68 @@
+name: APK size check
+
+# Builds the release APKs and reports their sizes WITHOUT publishing a
+# release. Used to verify packaging changes (ABI filters, compression).
+# Runs on: the ci/size-check branch (push) or manual dispatch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "ci/size-check"
+
+permissions:
+  contents: read
+
+jobs:
+  size-check:
+    name: Build & measure APKs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter (stable, pinned)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.3
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APKs
+        run: |
+          flutter build apk --release --split-per-abi \
+            --obfuscate \
+            --split-debug-info=build/symbols
+          flutter build apk --release \
+            --target-platform=android-arm,android-arm64 \
+            --obfuscate \
+            --split-debug-info=build/symbols
+
+      - name: Report sizes
+        run: |
+          echo "── APK sizes ─────────────────────────────"
+          ls -la build/app/outputs/flutter-apk/*.apk
+          echo "── bytes ─────────────────────────────────"
+          for f in build/app/outputs/flutter-apk/*.apk; do
+            echo "$(basename "$f"): $(stat -c%s "$f") bytes"
+          done
+          echo "── compression check (first 2 lib entries) ──"
+          unzip -v build/app/outputs/flutter-apk/app-release.apk | grep -E "lib/arm64-v8a/libflutter|lib/arm64-v8a/libmlkit" || true
+          echo "── ABI list in universal APK ──"
+          unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -oE "lib/[a-z0-9_-]+/" | sort -u || true
+
+      - name: Upload APKs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-check-apks
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 3
