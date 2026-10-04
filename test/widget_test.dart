@@ -5,11 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/app.dart';
 import 'package:mahtem/core/auth/account_store.dart';
 import 'package:mahtem/core/auth/password_hasher.dart';
-import 'package:mahtem/core/auth/remote_account.dart';
 import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/auth_controller.dart';
+import 'package:mahtem/ui/screens/auth/create_account_screen.dart';
 import 'package:mahtem/ui/screens/auth/sign_in_screen.dart';
 import 'package:mahtem/ui/shell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,19 +20,6 @@ AuthController makeAuth() => AuthController(
   store: MemoryAccountStore(),
   hasher: PasswordHasher(iterations: 1000),
 );
-
-class _ConfirmedDirectory implements RemoteAccountDirectory {
-  @override
-  Future<RemoteAuthOutcome> authenticate({
-    required String accountId,
-    required String password,
-  }) async => const RemoteAuthConfirmed(
-    RemoteAccountProfile(
-      identifier: '0911223344',
-      displayName: 'Test User',
-    ),
-  );
-}
 
 /// Seeds a signed-in session so the gate opens straight into the shell.
 Future<AuthController> seededAuth() async {
@@ -94,26 +81,33 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    final auth = AuthController(
-      store: MemoryAccountStore(),
-      hasher: PasswordHasher(iterations: 1000),
-      remoteDirectory: _ConfirmedDirectory(),
-    );
+    final auth = await seededAuth();
+    await auth.signOut();
     await bootToHome(tester, auth: auth);
+
+    final createAccountLink = find.text('Create account');
+    await tester.ensureVisible(createAccountLink);
+    await tester.pump();
+    await tester.tap(createAccountLink);
+    await tester.pumpAndSettle();
+    expect(find.byType(CreateAccountScreen), findsOneWidget);
 
     final signInLink = find.text('Sign in');
     await tester.ensureVisible(signInLink);
     await tester.pump();
     await tester.tap(signInLink);
     await tester.pumpAndSettle();
-    expect(find.byType(SignInScreen), findsOneWidget);
+    final activeSignIn = find.byType(SignInScreen).last;
     final signInFields = find.descendant(
-      of: find.byType(SignInScreen),
+      of: activeSignIn,
       matching: find.byType(TextField),
     );
     await tester.enterText(signInFields.at(0), '0911223344');
     await tester.enterText(signInFields.at(1), 'secret1');
-    final signInButton = find.text('SIGN IN');
+    final signInButton = find.descendant(
+      of: activeSignIn,
+      matching: find.text('SIGN IN'),
+    );
     await tester.ensureVisible(signInButton);
     await tester.tap(signInButton);
     await tester.pump(const Duration(milliseconds: 300));
