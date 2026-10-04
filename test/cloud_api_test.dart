@@ -142,4 +142,46 @@ void main() {
     await api.deleteSession('t');
     expect(header, 'mahtem-android');
   });
+
+  test('refreshSession exchanges refresh token for new access and rotated refresh token', () async {
+    final api = CloudApi(
+      client: MockClient((request) async {
+        expect(request.url.path, '/v1/session/refresh');
+        expect(request.method, 'POST');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['refreshToken'], 'ref-old');
+        return http.Response(
+          jsonEncode({
+            'accessToken': 'jwt-new',
+            'refreshToken': 'ref-new',
+            'userId': 'u1',
+            'expiresAt': 123456789,
+          }),
+          200,
+        );
+      }),
+    );
+
+    final refreshed = await api.refreshSession('ref-old');
+    expect(refreshed.sessionToken, 'jwt-new');
+    expect(refreshed.accessToken, 'jwt-new');
+    expect(refreshed.refreshToken, 'ref-new');
+    expect(refreshed.userId, 'u1');
+    expect(refreshed.expiresAtMs, 123456789);
+  });
+
+  test('revokeSession sends POST /v1/auth/revoke with refreshToken', () async {
+    String? bodySent;
+    final api = CloudApi(
+      client: MockClient((request) async {
+        expect(request.url.path, '/v1/auth/revoke');
+        expect(request.method, 'POST');
+        bodySent = request.body;
+        return http.Response(jsonEncode({'ok': true}), 200);
+      }),
+    );
+
+    await api.revokeSession(refreshToken: 'ref-123');
+    expect(bodySent, contains('"refreshToken":"ref-123"'));
+  });
 }

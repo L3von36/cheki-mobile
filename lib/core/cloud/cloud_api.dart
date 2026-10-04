@@ -42,14 +42,24 @@ class CloudApiException implements Exception {
 }
 
 class CloudSession {
+  /// The access token (JWT or legacy session token).
   final String sessionToken;
+
+  /// Rotating refresh token for renewing the access token.
+  final String? refreshToken;
+
   final String userId;
   final int expiresAtMs;
+
   const CloudSession({
     required this.sessionToken,
+    this.refreshToken,
     required this.userId,
     required this.expiresAtMs,
   });
+
+  /// Alias for OAuth 2.0 terminology.
+  String get accessToken => sessionToken;
 }
 
 class CloudVaultRemote {
@@ -178,7 +188,24 @@ class CloudApi {
       'authKey': authKey,
     });
     return CloudSession(
-      sessionToken: r['sessionToken'] as String? ?? '',
+      sessionToken:
+          r['accessToken'] as String? ?? r['sessionToken'] as String? ?? '',
+      refreshToken: r['refreshToken'] as String?,
+      userId: r['userId'] as String? ?? '',
+      expiresAtMs: (r['expiresAt'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Exchanges a valid [refreshToken] for a new short-lived access token
+  /// (JWT) and a newly rotated refresh token.
+  Future<CloudSession> refreshSession(String refreshToken) async {
+    final r = await _send('POST', '/v1/session/refresh', body: {
+      'refreshToken': refreshToken,
+    });
+    return CloudSession(
+      sessionToken:
+          r['accessToken'] as String? ?? r['sessionToken'] as String? ?? '',
+      refreshToken: r['refreshToken'] as String?,
       userId: r['userId'] as String? ?? '',
       expiresAtMs: (r['expiresAt'] as num?)?.toInt() ?? 0,
     );
@@ -196,6 +223,15 @@ class CloudApi {
 
   Future<void> deleteSession(String sessionToken) =>
       _send('DELETE', '/v1/session', bearer: sessionToken);
+
+  /// Revokes a refresh token and session.
+  Future<void> revokeSession({
+    String? sessionToken,
+    String? refreshToken,
+  }) =>
+      _send('POST', '/v1/auth/revoke', bearer: sessionToken, body: {
+        if (refreshToken != null) 'refreshToken': refreshToken,
+      });
 
   /// Uploads the encrypted vault. When [baseRevision] is given the write
   /// is optimistic: a newer stored revision raises

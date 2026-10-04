@@ -1,15 +1,14 @@
 # Mahtem Cloud API (Cloudflare Worker)
 
-Zero-knowledge account + history-backup backend for Mahtem v1.13.0+.
+Zero-knowledge account + history-backup backend with **OAuth 2.1 / JWT Architecture** for Mahtem.
 
 - **Live URL:** https://mahtem-api.mahtem.workers.dev
 - **Runtime:** Cloudflare Workers + KV namespace `mahtem-api`
-- **Source:** [`worker.js`](./worker.js) — single module, no build step
+- **Source:** [`worker.js`](./worker.js) — single module, pure Web Crypto API, zero external dependencies
 
-## Privacy contract
+## Privacy contract (Zero-Knowledge)
 
-The client derives everything on-device; the Worker stores only digests
-and ciphertext:
+The client derives everything on-device; the Worker stores only digests and ciphertext:
 
 | Data sent to the server      | What it is                                              |
 | ---------------------------- | ------------------------------------------------------- |
@@ -22,44 +21,48 @@ NEVER leaves the phone. The raw password NEVER leaves the phone. Even a
 full compromise of the Worker + KV store leaks no identifiers, no
 passwords and no readable history.
 
-## API
+## Token Architecture (OAuth 2.1 / JWT)
 
-| Route                     | Method | Auth     | Notes                                        |
-| ------------------------- | ------ | -------- | -------------------------------------------- |
-| `/v1/health`              | GET    | —        | Liveness probe                               |
-| `/v1/accounts`            | POST   | —        | `{identifierHash, authKey}` → 201 / 409      |
-| `/v1/accounts/lookup`     | POST   | —        | `{identifierHash}` → `{exists}`              |
-| `/v1/session`             | POST   | —        | `{identifierHash, authKey}` → session token  |
-| `/v1/session`             | GET    | Bearer   | Validate                                     |
-| `/v1/session`             | DELETE | Bearer   | Revoke                                       |
-| `/v1/vault`               | PUT    | Bearer   | `{blob, revision[, baseRevision]}`; 409 conflict when `baseRevision` is stale |
-| `/v1/vault`               | GET    | Bearer   | `{blob, revision, updatedAt}` / 404 empty    |
-| `/v1/vault`               | DELETE | Bearer   | Remove the cloud copy                        |
+1. **Short-Lived Access Token (JWT, HS256)**:
+   - **Lifespan**: 15 minutes (`exp: 900s`).
+   - **Signed**: HMAC-SHA256 via standard Web Crypto (`crypto.subtle`).
+   - **Stateless Verification**: Protected endpoints (`/v1/vault`, `/v1/session`) verify the cryptographic signature and expiration in-memory with **0 KV reads**, saving worker quota and reducing latency.
+   - **Secret**: Stored securely in `env.JWT_SECRET` or auto-provisioned in `config:jwt_secret`.
 
-Every request must carry `X-Mahtem-Client` (cheap bot screen). Sessions
-expire after 90 days (KV TTL auto-cleanup). KV free-tier quotas
-(1,000 writes/day, 100k reads/day) act as the de-facto rate limiter.
+2. **Rotating Refresh Token (`ref:...`)**:
+   - **Lifespan**: 30 days in KV with auto-cleanup TTL.
+   - **Token Rotation**: Every refresh generates a new refresh token and deletes the old one.
+   - **Replay & Theft Protection**: Reusing an already-consumed refresh token immediately fails with `401 invalid_grant`.
+
+## API Endpoints
+
+| Route                     | Method | Auth     | Description / Notes                                        |
+| ------------------------- | ------ | -------- | ---------------------------------------------------------- |
+| `/v1/health`              | GET    | —        | Liveness probe & auth capability info                      |
+| `/v1/accounts`            | POST   | —        | `{identifierHash, authKey}` → 201 / 409                    |
+| `/v1/accounts/lookup`     | POST   | —        | `{identifierHash}` → `{exists, createdAt}`                 |
+| `/v1/session`             | POST   | —        | `{identifierHash, authKey}` → `{accessToken, refreshToken, expiresIn, sessionToken, userId}` |
+| `/v1/session/refresh`     | POST   | —        | `{refreshToken}` → Rotates token, returns new JWT + refresh token |
+| `/v1/session`             | GET    | Bearer   | Stateless JWT validation → `{userId, exp, ok}`             |
+| `/v1/session`             | DELETE | Bearer   | Revoke session / refresh token                             |
+| `/v1/auth/revoke`         | POST   | —/Bearer | `{refreshToken}` → Revokes refresh token                   |
+| `/v1/vault`               | PUT    | Bearer   | `{blob, revision[, baseRevision]}`; 409 conflict check     |
+| `/v1/vault`               | GET    | Bearer   | `{blob, revision, updatedAt}` / 404 empty                  |
+| `/v1/vault`               | DELETE | Bearer   | Remove the cloud copy                                      |
+
+Every request must carry `X-Mahtem-Client` header.
+
+## Automated Tests
+
+Run the test suite locally with Node 20+:
+
+```bash
+node cloud/test_worker.mjs
+```
 
 ## Deploy
 
 Deploys are automatic: every push to `main` that touches `cloud/**` runs
 [`.github/workflows/deploy-cloud.yml`](../.github/workflows/deploy-cloud.yml),
 which uploads the module (with the KV binding re-asserted) and smoke-tests
-`/v1/health`. It authenticates with the `CLOUDFLARE_API_TOKEN` repo secret
-(a least-privilege token holding Workers Scripts edit only) and can be run
-manually via **Run workflow** (workflow_dispatch) on the Actions tab.
-
-Manual redeploy from a machine (same mechanism the workflow uses):
-
-```bash
-# metadata.json: {"main_module":"worker.js","compatibility_date":"2026-09-01",
-#   "bindings":[{"type":"kv_namespace","name":"KV","namespace_id":"<KV_ID>"}]}
-curl -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/mahtem-api" \
-  -F "metadata=@metadata.json;type=application/json" \
-  -F "worker.js=@worker.js;type=application/javascript+module"
-```
-
-Rotate the deploy token from time to time (Cloudflare dashboard → My
-Profile → API Tokens), then update the `CLOUDFLARE_API_TOKEN` repo secret
-with the new value — no other change needed.
+`/v1/health`.
