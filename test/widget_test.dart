@@ -10,6 +10,7 @@ import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/auth_controller.dart';
+import 'package:mahtem/ui/screens/auth/sign_in_screen.dart';
 import 'package:mahtem/ui/shell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -105,9 +106,15 @@ void main() {
     await tester.pump();
     await tester.tap(signInLink);
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(find.byType(TextField).at(0), '0911223344');
-    await tester.enterText(find.byType(TextField).at(1), 'secret1');
-    await tester.tap(find.text('SIGN IN'));
+    final signInFields = find.descendant(
+      of: find.byType(SignInScreen),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(signInFields.at(0), '0911223344');
+    await tester.enterText(signInFields.at(1), 'secret1');
+    final signInButton = find.text('SIGN IN');
+    await tester.ensureVisible(signInButton);
+    await tester.tap(signInButton);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
