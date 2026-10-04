@@ -516,7 +516,7 @@ Future<VerifyResult> verifyExtraBank(
 
   final fetch = httpFn ??
       ((u, h) =>
-          _defaultHttp(u, h, allowBadCert: bank?.allowBadCertificate ?? false));
+          _defaultHttp(u, h, allowBadCert: bank.allowBadCertificate));
   final headers = <String, String>{
     'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
