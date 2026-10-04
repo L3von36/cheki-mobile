@@ -1,0 +1,183 @@
+name: Admin App CI & Release
+
+# Mahtem Admin — owner-only analytics console (separate app, versioned as
+# admin-vX.Y.Z so it never collides with the main app's v* tags).
+#
+#   push to main touching admin-app/**  → analyze + test (quality gate)
+#   push a tag admin-vX.Y.Z             → analyze + test + signed APK release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "admin-app/**"
+      - ".github/workflows/admin-release.yml"
+    tags:
+      - "admin-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: admin-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Analyze & test (admin-app)
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter (stable, pinned)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.3
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+  release:
+    name: Build & release admin APK
+    if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/admin-v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter (stable, pinned)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.3
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+      # ── Signing (same keystore secrets as the main app) ──────────────
+      # Secrets expected (repo → Settings → Secrets → Actions):
+      #   KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
+            cat > android/key.properties <<EOF
+          storeFile=keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo "Keystore restored — release will be signed."
+          else
+            echo "No KEYSTORE_BASE64 secret found — building debug-signed release APK."
+          fi
+
+      - name: Build release APKs (split per ABI + universal)
+        run: |
+          flutter build apk --release --split-per-abi \
+            --target-platform=android-arm,android-arm64 \
+            --obfuscate \
+            --split-debug-info=build/symbols
+          # Modern Flutter no longer emits the fat APK from --split-per-abi,
+          # so build the universal one as a second pass (gradle cache makes
+          # this incremental). No bundled ML-kit/barhopper AARs in this app —
+          # the universal stays small on its own.
+          flutter build apk --release \
+            --target-platform=android-arm,android-arm64 \
+            --obfuscate \
+            --split-debug-info=build/symbols
+
+      - name: Rename APKs with tag
+        id: rename
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          OUT=build/app/outputs/flutter-apk
+          cp "$OUT/app-arm64-v8a-release.apk"   "mahtem-admin-${TAG}-arm64.apk"
+          cp "$OUT/app-armeabi-v7a-release.apk" "mahtem-admin-${TAG}-arm32.apk"
+          cp "$OUT/app-release.apk"             "mahtem-admin-${TAG}-universal.apk"
+          ls -la mahtem-admin-*.apk
+
+      - name: Create GitHub Release with APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Mahtem Admin ${{ github.ref_name }}
+          body: |
+            ## Mahtem Admin ${{ github.ref_name }}
+
+            Owner-only analytics console for the Mahtem receipt verification
+            network — every account, every synced scan, bank popularity and
+            live activity, in your pocket.
+
+            ### What it shows
+            - Registered accounts & cloud-synced vaults
+            - Total scans, verification success rate, scans today / 7 days
+            - 14-day scan activity chart
+            - **Most-used banks** ranking (which bank do people verify most?)
+            - Recent scan activity feed
+            - Per-account overview with CSV-style details
+
+            ### Sign-in
+            Enter the **ADMIN_KEY** (the Worker secret) once — it stays on
+            this device and is only used to authorize read-only analytics.
+
+            Read-only · Zero-knowledge preserved: receipt contents stay
+            encrypted; the console sees banks, outcomes and counts only.
+
+            ### Install
+            1. Download **`mahtem-admin-${{ github.ref_name }}-arm64.apk`** (fits almost
+               every phone sold since 2016)
+            2. Very old phone? `mahtem-admin-${{ github.ref_name }}-arm32.apk`
+            3. Not sure? `mahtem-admin-${{ github.ref_name }}-universal.apk` works everywhere
+            4. Allow "Install from unknown sources" if prompted
+
+            This is the owner's tool — keep the APK and the ADMIN_KEY private.
+          files: |
+            mahtem-admin-${{ github.ref_name }}-arm64.apk
+            mahtem-admin-${{ github.ref_name }}-arm32.apk
+            mahtem-admin-${{ github.ref_name }}-universal.apk
+          generate_release_notes: true
+          draft: false
+          prerelease: false

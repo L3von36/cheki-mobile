@@ -1,0 +1,27 @@
+name: mahtem_admin
+description: >-
+  Mahtem Admin — owner-only analytics console for the Mahtem receipt
+  verification network (Ethiopia). Read-only: accounts, scans, bank
+  popularity. Zero-knowledge preserved; the admin key never leaves the device
+  except to authorize reads against the Mahtem API.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.4.0
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/seal.png

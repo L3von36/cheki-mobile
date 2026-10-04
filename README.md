@@ -111,6 +111,17 @@ your first 5 checks are free.
   The receipt-number OCR runs on-device too (ML Kit) — camera frames are
   never uploaded
 
+## Mahtem Admin — owner console (`admin-app/`)
+
+A separate, owner-only Android app lives in [`admin-app/`](admin-app/): every
+account, every synced scan, 14-day activity, **bank popularity** (which bank
+do people verify most?) and a live scan feed — with the same zero-knowledge
+guarantees (receipt contents stay encrypted; the console sees banks,
+outcomes and counts only). Sign in once with the Worker's `ADMIN_KEY`
+secret; it stays on the device. Releases are tagged `admin-vX.Y.Z` and
+published by `.github/workflows/admin-release.yml`
+(`mahtem-admin-<tag>-arm64/arm32/universal.apk`).
+
 ## How verification works
 
 Each bank publishes receipts on a public endpoint; the app ships the

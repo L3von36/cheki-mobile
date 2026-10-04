@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand launch splash: deep navy + centered Mahtem verified-seal.
+     The seal bitmap ships per-density as launch_image.png; gravity=center
+     renders it 1:1, never stretched. Matches the adaptive icon tile. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/mahtem_launch_bg" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/launch_image" />
+    </item>
+</layer-list>
