@@ -161,14 +161,15 @@ void main() {
     // Vault content is ENCRYPTED — the fake server only ever sees a blob.
     final stored = server.vaults.values.single;
     final blob = stored['blob'] as String;
-    expect(blob, isNot(contains('FT')));
-    expect(blob.length, greaterThan(16));
+    expect(base64Encode(base64Decode(blob)), blob);
+    expect(() => jsonDecode(blob), throwsFormatException);
 
     // Decryption with the derived key yields exactly our history.
     final key = await deriveVaultKey('correct-horse', 'user@example.com');
     final plain = await decryptVaultBlob(key, blob);
     final entries = jsonDecode(plain)['entries'] as List;
     expect(entries, hasLength(2));
+    expect(entries.map((entry) => entry['id']), containsAll(['h1', 'h2']));
 
     // State persists for the next boot.
     expect(prefs.getBool('cloud.enabled'), isTrue);
