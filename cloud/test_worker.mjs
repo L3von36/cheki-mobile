@@ -397,6 +397,166 @@ async function run() {
 
   console.log('Admin auth scenarios (setup/login/me/change-password/logout/rate-limit/reset): OK');
 
+  // ── v1.18: management layer (CRUD) ──────────────────────────────────────
+  console.log('Management layer tests...');
+
+  // Fresh owner (previous section was reset to first-run)
+  const setup2 = await (
+    await worker.fetch(
+      req('/v1/admin/auth/setup', { method: 'POST', body: { email: 'owner2@mahtem.app', password: 'owner-password-1' } }),
+      env,
+    )
+  ).json();
+  if (!setup2.token) throw new Error('owner setup failed: ' + JSON.stringify(setup2));
+  const ownerAuth = { Authorization: `Bearer ${setup2.token}` };
+
+  const me2 = await (await worker.fetch(req('/v1/admin/auth/me', { headers: ownerAuth }), env)).json();
+  if (me2.role !== 'owner') throw new Error('me should report role owner, got ' + JSON.stringify(me2));
+
+  // Settings: defaults, owner-only mutation, enforcement
+  const s0 = await (await worker.fetch(req('/v1/admin/settings', { headers: ownerAuth }), env)).json();
+  if (s0.signupsEnabled !== true || s0.maintenanceMode !== false) throw new Error('settings defaults wrong: ' + JSON.stringify(s0));
+
+  await worker.fetch(req('/v1/admin/settings', { method: 'PUT', headers: ownerAuth, body: { signupsEnabled: false } }), env);
+  const signupBlocked = await worker.fetch(
+    req('/v1/accounts', { method: 'POST', body: { identifierHash: 'c'.repeat(64), authKey: 'd'.repeat(64) } }),
+    env,
+  );
+  if (signupBlocked.status !== 403) throw new Error('signups_disabled should 403, got ' + signupBlocked.status);
+
+  await worker.fetch(req('/v1/admin/settings', { method: 'PUT', headers: ownerAuth, body: { signupsEnabled: true, maintenanceMode: true } }), env);
+  const userLogin = await (
+    await worker.fetch(req('/v1/session', { method: 'POST', body: { identifierHash: idHash, authKey } }), env)
+  ).json();
+  const maint = await worker.fetch(
+    req('/v1/vault', { method: 'PUT', headers: { Authorization: `Bearer ${userLogin.accessToken}` }, body: { blob: 'QUJDREVGR0hJSktMTU5PUA==', revision: 9 } }),
+    env,
+  );
+  if (maint.status !== 503) throw new Error('maintenance should 503 vault writes, got ' + maint.status);
+  await worker.fetch(req('/v1/admin/settings', { method: 'PUT', headers: ownerAuth, body: { maintenanceMode: false } }), env);
+
+  // Admin users CRUD + role enforcement
+  const badCreate = await worker.fetch(req('/v1/admin/users', { method: 'POST', headers: ownerAuth, body: { email: 'not-an-email', password: 'password-12345' } }), env);
+  if (badCreate.status !== 400) throw new Error('invalid email should 400');
+  const dupOwner = await worker.fetch(req('/v1/admin/users', { method: 'POST', headers: ownerAuth, body: { email: 'OWNER2@mahtem.app', password: 'password-12345' } }), env);
+  if (dupOwner.status !== 409) throw new Error('owner email duplicate should 409');
+  const created = await worker.fetch(req('/v1/admin/users', { method: 'POST', headers: ownerAuth, body: { email: 'helper@mahtem.app', password: 'helper-password-1' } }), env);
+  if (created.status !== 201) throw new Error('admin create failed: ' + JSON.stringify(await created.json()));
+  const helper = await created.json();
+
+  const helperLogin = await (
+    await worker.fetch(req('/v1/admin/auth/login', { method: 'POST', body: { email: 'helper@mahtem.app', password: 'helper-password-1' } }), env)
+  ).json();
+  if (!helperLogin.token || helperLogin.role !== 'admin') throw new Error('helper login failed or wrong role: ' + JSON.stringify(helperLogin));
+  const helperAuth = { Authorization: `Bearer ${helperLogin.token}` };
+
+  const helperUsers = await worker.fetch(req('/v1/admin/users', { headers: helperAuth }), env);
+  if (helperUsers.status !== 200) throw new Error('admin GET users should 200');
+  const helperCreate = await worker.fetch(req('/v1/admin/users', { method: 'POST', headers: helperAuth, body: { email: 'x@y.com', password: 'password-12345' } }), env);
+  if (helperCreate.status !== 403) throw new Error('admin POST users should 403');
+  const helperSettingsPut = await worker.fetch(req('/v1/admin/settings', { method: 'PUT', headers: helperAuth, body: { signupsEnabled: false } }), env);
+  if (helperSettingsPut.status !== 403) throw new Error('admin PUT settings should 403');
+
+  const rp = await worker.fetch(req(`/v1/admin/users/${helper.id}/reset-password`, { method: 'POST', headers: ownerAuth, body: { newPassword: 'helper-password-2' } }), env);
+  if (rp.status !== 200) throw new Error('reset-password failed: ' + JSON.stringify(await rp.json()));
+  const helperDead = await worker.fetch(req('/v1/admin/overview', { headers: helperAuth }), env);
+  if (helperDead.status !== 401) throw new Error('reset should kill helper sessions');
+  const helperRe = await (
+    await worker.fetch(req('/v1/admin/auth/login', { method: 'POST', body: { email: 'helper@mahtem.app', password: 'helper-password-2' } }), env)
+  ).json();
+  if (!helperRe.token) throw new Error('helper relogin with new password failed');
+  const helperAuth2 = { Authorization: `Bearer ${helperRe.token}` };
+
+  // Announcements CRUD + public feed
+  const ann = await worker.fetch(req('/v1/admin/announcements', { method: 'POST', headers: ownerAuth, body: { message: 'Scheduled maintenance tonight', level: 'warn' } }), env);
+  if (ann.status !== 201) throw new Error('announcement create failed: ' + JSON.stringify(await ann.json()));
+  const annRec = await ann.json();
+  const helperAnn = await worker.fetch(req('/v1/admin/announcements', { method: 'POST', headers: helperAuth2, body: { message: 'Helper can post too' } }), env);
+  if (helperAnn.status !== 201) throw new Error('admin announcement create should 201');
+  const pub = await (await worker.fetch(req('/v1/announcements'), env)).json();
+  if (!Array.isArray(pub.announcements) || pub.announcements.length !== 2) throw new Error('public announcements wrong: ' + JSON.stringify(pub));
+  const annDel = await worker.fetch(req(`/v1/admin/announcements/${annRec.id}`, { method: 'DELETE', headers: ownerAuth }), env);
+  if (annDel.status !== 200) throw new Error('announcement delete failed');
+  const annDel2 = await worker.fetch(req(`/v1/admin/announcements/${annRec.id}`, { method: 'DELETE', headers: ownerAuth }), env);
+  if (annDel2.status !== 404) throw new Error('double delete should 404');
+
+  // Account suspend / unsuspend (admin role allowed)
+  const vaultKey = [...env.KV.store.keys()].find((k) => k.startsWith('vault:'));
+  const uid = vaultKey.slice(6);
+  const acct = uid.slice(0, 8);
+  const susp = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'PATCH', headers: ownerAuth, body: { suspended: true } }), env);
+  if (susp.status !== 200) throw new Error('suspend failed: ' + JSON.stringify(await susp.json()));
+  const suspWrite = await worker.fetch(
+    req('/v1/vault', { method: 'PUT', headers: { Authorization: `Bearer ${userLogin.accessToken}` }, body: { blob: 'QUJDREVGR0hJSktMTU5PUA==', revision: 10 } }),
+    env,
+  );
+  if (suspWrite.status !== 403) throw new Error('suspended vault write should 403, got ' + suspWrite.status);
+  const suspLogin = await worker.fetch(req('/v1/session', { method: 'POST', body: { identifierHash: idHash, authKey } }), env);
+  if (suspLogin.status !== 403) throw new Error('suspended login should 403');
+  const unsusp = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'PATCH', headers: helperAuth2, body: { suspended: false } }), env);
+  if (unsusp.status !== 200) throw new Error('unsuspend (admin role) failed');
+  const unsuspWrite = await worker.fetch(
+    req('/v1/vault', { method: 'PUT', headers: { Authorization: `Bearer ${userLogin.accessToken}` }, body: { blob: 'QUJDREVGR0hJSktMTU5PUA==', revision: 10 } }),
+    env,
+  );
+  if (unsuspWrite.status !== 200) throw new Error('unsuspended vault write should 200, got ' + unsuspWrite.status);
+
+  // Legacy ADMIN_KEY: read-only analytics, no management
+  const legacyOverview = await worker.fetch(req('/v1/admin/overview', { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } }), env);
+  if (legacyOverview.status !== 200) throw new Error('legacy overview should stay 200');
+  const legacySettings = await worker.fetch(req('/v1/admin/settings', { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } }), env);
+  if (legacySettings.status !== 403) throw new Error('legacy settings GET should 403');
+  const legacyPatch = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'PATCH', headers: { Authorization: `Bearer ${env.ADMIN_KEY}` }, body: { suspended: true } }), env);
+  if (legacyPatch.status !== 403) throw new Error('legacy PATCH should 403');
+  const legacyUsers = await worker.fetch(req('/v1/admin/users', { headers: { Authorization: `Bearer ${env.ADMIN_KEY}` } }), env);
+  if (legacyUsers.status !== 403) throw new Error('legacy users GET should 403');
+
+  // Account delete: typed confirm, full wipe, tombstone
+  const noConfirm = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'DELETE', headers: ownerAuth, body: { confirm: 'zzzz' } }), env);
+  if (noConfirm.status !== 400) throw new Error('delete without confirm should 400');
+  const del = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'DELETE', headers: ownerAuth, body: { confirm: acct } }), env);
+  if (del.status !== 200) throw new Error('delete failed: ' + JSON.stringify(await del.json()));
+  const delData = await del.json();
+  if (!delData.userRemoved) throw new Error('delete should remove the user record: ' + JSON.stringify(delData));
+  const afterDel = await (await worker.fetch(req('/v1/admin/overview', { headers: ownerAuth }), env)).json();
+  if (afterDel.totals.vaults !== 0) throw new Error('vault should be gone after delete');
+  const zombieWrite = await worker.fetch(
+    req('/v1/vault', { method: 'PUT', headers: { Authorization: `Bearer ${userLogin.accessToken}` }, body: { blob: 'QUJDREVGR0hJSktMTU5PUA==', revision: 11 } }),
+    env,
+  );
+  if (zombieWrite.status !== 403) throw new Error('tombstone should block zombie vault write, got ' + zombieWrite.status);
+  const deadLogin = await worker.fetch(req('/v1/session', { method: 'POST', body: { identifierHash: idHash, authKey } }), env);
+  if (deadLogin.status !== 404) throw new Error('deleted account login should 404, got ' + deadLogin.status);
+  const patchDeleted = await worker.fetch(req(`/v1/admin/account/${acct}`, { method: 'PATCH', headers: ownerAuth, body: { suspended: false } }), env);
+  if (patchDeleted.status !== 404) throw new Error('patching a deleted account should 404 (vault gone), got ' + patchDeleted.status);
+
+  // Audit trail captured the whole story
+  const audit = await (await worker.fetch(req('/v1/admin/audit', { headers: ownerAuth }), env)).json();
+  const actions = (audit.entries || []).map((e) => e.action);
+  for (const expected of [
+    'settings_updated',
+    'admin_created',
+    'admin_reset_password',
+    'announcement_created',
+    'announcement_deleted',
+    'account_suspended',
+    'account_unsuspended',
+    'account_deleted',
+    'break_glass_reset',
+  ]) {
+    if (!actions.includes(expected)) throw new Error(`audit missing ${expected}; have: ${actions.join(',')}`);
+  }
+
+  // Removing an admin kills their sessions and future logins
+  const rm = await worker.fetch(req(`/v1/admin/users/${helper.id}`, { method: 'DELETE', headers: ownerAuth }), env);
+  if (rm.status !== 200) throw new Error('admin remove failed');
+  const helperGone = await worker.fetch(req('/v1/admin/overview', { headers: { Authorization: `Bearer ${helperRe.token}` } }), env);
+  if (helperGone.status !== 401) throw new Error('removed admin session should 401');
+  const helperLoginGone = await worker.fetch(req('/v1/admin/auth/login', { method: 'POST', body: { email: 'helper@mahtem.app', password: 'helper-password-2' } }), env);
+  if (helperLoginGone.status !== 401) throw new Error('removed admin login should 401');
+
+  console.log('Management layer (settings/users/announcements/suspend/delete/audit/legacy): OK');
+
   console.log('All worker tests passed successfully!');
 }
 

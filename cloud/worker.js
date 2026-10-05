@@ -58,6 +58,15 @@ const ADMIN_PBKDF2_ITERATIONS = 100_000;
 const ADMIN_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const ADMIN_LOGIN_MAX_ATTEMPTS = 8;
 const ADMIN_EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+// v1.18 — management layer: multiple admins, server settings, announcements,
+// an audit trail and per-account enforcement (suspend / tombstone).
+const ADMIN_USERS_KEY = 'adm_users'; // JSON array of admin records
+const ADMIN_SETTINGS_KEY = 'adm_settings'; // JSON {signupsEnabled, maintenanceMode, ...}
+const ADMIN_ANNOUNCEMENTS_KEY = 'adm_announcements'; // JSON array
+const ADMIN_ANNOUNCE_MAX = 5;
+const ADMIN_AUDIT_KEY = 'adm_audit'; // JSON array, newest first
+const ADMIN_AUDIT_MAX = 300;
+const ADMIN_FLAG_PREFIX = 'adm_x:'; // adm_x:<uuid> → {suspended|deleted}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -284,7 +293,7 @@ async function requireSession(request, env) {
   return { ok: true, token, userId: session.userId, exp: session.exp };
 }
 
-// ── Admin (owner-only, v1.15.0; email+password v1.16.0) ─────────────────────
+// ── Admin (owner v1.16; multi-admin + management v1.18) ─────────────────────
 
 function bytesToHex(bytes) {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -446,10 +455,155 @@ async function recordLoginFailure(env, email) {
   });
 }
 
+// ── Multi-admin store (v1.18) ───────────────────────────────────────────────
+
+async function getAdminUsers(env) {
+  const raw = await env.KV.get(ADMIN_USERS_KEY);
+  if (!raw) return [];
+  try {
+    const r = JSON.parse(raw);
+    if (Array.isArray(r)) return r.filter((u) => u && typeof u.email === 'string');
+    if (r && typeof r === 'object') return Object.values(r).filter((u) => u && typeof u.email === 'string');
+    return [];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function saveAdminUsers(env, users) {
+  await env.KV.put(ADMIN_USERS_KEY, JSON.stringify(users));
+}
+
+async function findAdminUserByEmail(env, email) {
+  const users = await getAdminUsers(env);
+  return users.find((u) => u.email === email) ?? null;
+}
+
+async function findAdminUserById(env, id) {
+  const users = await getAdminUsers(env);
+  return users.find((u) => u.id === id) ?? null;
+}
+
+/** 'owner' | 'admin' | null (unknown email). Legacy ADMIN_KEY is handled separately. */
+async function adminRoleForEmail(env, email) {
+  if (typeof email !== 'string' || !email) return null;
+  const owner = await getOwner(env);
+  if (owner && owner.email === email) return 'owner';
+  const users = await getAdminUsers(env);
+  return users.some((u) => u.email === email) ? 'admin' : null;
+}
+
+async function getAdminSettings(env) {
+  const defaults = {
+    signupsEnabled: true,
+    maintenanceMode: false,
+    updatedAt: null,
+    updatedBy: null,
+  };
+  const raw = await env.KV.get(ADMIN_SETTINGS_KEY);
+  if (!raw) return defaults;
+  try {
+    const r = JSON.parse(raw);
+    return typeof r === 'object' && r ? { ...defaults, ...r } : defaults;
+  } catch (_) {
+    return defaults;
+  }
+}
+
+async function getAnnouncements(env) {
+  const raw = await env.KV.get(ADMIN_ANNOUNCEMENTS_KEY);
+  if (!raw) return [];
+  try {
+    const r = JSON.parse(raw);
+    return Array.isArray(r) ? r.filter((a) => a && typeof a.id === 'string') : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/** Per-account enforcement flag: {suspended:true} or {deleted:true} tombstone. */
+async function getAccountFlag(env, uid) {
+  const raw = await env.KV.get(`${ADMIN_FLAG_PREFIX}${uid}`);
+  if (!raw) return null;
+  try {
+    const r = JSON.parse(raw);
+    return r && typeof r === 'object' ? r : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Append-only audit trail (newest first, hard-capped). Never throws. */
+async function auditLog(env, actor, action, target, detail) {
+  try {
+    const raw = await env.KV.get(ADMIN_AUDIT_KEY);
+    let list = [];
+    if (raw) {
+      try {
+        const r = JSON.parse(raw);
+        if (Array.isArray(r)) list = r;
+      } catch (_) {
+        /* start fresh */
+      }
+    }
+    list.unshift({
+      t: Date.now(),
+      actor: actor || '(unknown)',
+      action,
+      target: target ?? null,
+      detail: detail ?? null,
+    });
+    await env.KV.put(ADMIN_AUDIT_KEY, JSON.stringify(list.slice(0, ADMIN_AUDIT_MAX)));
+  } catch (_) {
+    /* audit must never break the request */
+  }
+}
+
+/** Revoke every admin session belonging to one email (used on remove/reset). */
+async function killAdminSessionsForEmail(env, email) {
+  for (const name of await listAllKeys(env, ADMIN_SESSION_PREFIX)) {
+    const raw = await env.KV.get(name);
+    if (!raw) continue;
+    try {
+      const s = JSON.parse(raw);
+      if (s && s.e === email) await env.KV.delete(name);
+    } catch (_) {
+      /* leave unparseable sessions alone */
+    }
+  }
+}
+
+/** Revoke every user session + refresh token of one account uuid. */
+async function killUserSessions(env, uid) {
+  for (const prefix of ['sess:', 'ref:']) {
+    for (const name of await listAllKeys(env, prefix)) {
+      const raw = await env.KV.get(name);
+      if (!raw) continue;
+      try {
+        const s = JSON.parse(raw);
+        if (s && s.userId === uid) await env.KV.delete(name);
+      } catch (_) {
+        /* leave unparseable records alone */
+      }
+    }
+  }
+}
+
+/** Resolve the 8-hex (or full) account prefix used by admin routes. */
+async function resolveAccountByPrefix(env, uidPrefix) {
+  const matches = await listAllKeys(env, `vault:${uidPrefix}`);
+  if (matches.length === 0) return { notFound: true };
+  if (matches.length > 1) {
+    return { ambiguous: true, ids: matches.map((n) => n.slice(6, 14)) };
+  }
+  return { uid: matches[0].slice(6) };
+}
+
 /**
- * Admin gate for /v1/admin/overview. Accepts, in order:
- *   1. An owner session token (email+password sign-in, `adm_s:*` in KV).
- *   2. The legacy ADMIN_KEY secret (pre-v1.1.0 clients + break-glass).
+ * Admin gate for /v1/admin/*. Accepts, in order:
+ *   1. An admin session token (email+password sign-in, `adm_s:*` in KV).
+ *   2. The legacy ADMIN_KEY secret (pre-v1.1.0 clients + break-glass) —
+ *      role 'legacy', treated read-only by the management endpoints.
  * 503 only when the deployment has neither an owner nor an ADMIN_KEY.
  */
 async function requireAdmin(request, env) {
@@ -465,13 +619,23 @@ async function requireAdmin(request, env) {
   }
   const raw = await env.KV.get(`${ADMIN_SESSION_PREFIX}${token}`);
   if (raw) {
+    let sess = null;
     try {
-      const sess = JSON.parse(raw);
-      if (sess && sess.e && (sess.exp || 0) * 1000 >= Date.now()) {
-        return { ok: true, email: sess.e };
-      }
+      sess = JSON.parse(raw);
     } catch (_) {
-      /* fall through to the legacy path */
+      sess = null;
+    }
+    if (sess && sess.e && (sess.exp || 0) * 1000 >= Date.now()) {
+      const role = await adminRoleForEmail(env, sess.e);
+      if (!role) {
+        return {
+          ok: false,
+          status: 401,
+          error: 'admin_session_expired',
+          message: 'This admin account was removed — sign in again.',
+        };
+      }
+      return { ok: true, email: sess.e, role, legacy: false };
     }
   }
   const expected = env.ADMIN_KEY;
@@ -480,7 +644,9 @@ async function requireAdmin(request, env) {
   if (keyConfigured) {
     // Digest comparison — no timing side channel on the secret.
     const [a, b] = await Promise.all([sha256Hex(token), sha256Hex(expected)]);
-    if (a === b) return { ok: true, legacy: true };
+    if (a === b) {
+      return { ok: true, email: null, role: 'legacy', legacy: true };
+    }
   }
   if (!keyConfigured && !(await getOwner(env))) {
     return {
@@ -558,6 +724,7 @@ async function buildAdminOverview(env) {
     }
     vaultCount++;
     const uid = name.slice(6);
+    const flag = await getAccountFlag(env, uid);
     const events = Array.isArray(v.stats) ? v.stats : [];
     let lastScanAt = null;
     let topBank = null;
@@ -599,6 +766,7 @@ async function buildAdminOverview(env) {
       scans: events.length,
       lastScanAt,
       topBank,
+      suspended: !!(flag && flag.suspended),
     });
   }
   accountRows.sort(
@@ -655,6 +823,7 @@ async function buildAdminAccountDetail(env, uidPrefix) {
     };
   }
   const uid = matches[0].slice(6);
+  const flag = await getAccountFlag(env, uid);
 
   const vaultRaw = await env.KV.get(matches[0]);
   if (!vaultRaw) return { notFound: true };
@@ -712,6 +881,7 @@ async function buildAdminAccountDetail(env, uidPrefix) {
     scans: events.length,
     verified,
     lastScanAt,
+    suspended: !!(flag && flag.suspended),
     banks,
     days,
     events: events.slice(0, 200).map((ev) => ({
@@ -790,6 +960,183 @@ export default {
         return json(detail);
       }
 
+      // ── admin management APIs (v1.18) — dynamic paths ───────────────
+      // Roles: 'owner' can do everything; 'admin' can manage accounts and
+      // announcements; the legacy ADMIN_KEY stays read-only.
+      const NEED_SESSION = {
+        ok: false,
+        status: 403,
+        error: 'forbidden',
+        message:
+          'This action needs a signed-in admin (email + password), not the legacy key.',
+      };
+      const NEED_OWNER = {
+        ok: false,
+        status: 403,
+        error: 'forbidden',
+        message: 'Only the owner account can do this.',
+      };
+
+      const pwResetMatch = route.match(
+        /^POST \/v1\/admin\/users\/([0-9a-f-]{8,36})\/reset-password$/i,
+      );
+      if (pwResetMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        if (admin.role !== 'owner') return err(NEED_OWNER.error, NEED_OWNER.status, NEED_OWNER.message);
+        const target = await findAdminUserById(env, pwResetMatch[1].toLowerCase());
+        if (!target) return err('not_found', 404, 'No such admin account.');
+        const body = await readJson(request);
+        if (!isValidPassword(body?.newPassword)) {
+          return err('weak_password', 400, 'New password must be at least 10 characters.');
+        }
+        const salt = randomToken(16);
+        const users = await getAdminUsers(env);
+        for (const u of users) {
+          if (u.id === target.id) {
+            u.hash = await hashPassword(body.newPassword, salt, ADMIN_PBKDF2_ITERATIONS);
+            u.salt = salt;
+            u.iter = ADMIN_PBKDF2_ITERATIONS;
+            u.passwordChangedAt = Date.now();
+            u.passwordChangedBy = admin.email;
+          }
+        }
+        await saveAdminUsers(env, users);
+        await killAdminSessionsForEmail(env, target.email);
+        auditLog(env, admin.email, 'admin_reset_password', target.email, null);
+        return json({ ok: true });
+      }
+
+      const userDeleteMatch = route.match(/^DELETE \/v1\/admin\/users\/([0-9a-f-]{8,36})$/i);
+      if (userDeleteMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        if (admin.role !== 'owner') return err(NEED_OWNER.error, NEED_OWNER.status, NEED_OWNER.message);
+        const id = userDeleteMatch[1].toLowerCase();
+        const users = await getAdminUsers(env);
+        const target = users.find((u) => u.id === id);
+        if (!target) return err('not_found', 404, 'No such admin account.');
+        await saveAdminUsers(env, users.filter((u) => u.id !== id));
+        await killAdminSessionsForEmail(env, target.email);
+        auditLog(env, admin.email, 'admin_removed', target.email, null);
+        return json({ ok: true });
+      }
+
+      const annDeleteMatch = route.match(/^DELETE \/v1\/admin\/announcements\/([0-9a-z-]{6,36})$/i);
+      if (annDeleteMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        if (admin.role === 'legacy') return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+        const id = annDeleteMatch[1].toLowerCase();
+        const list = await getAnnouncements(env);
+        const target = list.find((a) => a.id === id);
+        if (!target) return err('not_found', 404, 'No such announcement.');
+        await env.KV.put(
+          ADMIN_ANNOUNCEMENTS_KEY,
+          JSON.stringify(list.filter((a) => a.id !== id)),
+        );
+        auditLog(env, admin.email, 'announcement_deleted', id, target.message.slice(0, 80));
+        return json({ ok: true });
+      }
+
+      const accountPatchMatch = route.match(/^PATCH \/v1\/admin\/account\/([0-9a-fA-F]{8,64})$/);
+      if (accountPatchMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        if (admin.role === 'legacy') return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+        const resolved = await resolveAccountByPrefix(env, accountPatchMatch[1].toLowerCase());
+        if (resolved.notFound) return err('not_found', 404, 'No account matches this prefix.');
+        if (resolved.ambiguous) {
+          return json({ error: 'ambiguous', message: 'Prefix matches several accounts.', ids: resolved.ids }, 409);
+        }
+        const body = await readJson(request);
+        const flag = await getAccountFlag(env, resolved.uid);
+        if (flag?.deleted) {
+          return err('account_deleted', 409, 'This account was already deleted from the cloud.');
+        }
+        const suspend = body?.suspended;
+        if (typeof suspend !== 'boolean') {
+          return err('bad_input', 400, 'Body must be {"suspended": true|false}.');
+        }
+        if (suspend) {
+          await env.KV.put(
+            `${ADMIN_FLAG_PREFIX}${resolved.uid}`,
+            JSON.stringify({ suspended: true, at: Date.now(), by: admin.email }),
+          );
+          await killUserSessions(env, resolved.uid);
+          auditLog(env, admin.email, 'account_suspended', resolved.uid.slice(0, 8), null);
+        } else {
+          await env.KV.delete(`${ADMIN_FLAG_PREFIX}${resolved.uid}`);
+          auditLog(env, admin.email, 'account_unsuspended', resolved.uid.slice(0, 8), null);
+        }
+        return json({ ok: true, id: resolved.uid.slice(0, 8), suspended: suspend });
+      }
+
+      const accountDeleteMatch = route.match(/^DELETE \/v1\/admin\/account\/([0-9a-fA-F]{8,64})$/);
+      if (accountDeleteMatch) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        if (admin.role === 'legacy') return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+        const resolved = await resolveAccountByPrefix(env, accountDeleteMatch[1].toLowerCase());
+        if (resolved.notFound) return err('not_found', 404, 'No account matches this prefix.');
+        if (resolved.ambiguous) {
+          return json({ error: 'ambiguous', message: 'Prefix matches several accounts.', ids: resolved.ids }, 409);
+        }
+        const uid = resolved.uid;
+        const short = uid.slice(0, 8);
+        const body = await readJson(request);
+        // Typed confirmation — the caller must repeat the 8-hex prefix.
+        if (body?.confirm !== short) {
+          return err(
+            'confirm_required',
+            400,
+            `Type "${short}" in the confirm field to delete this account.`,
+          );
+        }
+        let sessions = 0;
+        let refresh = 0;
+        for (const prefix of ['sess:', 'ref:']) {
+          for (const name of await listAllKeys(env, prefix)) {
+            const raw = await env.KV.get(name);
+            if (!raw) continue;
+            try {
+              const s = JSON.parse(raw);
+              if (s && s.userId === uid) {
+                await env.KV.delete(name);
+                if (prefix === 'sess:') sessions++;
+                else refresh++;
+              }
+            } catch (_) {
+              /* leave unparseable records alone */
+            }
+          }
+        }
+        await env.KV.delete(`vault:${uid}`);
+        let userRemoved = false;
+        for (const name of await listAllKeys(env, 'user:')) {
+          const raw = await env.KV.get(name);
+          if (!raw) continue;
+          try {
+            const r = JSON.parse(raw);
+            if (r && r.id === uid) {
+              await env.KV.delete(name);
+              userRemoved = true;
+              break;
+            }
+          } catch (_) {
+            /* skip corrupt record */
+          }
+        }
+        // Tombstone: devices with cached access tokens must never re-create
+        // the vault silently (access tokens are stateless JWTs).
+        await env.KV.put(
+          `${ADMIN_FLAG_PREFIX}${uid}`,
+          JSON.stringify({ deleted: true, at: Date.now(), by: admin.email }),
+        );
+        auditLog(env, admin.email, 'account_deleted', short, `${sessions} sessions, ${refresh} refresh tokens revoked`);
+        return json({ ok: true, id: short, userRemoved, sessions, refreshTokens: refresh });
+      }
+
       switch (route) {
         case 'GET /v1/health':
           return json({
@@ -801,6 +1148,14 @@ export default {
 
         // ── account creation ────────────────────────────────────────────
         case 'POST /v1/accounts': {
+          const settings = await getAdminSettings(env);
+          if (!settings.signupsEnabled) {
+            return err(
+              'signups_disabled',
+              403,
+              'New account sign-ups are currently disabled.',
+            );
+          }
           const body = await readJson(request);
           const identifierHash = body?.identifierHash;
           const authKey = body?.authKey;
@@ -859,6 +1214,17 @@ export default {
           const authHash = await hashAuthKey(authKey, record.id);
           if (authHash !== record.authHash) {
             return err('bad_credentials', 401, 'Wrong identifier or password.');
+          }
+          const flag = await getAccountFlag(env, record.id);
+          if (flag?.deleted) {
+            return err('no_account', 404, 'No account for this identifier.');
+          }
+          if (flag?.suspended) {
+            return err(
+              'account_suspended',
+              403,
+              'This account has been suspended. Contact the administrator.',
+            );
           }
 
           const tokens = await issueSessionTokens(record.id, env);
@@ -1005,30 +1371,52 @@ export default {
               'No owner account exists yet. Create one first.',
             );
           }
-          if (email !== owner.email) {
+          // Owner first, then additional admins (v1.18).
+          let record = null;
+          let role = 'owner';
+          if (email === owner.email) {
+            record = owner;
+          } else {
+            const adminUser = await findAdminUserByEmail(env, email);
+            if (adminUser) {
+              record = adminUser;
+              role = 'admin';
+            }
+          }
+          if (!record) {
             await recordLoginFailure(env, email);
             return err('bad_credentials', 401, 'Wrong email or password.');
           }
           const candidate = await hashPassword(
             body.password,
-            owner.salt,
-            owner.iter || ADMIN_PBKDF2_ITERATIONS,
+            record.salt,
+            record.iter || ADMIN_PBKDF2_ITERATIONS,
           );
-          if (!timingSafeEqualHex(candidate, owner.hash)) {
+          if (!timingSafeEqualHex(candidate, record.hash)) {
             await recordLoginFailure(env, email);
             return err('bad_credentials', 401, 'Wrong email or password.');
           }
           await env.KV.delete(`adm_rl:${email}`);
-          const session = await createAdminSession(env, owner.email);
-          return json({ ok: true, ...session });
+          const session = await createAdminSession(env, record.email);
+          auditLog(env, record.email, 'login', role, null);
+          return json({ ok: true, role, ...session });
         }
 
         case 'GET /v1/admin/auth/me': {
           const s = await requireAdminSession(request, env);
           if (!s.ok) return err(s.error, s.status, s.message);
           const owner = await getOwner(env);
+          const role = await adminRoleForEmail(env, s.email);
+          if (!role) {
+            return err(
+              'admin_session_expired',
+              401,
+              'This admin account was removed — sign in again.',
+            );
+          }
           return json({
             email: s.email,
+            role,
             expiresAt: s.exp ? s.exp * 1000 : null,
             ownerCreatedAt: owner?.createdAt ?? null,
           });
@@ -1088,12 +1476,12 @@ export default {
               passwordChangedAt: Date.now(),
             }),
           );
-          // Rotation: every existing session dies (lost phone, leaked
-          // session), this device gets a fresh token in the response.
-          for (const name of await listAllKeys(env, ADMIN_SESSION_PREFIX)) {
-            await env.KV.delete(name);
-          }
+          // Rotation scoped to THIS account (v1.18): other admins stay
+          // signed in; every session of the changer dies (lost phone,
+          // leaked session), this device gets a fresh token in the response.
+          await killAdminSessionsForEmail(env, owner.email);
           const session = await createAdminSession(env, owner.email);
+          auditLog(env, owner.email, 'change_password', owner.email, null);
           return json({ ok: true, ...session });
         }
 
@@ -1120,9 +1508,11 @@ export default {
             return err('admin_required', 401, 'Invalid admin key.');
           }
           await env.KV.delete(ADMIN_OWNER_KEY);
+          await env.KV.delete(ADMIN_USERS_KEY);
           for (const name of await listAllKeys(env, ADMIN_SESSION_PREFIX)) {
             await env.KV.delete(name);
           }
+          auditLog(env, '(admin key)', 'break_glass_reset', null, 'owner + admins + sessions removed');
           return json({ ok: true });
         }
 
@@ -1132,10 +1522,207 @@ export default {
           return json(await buildAdminOverview(env));
         }
 
+        // ── admin management (v1.18) ──────────────────────────────────
+        case 'GET /v1/admin/settings': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role === 'legacy') {
+            return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+          }
+          return json(await getAdminSettings(env));
+        }
+
+        case 'PUT /v1/admin/settings': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role !== 'owner') return err(NEED_OWNER.error, NEED_OWNER.status, NEED_OWNER.message);
+          const body = await readJson(request);
+          const current = await getAdminSettings(env);
+          const next = { ...current };
+          if (body?.signupsEnabled !== undefined) {
+            if (typeof body.signupsEnabled !== 'boolean') {
+              return err('bad_input', 400, 'signupsEnabled must be true or false.');
+            }
+            next.signupsEnabled = body.signupsEnabled;
+          }
+          if (body?.maintenanceMode !== undefined) {
+            if (typeof body.maintenanceMode !== 'boolean') {
+              return err('bad_input', 400, 'maintenanceMode must be true or false.');
+            }
+            next.maintenanceMode = body.maintenanceMode;
+          }
+          next.updatedAt = Date.now();
+          next.updatedBy = admin.email;
+          await env.KV.put(ADMIN_SETTINGS_KEY, JSON.stringify(next));
+          auditLog(
+            env,
+            admin.email,
+            'settings_updated',
+            null,
+            `signups=${next.signupsEnabled ? 'on' : 'off'}, maintenance=${next.maintenanceMode ? 'on' : 'off'}`,
+          );
+          return json(next);
+        }
+
+        case 'GET /v1/admin/users': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role === 'legacy') {
+            return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+          }
+          const owner = await getOwner(env);
+          const users = await getAdminUsers(env);
+          return json({
+            owner: owner
+              ? { email: owner.email, createdAt: owner.createdAt ?? null }
+              : null,
+            admins: users
+              .map((u) => ({
+                id: u.id,
+                email: u.email,
+                createdAt: u.createdAt ?? null,
+                createdBy: u.createdBy ?? null,
+              }))
+              .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+          });
+        }
+
+        case 'POST /v1/admin/users': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role !== 'owner') return err(NEED_OWNER.error, NEED_OWNER.status, NEED_OWNER.message);
+          const body = await readJson(request);
+          const email = normalizeEmail(body?.email);
+          if (!isValidEmail(email)) {
+            return err('bad_input', 400, 'Enter a valid email address.');
+          }
+          if (!isValidPassword(body?.password)) {
+            return err('weak_password', 400, 'Password must be at least 10 characters.');
+          }
+          const owner = await getOwner(env);
+          if (owner && owner.email === email) {
+            return err('exists', 409, 'This email is already the owner account.');
+          }
+          if (await findAdminUserByEmail(env, email)) {
+            return err('exists', 409, 'An admin with this email already exists.');
+          }
+          const users = await getAdminUsers(env);
+          if (users.length >= 25) {
+            return err('limit', 409, 'Admin account limit reached (25).');
+          }
+          const salt = randomToken(16);
+          const record = {
+            id: randomToken(8),
+            email,
+            hash: await hashPassword(body.password, salt, ADMIN_PBKDF2_ITERATIONS),
+            salt,
+            iter: ADMIN_PBKDF2_ITERATIONS,
+            createdAt: Date.now(),
+            createdBy: admin.email,
+          };
+          users.push(record);
+          await saveAdminUsers(env, users);
+          auditLog(env, admin.email, 'admin_created', email, null);
+          return json(
+            { id: record.id, email, createdAt: record.createdAt, createdBy: admin.email },
+            201,
+          );
+        }
+
+        case 'GET /v1/admin/announcements': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role === 'legacy') {
+            return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+          }
+          return json({ announcements: await getAnnouncements(env) });
+        }
+
+        case 'POST /v1/admin/announcements': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role === 'legacy') return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+          const body = await readJson(request);
+          const message = typeof body?.message === 'string' ? body.message.trim() : '';
+          const level = body?.level === 'warn' || body?.level === 'critical' ? body.level : 'info';
+          if (message.length < 3 || message.length > 500) {
+            return err('bad_input', 400, 'Message must be 3-500 characters.');
+          }
+          const list = await getAnnouncements(env);
+          if (list.length >= ADMIN_ANNOUNCE_MAX) {
+            return err('limit', 409, `At most ${ADMIN_ANNOUNCE_MAX} announcements can be stored — delete one first.`);
+          }
+          const record = {
+            id: randomToken(8),
+            message,
+            level,
+            active: true,
+            createdAt: Date.now(),
+            createdBy: admin.email,
+          };
+          list.unshift(record);
+          await env.KV.put(ADMIN_ANNOUNCEMENTS_KEY, JSON.stringify(list));
+          auditLog(env, admin.email, 'announcement_created', record.id, message.slice(0, 80));
+          return json(record, 201);
+        }
+
+        case 'GET /v1/admin/audit': {
+          const admin = await requireAdmin(request, env);
+          if (!admin.ok) return err(admin.error, admin.status, admin.message);
+          if (admin.role === 'legacy') {
+            return err(NEED_SESSION.error, NEED_SESSION.status, NEED_SESSION.message);
+          }
+          let entries = [];
+          const raw = await env.KV.get(ADMIN_AUDIT_KEY);
+          if (raw) {
+            try {
+              const r = JSON.parse(raw);
+              if (Array.isArray(r)) entries = r;
+            } catch (_) {
+              /* empty */
+            }
+          }
+          return json({ entries: entries.slice(0, 150) });
+        }
+
+        // Public (app-facing) — active announcements for devices to display.
+        case 'GET /v1/announcements': {
+          const list = await getAnnouncements(env);
+          return json({
+            announcements: list
+              .filter((a) => a.active)
+              .slice(0, ADMIN_ANNOUNCE_MAX)
+              .map((a) => ({ id: a.id, message: a.message, level: a.level, createdAt: a.createdAt })),
+          });
+        }
+
         case 'PUT /v1/vault': {
           const session = await requireSession(request, env);
           if (!session.ok) {
             return err(session.error, session.status, session.message);
+          }
+          const flag = await getAccountFlag(env, session.userId);
+          if (flag?.deleted) {
+            return err(
+              'account_deleted',
+              403,
+              'This account was deleted from the cloud. Sign up again to continue.',
+            );
+          }
+          if (flag?.suspended) {
+            return err(
+              'account_suspended',
+              403,
+              'This account has been suspended. Contact the administrator.',
+            );
+          }
+          const settings = await getAdminSettings(env);
+          if (settings.maintenanceMode) {
+            return err(
+              'maintenance',
+              503,
+              'The service is in maintenance mode. Try again later.',
+            );
           }
           const body = await readJson(request);
           const blob = body?.blob;
