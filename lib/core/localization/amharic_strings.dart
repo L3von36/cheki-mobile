@@ -258,6 +258,10 @@ final class AmharicStrings extends AppStrings {
   String get scanImageUnreadable => 'ያንን ምስል ማንበብ አልተቻለም።';
 
   @override
+  String get scanNoReceiptFound =>
+      'በዚያ ምስል ውስጥ የደረሰኝ QR ወይም ቁጥር አልተገኘም።';
+
+  @override
   String scanCameraError(String code) =>
       'ካሜራው አልተከፈተም ($code)። ይዝጉትና እንደገና ይሞክሩ።';
 

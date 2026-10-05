@@ -274,6 +274,10 @@ final class TigrinyaStrings extends AppStrings {
   String get scanImageUnreadable => 'እቲ ስእሊ ክንብቦ ኣይኽእልን።';
 
   @override
+  String get scanNoReceiptFound =>
+      'ኣብቲ ስእሊ ሰርተፊኬት QR ወይ መለለዪ ቍጽሪ ኣይተረኽበን።';
+
+  @override
   String scanCameraError(String code) =>
       'እቲ ካሜራ ኣይተከፈተን ($code)። ዕጉቡዎ ደጊምኩም '
       'ፈትሹ።';

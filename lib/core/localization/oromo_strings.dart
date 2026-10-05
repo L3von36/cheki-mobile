@@ -278,6 +278,10 @@ final class OromoStrings extends AppStrings {
   String get scanImageUnreadable => 'Suuricha san dubbisuu hin dandeenye.';
 
   @override
+  String get scanNoReceiptFound =>
+      'Suuricha sanatti QR fi lakkoofsa risiitii hin argamne.';
+
+  @override
   String scanCameraError(String code) =>
       'Kaameeraan hin banamne ($code). Fuula kana cufuudhaan irra '
       'deebi\u2019anii yaalaa.';

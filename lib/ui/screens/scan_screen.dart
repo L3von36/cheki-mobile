@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/reference_patterns.dart';
 import '../../core/scan_input.dart';
 import '../../state/locale_controller.dart';
 import 'reference_scan_screen.dart';
@@ -42,6 +44,7 @@ class _ScanScreenState extends State<ScanScreen>
   MobileScannerController? _controller;
   final ImagePicker _picker = ImagePicker();
   final ScanStabilizer _stabilizer = ScanStabilizer();
+  TextRecognizer? _recognizer;
   _CameraState _cameraState = _CameraState.checking;
   bool _handled = false;
   bool _torchOn = false;
@@ -93,6 +96,7 @@ class _ScanScreenState extends State<ScanScreen>
   void dispose() {
     _pulse.dispose();
     _controller?.dispose();
+    _recognizer?.close();
     super.dispose();
   }
 
@@ -140,11 +144,39 @@ class _ScanScreenState extends State<ScanScreen>
           return;
         }
       }
+      // OCR fallback: most receipt screenshots (Telebirr / M-Pesa
+      // transaction detail screens, forwarded SMS) carry no QR at all —
+      // only the printed number. Same extraction the number scanner uses,
+      // accepting only what the rank / shape rule trusts.
+      final recognizer =
+          _recognizer ??= TextRecognizer(script: TextRecognitionScript.latin);
+      final result = await recognizer.processImage(
+        InputImage.fromFilePath(image.path),
+      );
+      if (!mounted) return;
+      final found = <ReferenceCandidate>[];
+      for (final block in result.blocks) {
+        for (final line in block.lines) {
+          found.addAll(extractReferenceCandidates(line.text));
+        }
+      }
+      if (found.isEmpty && result.text.trim().isNotEmpty) {
+        // OCR sometimes splits a number across lines.
+        found.addAll(
+          extractReferenceCandidates(result.text.replaceAll('\n', ' ')),
+        );
+      }
+      final pick = bestGalleryCandidate(found);
+      if (pick != null) {
+        _tryAccept(pick.value);
+        return;
+      }
+      if (!mounted) return;
       final s = context.read<LocaleController>().strings;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(s.scanNoQrFound),
+          content: Text(s.scanNoReceiptFound),
         ),
       );
     } catch (_) {

@@ -1811,6 +1811,51 @@ export default {
           return json({ ok: true });
         }
 
+        // ── geo-block relay ─────────────────────────────────────────────
+        // Telebirr and M-Pesa receipt endpoints refuse non-Ethiopian
+        // client IPs. The app asks THIS worker to fetch the receipt page
+        // on the user's behalf; only those two banks' own receipt hosts
+        // are ever fetched (strict allowlist — never an open proxy), GET
+        // only, body capped. Returns the bank's answer verbatim as JSON.
+        case 'POST /v1/relay': {
+          const body = await readJson(request);
+          const bank = body?.bank;
+          const target = body?.url;
+          const ALLOWED_HOSTS = {
+            telebirr: ['transactioninfo.ethiotelecom.et'],
+            mpesa: ['m-pesabusiness.safaricom.et'],
+          };
+          if (!Object.hasOwn(ALLOWED_HOSTS, bank)) {
+            return err('bad_bank', 400, 'bank must be telebirr or mpesa.');
+          }
+          let u;
+          try {
+            u = new URL(target);
+          } catch (_) {
+            return err('bad_url', 400, 'url must be an absolute URL.');
+          }
+          if (u.protocol !== 'https:' || !ALLOWED_HOSTS[bank].includes(u.hostname)) {
+            return err('bad_host', 400, 'url host is not relay-allowed.');
+          }
+          try {
+            const upstream = await fetch(u.toString(), {
+              method: 'GET',
+              redirect: 'follow',
+              signal: AbortSignal.timeout(12_000),
+              headers: {
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/json,*/*',
+              },
+            });
+            let text = await upstream.text();
+            if (text.length > 1_000_000) text = text.slice(0, 1_000_000);
+            return json({ ok: true, status: upstream.status, body: text });
+          } catch (_) {
+            return err('relay_failed', 502, 'Could not reach the bank.');
+          }
+        }
+
         default:
           return err('not_found', 404, 'Unknown route.');
       }

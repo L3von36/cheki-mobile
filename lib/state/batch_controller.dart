@@ -4,6 +4,7 @@ import '../core/batch_parse.dart';
 import '../core/fraud_advisories.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/receipt_verify/extra_banks.dart';
+import '../core/receipt_verify/geo_relay.dart';
 import '../core/receipt_verify/verifier.dart';
 import '../core/verify_history.dart';
 
@@ -173,6 +174,18 @@ class BatchController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// One row's check through the right channel: geo-blocked banks
+  /// (Telebirr / M-Pesa) try the Worker relay first when the device looks
+  /// abroad (or on web); no definitive relay answer falls back to the
+  /// regular path (extra banks → their verifier, else the stylepos one).
+  Future<VerifyResult> _invoke(VerifyInput input) async {
+    if (shouldUseGeoRelay(input.bankId)) {
+      final relayed = await verifyViaGeoRelay(input);
+      if (relayed != null) return relayed;
+    }
+    return (isExtraBank(input.bankId) ? _extraVerifyFn : _verifyFn)(input);
+  }
+
   /// Runs every pending row, in order, one at a time.
   ///
   /// [consumeAttempt] is awaited right before each check — return false
@@ -221,9 +234,8 @@ class BatchController extends ChangeNotifier {
 
       VerifyResult res;
       try {
-        final fn = isExtraBank(bankId) ? _extraVerifyFn : _verifyFn;
         final acct = row.account?.trim();
-        res = await fn(VerifyInput(
+        res = await _invoke(VerifyInput(
           bankId: bankId,
           reference: row.reference,
           account: (acct == null || acct.isEmpty) ? null : acct,

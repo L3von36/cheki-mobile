@@ -280,4 +280,50 @@ Ref: CBE20250115AX
       expect(hit!.value, 'FT26140P01YB');
     });
   });
+
+  group('bestGalleryCandidate (QR screen OCR fallback)', () {
+    test('accepts strong ranks outright', () {
+      final labeled =
+          extractReferenceCandidates('Ref: GT8842ABCD12 amount 250');
+      expect(bestGalleryCandidate(labeled)!.value, 'GT8842ABCD12');
+
+      final rrn = extractReferenceCandidates('Paid 123456789012 ETB');
+      expect(bestGalleryCandidate(rrn)!.value, '123456789012');
+    });
+
+    test('accepts a lone weak token whose shape identifies a bank', () {
+      // OCR ranks a bare M-Pesa number 4 — the shape rule still trusts it.
+      final found = [const ReferenceCandidate('SJ72HK3YZ9', 4)];
+      expect(bestGalleryCandidate(found)!.value, 'SJ72HK3YZ9');
+
+      final invoice = [const ReferenceCandidate('CHQ261Z4AB2C', 4)];
+      expect(bestGalleryCandidate(invoice)!.value, 'CHQ261Z4AB2C');
+    });
+
+    test('prefers the lone known-shape token among several weak readings',
+        () {
+      final found = [
+        const ReferenceCandidate('ABCDEFGH1234', 4), // no known shape
+        const ReferenceCandidate('SJ72HK3YZ9', 4), // M-Pesa shape
+      ];
+      expect(bestGalleryCandidate(found)!.value, 'SJ72HK3YZ9');
+    });
+
+    test('accepts a lone weak token of unknown shape', () {
+      final found = [const ReferenceCandidate('ABCDEFGH1234', 4)];
+      expect(bestGalleryCandidate(found)!.value, 'ABCDEFGH1234');
+    });
+
+    test('several weak unknown-shape readings guess nothing', () {
+      final found = [
+        const ReferenceCandidate('ABCDEFGH1234', 4),
+        const ReferenceCandidate('ZZ9Y8X7W6V5', 4),
+      ];
+      expect(bestGalleryCandidate(found), isNull);
+    });
+
+    test('nothing read → null', () {
+      expect(bestGalleryCandidate(const []), isNull);
+    });
+  });
 }

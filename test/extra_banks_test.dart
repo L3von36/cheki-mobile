@@ -1,6 +1,7 @@
-/// Tests for the app-side extra banks (Wegagen, Amhara) — URL detection,
-/// JSON parsing against REAL API payloads captured from the banks'
-/// endpoints, HTTP-failure mapping, catalog wiring and controller routing.
+/// Tests for the app-side extra banks (Wegagen, Amhara, Abay) — URL
+/// detection, parsing against REAL API payloads captured from the banks'
+/// endpoints (plus an Abay page in tx-verify's documented shape),
+/// HTTP-failure mapping, catalog wiring and controller routing.
 library;
 
 import 'dart:convert';
@@ -65,16 +66,19 @@ const _amharaIncomingJson = '''
 
 void main() {
   group('catalog', () {
-    test('the combined catalog carries the two extras', () {
-      expect(kAllVerifyBanks.length, kVerifyBanks.length + 2);
+    test('the combined catalog carries the three extras', () {
+      expect(kAllVerifyBanks.length, kVerifyBanks.length + kExtraBanks.length);
       expect(bankByIdAll('wegagen')!.name, 'Wegagen Bank');
       expect(bankByIdAll('amhara')!.name, 'Amhara Bank');
+      expect(bankByIdAll('abay')!.name, 'Abay Bank');
       expect(bankByIdAll('telebirr')!.id, 'telebirr'); // engine ids intact
       expect(bankByIdAll('nope'), isNull);
       expect(isExtraBank('wegagen'), isTrue);
       expect(isExtraBank('amhara'), isTrue);
+      expect(isExtraBank('abay'), isTrue);
       expect(isExtraBank('awash'), isTrue); // engine entry, app-layer verifier
       expect(isExtraBank('cbe'), isTrue); // engine entry, hardened app flow
+      expect(isExtraBank('telebirr'), isFalse); // engine flows stay intact
     });
   });
 
@@ -106,6 +110,22 @@ void main() {
           'https://transaction.amharabank.com.et/FT26248K7Q1P');
       expect(d!.bank, 'amhara');
       expect(d.reference, 'FT26248K7Q1P');
+    });
+
+    test('reads the Abay receipt link', () {
+      final d = detectExtraBankFromUrl(
+          'https://abaymobile.com.et/info/135FTRM25044000119176773010');
+      expect(d!.bank, 'abay');
+      expect(d.reference, '135FTRM25044000119176773010');
+    });
+
+    test('reads the Abay link embedded in prose, without the trailing '
+        'punctuation', () {
+      final d = detectExtraBankFromUrl(
+          'Open your receipt: https://abaymobile.com.et/info/'
+          '135FTRM25044000119176773010 to view details.');
+      expect(d!.bank, 'abay');
+      expect(d.reference, '135FTRM25044000119176773010');
     });
 
     test('reads the Amhara QR JSON payload — the real scanned text', () {
@@ -417,6 +437,85 @@ void main() {
       expect(res.failure!.kind, VerifyErrorKind.notFound);
       expect(res.failure!.message, contains('No receipt found'));
       expect(calls, 2); // as-shared then flipped — no 5xx retry storm
+    });
+  });
+
+  group('verifyExtraBank — Abay', () {
+    // In the structure tx-verify scrapes (table#txn_tbl, label/value rows).
+    final abayHtml =
+        File('test/fixtures/abay_receipt.html').readAsStringSync();
+
+    test('parses the receipt page end-to-end', () async {
+      final seen = <Uri?>[];
+      final seenAccept = <String?>[];
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'abay', reference: '135FTRM25044000119176773010'),
+        httpFn: (uri, headers) async {
+          seen.add(uri);
+          seenAccept.add(headers['Accept']);
+          return ExtraHttpResponse(200, utf8.encode(abayHtml));
+        },
+      );
+      expect(res.ok, isTrue);
+      final r = res.receipt!;
+      expect(r.bankCode, 'abay');
+      expect(r.bankName, 'Abay Bank');
+      expect(r.reference, '135FTRM25044000119176773010');
+      expect(r.senderName, 'FIREHIWOT KEBEDE MENGESHA');
+      expect(r.senderAccount, '1000217529647');
+      expect(r.receiverName, 'ABEBE BEKELE HAILU');
+      expect(r.receiverAccount, 'ETB1756000010003');
+      expect(r.amount, 1500.0);
+      expect(r.currency, 'ETB');
+      expect(r.date, '2025-04-25 10:15');
+      expect(r.transactionType, 'Transfer');
+      expect(r.reason, 'Rent payment');
+      expect(r.invoiceNumber, '135FTRM25044000119176773010');
+      expect(seen.single!.toString(),
+          'https://abaymobile.com.et/info/135FTRM25044000119176773010');
+      expect(seenAccept.single, contains('text/html'));
+    });
+
+    test('a pasted receipt URL is fetched as-is', () async {
+      final seen = <Uri?>[];
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'abay',
+            reference:
+                'https://abaymobile.com.et/info/135FTRM25044000119176773010'),
+        httpFn: (uri, headers) async {
+          seen.add(uri);
+          return ExtraHttpResponse(200, utf8.encode(abayHtml));
+        },
+      );
+      expect(res.ok, isTrue);
+      expect(seen.single!.toString(),
+          'https://abaymobile.com.et/info/135FTRM25044000119176773010');
+    });
+
+    test('a page missing a required field maps to not-found', () async {
+      // A generic error/login page has no txn_tbl receipt rows at all.
+      const notAReceipt = '<html><body><p>Please sign in.</p></body></html>';
+      final res = await verifyExtraBank(
+        const VerifyInput(
+            bankId: 'abay', reference: '135FTRM25044000119176773010'),
+        httpFn: (uri, headers) async =>
+            ExtraHttpResponse(200, utf8.encode(notAReceipt)),
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message, contains('No receipt found'));
+    });
+
+    test('HTTP 404 maps to not-found', () async {
+      final res = await verifyExtraBank(
+        const VerifyInput(bankId: 'abay', reference: '135FT00000000000000000000'),
+        httpFn: (uri, headers) async => const ExtraHttpResponse(404, []),
+      );
+      expect(res.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+      expect(res.failure!.message, contains('not found'));
     });
   });
 

@@ -261,6 +261,10 @@ final class EnglishStrings extends AppStrings {
   String get scanImageUnreadable => 'Could not read that image.';
 
   @override
+  String get scanNoReceiptFound =>
+      'No QR code or reference number found in that image.';
+
+  @override
   String scanCameraError(String code) =>
       'The camera could not start ($code). Close this screen and try again.';
 

@@ -1,11 +1,11 @@
-/// App-side bank additions: Wegagen Bank, Amhara Bank, Awash Bank and a
-/// hardened CBE receipt flow.
+/// App-side bank additions: Wegagen Bank, Amhara Bank, Abay Bank, Awash
+/// Bank and a hardened CBE receipt flow.
 ///
 /// The stylepos engine files (`verifier.dart`, `parsers.dart`, `models.dart`)
 /// stay VERBATIM — this additive module extends them without touching a
 /// line:
 ///
-///   * two extra [BankInfo] catalog entries + a combined catalog
+///   * three extra [BankInfo] catalog entries + a combined catalog
 ///     ([kAllVerifyBanks] / [bankByIdAll]) — Awash and CBE itself are already
 ///     in the engine catalog, so no extra entries are needed,
 ///   * text detection for the banks' own share links — bare URLs, links
@@ -13,10 +13,12 @@
 ///     that), and the Amhara QR's bare JSON payload
 ///     ([detectExtraBankFromUrl], runs before the engine detector),
 ///   * a verifier ([verifyExtraBank]) the controller routes `wegagen` /
-///     `amhara` / `awash` / `cbe` inputs to, using the same HTTP client
-///     factory. CBE rides along so its API's flaky transient HTTP 400
+///     `amhara` / `abay` / `awash` / `cbe` inputs to, using the same HTTP
+///     client factory. CBE rides along so its API's flaky transient HTTP 400
 ///     (observed live: a valid token answered 400 and then 200 on the next
-///     call) gets retried instead of surfacing as an error.
+///     call) gets retried instead of surfacing as an error,
+///   * a generic HTML label/value scraper ([scrapeHtmlKeyValues]) for banks
+///     that publish receipts as plain HTML tables rather than JSON APIs.
 ///
 /// Endpoints (behind the banks' own React receipt pages — we call the APIs
 /// the pages themselves call):
@@ -26,6 +28,8 @@
 ///     `transinfo.wegagenbanksc.com.et:8183/?id=…` receipt link.
 ///   * Amhara   — `https://transaction.amharabank.com.et/{trx}` where `{trx}`
 ///     is the `FT…` number of the `receipt.amharabank.com.et/?trx=…` link.
+///   * Abay     — `https://abaymobile.com.et/info/{code}` where `{code}` is
+///     the `135FT…` receipt code (or the shared link itself, passed through).
 ///   * Awash    — `https://awashpay.awashbank.com:8225/{token}` — the EXACT
 ///     token as shared, leading dash included. The engine's own detector
 ///     strips that dash and the bank then answers 403, which is why Awash
@@ -69,9 +73,27 @@ const BankInfo kAmharaBank = BankInfo(
       'the shared receipt link.',
 );
 
-/// The two new entries, appended after the stylepos catalog (Awash already
+/// Abay Bank — public HTML receipts keyed by the long receipt code
+/// (`135FTRM…`), shared as `abaymobile.com.et/info/{code}` links.
+/// Ported from tx-verify's `verify_abay` (public page, no login).
+const BankInfo kAbayBank = BankInfo(
+  id: 'abay',
+  name: 'Abay Bank',
+  shortName: 'Abay',
+  isWallet: false,
+  // The bank serves its receipt pages with a certificate the OS trust
+  // store does not accept — the same situation as CBE's endpoints.
+  allowBadCertificate: true,
+  referenceLabel: 'Receipt code',
+  referenceHint: 'e.g. 135FTRM25044000119176773010 or the share link',
+  helper:
+      'The receipt code from the Abay mobile receipt — or paste the shared '
+      'abaymobile.com.et/info/… link.',
+);
+
+/// The extra entries, appended after the stylepos catalog (Awash already
 /// ships inside the engine catalog — see [detectExtraBankFromUrl]).
-const List<BankInfo> kExtraBanks = [kWegagenBank, kAmharaBank];
+const List<BankInfo> kExtraBanks = [kWegagenBank, kAmharaBank, kAbayBank];
 
 /// Full catalog: the verbatim stylepos list first, then the extras.
 const List<BankInfo> kAllVerifyBanks = [...kVerifyBanks, ...kExtraBanks];
@@ -91,7 +113,11 @@ BankInfo? bankByIdAll(String id) {
 /// retry the bank's flaky transient HTTP 400 (the engine's verbatim loop
 /// only retries 5xx).
 bool isExtraBank(String id) =>
-    id == 'wegagen' || id == 'amhara' || id == 'awash' || id == 'cbe';
+    id == 'wegagen' ||
+    id == 'amhara' ||
+    id == 'awash' ||
+    id == 'cbe' ||
+    id == 'abay';
 
 // ---------------------------------------------------------------------------
 // URL detection
@@ -144,6 +170,13 @@ UrlDetection? detectExtraBankFromUrl(String input) {
     caseSensitive: false,
   ).firstMatch(text);
   if (am != null) return UrlDetection('amhara', am.group(1)!);
+
+  // Abay: https://abaymobile.com.et/info/135FTRM25044000119176773010
+  final ab = RegExp(
+    r'abaymobile\.com\.et/info/([A-Za-z0-9]{10,})',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (ab != null) return UrlDetection('abay', ab.group(1)!);
 
   // Awash: https://awashpay.awashbank.com:8225/-2KHIQYW30P-5VQUNG — the
   // token is PATH-styled and its LEADING DASH IS PART OF IT. The bank
@@ -403,6 +436,122 @@ AmharaParse parseAmharaReceiptJson(String body) {
 }
 
 // ---------------------------------------------------------------------------
+// HTML receipt pages (label/value tables)
+// ---------------------------------------------------------------------------
+
+/// Decodes the readable text of one HTML fragment: tags stripped, the
+/// entities banks actually use resolved, whitespace collapsed.
+String _htmlText(String raw) {
+  var t = raw.replaceAll(RegExp(r'<[^>]+>'), ' ');
+  t = t
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'");
+  t = t.replaceAllMapped(
+      RegExp(r'&#(\d+);'), (m) => String.fromCharCode(int.parse(m.group(1)!)));
+  return t.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// Scrapes label → value pairs out of an HTML receipt page. When [tableId]
+/// is given and present, only that table is read; otherwise every table's
+/// two-column rows are merged (first key wins). Rows are `<tr>` with at
+/// least two `<td>` cells: cell 1 is the label, cell 2 the value — the
+/// shape Abay and (future HTML-bank) receipts print.
+Map<String, String> scrapeHtmlKeyValues(String html, {String? tableId}) {
+  var scope = html;
+  if (tableId != null) {
+    final open = RegExp(
+            '<table[^>]*\\bid\\s*=\\s*["\']?${RegExp.escape(tableId)}'
+            '["\']?[^>]*>',
+            caseSensitive: false)
+        .firstMatch(html);
+    if (open != null) {
+      final end = RegExp(r'</table>', caseSensitive: false)
+          .allMatches(html, open.end);
+      scope = html.substring(
+          open.end, end.isEmpty ? html.length : end.first.start);
+    }
+    // A missing table means the page is not a receipt we recognize — fall
+    // through and scrape the whole page generically; the caller still has
+    // to see every required field before it accepts.
+  }
+  final fields = <String, String>{};
+  final rowRe = RegExp(r'<tr[^>]*>(.*?)</tr>',
+      caseSensitive: false, dotAll: true);
+  final cellRe = RegExp(r'<td[^>]*>(.*?)</td>',
+      caseSensitive: false, dotAll: true);
+  for (final row in rowRe.allMatches(scope)) {
+    final cells = <String>[];
+    for (final cell in cellRe.allMatches(row.group(1)!)) {
+      final text = _htmlText(cell.group(1)!);
+      if (text.isNotEmpty) cells.add(text);
+    }
+    if (cells.length >= 2 && !fields.containsKey(cells[0])) {
+      fields[cells[0]] = cells[1];
+    }
+  }
+  return fields;
+}
+
+/// `dd/mm/yyyy[ hh:mm[:ss]]` → `yyyy-MM-dd HH:mm` (date-only pages keep
+/// just the date).
+String? _fmtAbayDate(String? v) {
+  final t = (v ?? '').trim();
+  if (t.isEmpty) return null;
+  final m = RegExp(
+          r'^(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2})(?::\d{2})?)?$')
+      .firstMatch(t);
+  if (m == null) return null;
+  final date = '${m.group(3)}-${m.group(2)}-${m.group(1)}';
+  final time = m.group(4) == null ? '' : ' ${m.group(4)}:${m.group(5)}';
+  return '$date$time';
+}
+
+/// Parses an Abay Bank receipt page (`abaymobile.com.et/info/{code}`)
+/// into a [ReceiptData]. Success mirrors tx-verify's bar: every field the
+/// bank prints — payer, receiver, accounts, amount, date, reference —
+/// must be present, otherwise the page is not a usable receipt.
+ReceiptData? parseAbayReceiptPage(String html, String fallbackReference) {
+  final fields = scrapeHtmlKeyValues(html, tableId: 'txn_tbl');
+  if (fields.isEmpty) return null;
+  final sender = _clean(fields['Payer Name']);
+  final senderAcct = _clean(fields['Payer Account']);
+  final receiver = _clean(fields['Receiver Name']);
+  final receiverAcct = _clean(fields['Receiver Account']);
+  final reference = _clean(fields['Reference No']);
+  final amount = _num(fields['Amount']);
+  final date = _fmtAbayDate(fields['Date']);
+  if (sender == null ||
+      senderAcct == null ||
+      receiver == null ||
+      receiverAcct == null ||
+      reference == null ||
+      amount == null ||
+      date == null) {
+    return null;
+  }
+  final bank = bankByIdAll('abay')!;
+  return ReceiptData(
+    verified: true,
+    bankCode: bank.id,
+    bankName: bank.name,
+    reference: reference,
+    senderName: sender,
+    senderAccount: senderAcct,
+    receiverName: receiver,
+    receiverAccount: receiverAcct,
+    amount: amount,
+    date: date,
+    transactionType: _clean(fields['Type']),
+    reason: _clean(fields['Remark']),
+    invoiceNumber: reference,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Verification
 // ---------------------------------------------------------------------------
 
@@ -510,6 +659,9 @@ Future<VerifyResult> verifyExtraBank(
     'awash' => Uri.parse('https://awashpay.awashbank.com:8225/$reference'),
     'cbe' => Uri.parse(
         'https://Mb.cbe.com.et/api/v1/transactions/public/transaction-detail/$reference'),
+    'abay' => reference.toLowerCase().startsWith('http')
+        ? Uri.parse(reference)
+        : Uri.parse('https://abaymobile.com.et/info/$reference'),
     _ => Uri.parse(
         'https://transaction.amharabank.com.et/${Uri.encodeQueryComponent(reference)}'),
   };
@@ -520,7 +672,7 @@ Future<VerifyResult> verifyExtraBank(
   final headers = <String, String>{
     'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Accept': bankId == 'awash'
+    'Accept': bankId == 'awash' || bankId == 'abay'
         ? 'text/html,application/xhtml+xml,application/json,*/*'
         : 'application/json',
     if (bankId == 'cbe') ..._cbeApiHeaders,
@@ -703,6 +855,24 @@ Future<VerifyResult> verifyExtraBank(
                 tips: const [
                   'Paste the link exactly as the sender shared it.',
                   'Ask the sender to re-share the receipt from the Awash app.',
+                ],
+              ),
+              sw.elapsedMilliseconds,
+            );
+          }
+          return VerifyResult.receipt(receipt, sw.elapsedMilliseconds);
+        }
+
+        if (bankId == 'abay') {
+          final receipt = parseAbayReceiptPage(body, reference);
+          if (receipt == null) {
+            return VerifyResult.failed(
+              VerifyFailure(
+                VerifyErrorKind.notFound,
+                'No receipt found for “$reference” at ${bank.name}.',
+                tips: const [
+                  'Double-check every character of the receipt code.',
+                  'Ask the sender to re-share the receipt from the Abay app.',
                 ],
               ),
               sw.elapsedMilliseconds,

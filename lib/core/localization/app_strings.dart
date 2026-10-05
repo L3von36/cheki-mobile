@@ -170,6 +170,10 @@ abstract base class AppStrings {
   String get scanGallery;
   String get scanNoQrFound;
   String get scanImageUnreadable;
+
+  /// Gallery image carried neither a QR code nor a readable reference
+  /// number (the QR screen falls back to OCR before giving up).
+  String get scanNoReceiptFound;
   String scanCameraError(String code);
   String get scanRetry;
   String get scanCameraPermissionNeeded;

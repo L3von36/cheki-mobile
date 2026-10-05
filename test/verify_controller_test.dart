@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/receipt_verify/verifier.dart';
 import 'package:mahtem/state/verify_controller.dart';
@@ -354,6 +355,205 @@ void main() {
       final c = VerifyController();
       c.setReference('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
       expect(c.effectiveBank?.id, 'cbe');
+    });
+  });
+
+  group('bare-reference shape auto-detection', () {
+    test('an unambiguous shape pre-selects its bank', () {
+      final mpesa = VerifyController()..setReference('SJ72HK3YZ9');
+      expect(mpesa.effectiveBank?.id, 'mpesa');
+
+      final cbe = VerifyController()..setReference('fHCx8QmLpZ1');
+      expect(cbe.effectiveBank?.id, 'cbe');
+
+      final dashen = VerifyController()..setReference('26010805472123');
+      expect(dashen.effectiveBank?.id, 'dashen');
+
+      final zemen = VerifyController()..setReference('ETTB123456789');
+      expect(zemen.effectiveBank?.id, 'zemen');
+    });
+
+    test('ambiguous FT stays unselected and arms the candidate list', () {
+      final c = VerifyController()..applyScan('FT26140P01YB');
+      expect(c.detectedBank, isNull);
+      expect(c.canVerify, isFalse); // the picker still decides
+      expect(c.shapeCandidates, ['amhara', 'boa', 'cbebirr']);
+    });
+
+    test('link / QR references carry no shape candidates', () {
+      final c = VerifyController()
+        ..applyScan('https://mbreciept.cbe.com.et/fHCx8QmLpZ1');
+      expect(c.detectedBank?.id, 'cbe');
+      expect(c.shapeCandidates, isEmpty); // the link is authoritative
+    });
+
+    test('candidates follow the reference through edits and resets', () {
+      final c = VerifyController()..setReference('SJ72HK3YZ9');
+      expect(c.shapeCandidates, ['mpesa']);
+      c.setReference('REFERENCE99');
+      expect(c.shapeCandidates, isEmpty);
+      c.setReference('FT26140P01YB');
+      expect(c.shapeCandidates, ['amhara', 'boa', 'cbebirr']);
+      c.resetAll();
+      expect(c.shapeCandidates, isEmpty);
+    });
+  });
+
+  group('wrong-bank retry net', () {
+    test('a not-found on one FT candidate tries the others and adopts the '
+        'one that verifies', () async {
+      final engineInputs = <VerifyInput>[];
+      final extraInputs = <VerifyInput>[];
+      final c = VerifyController(
+        verifyFn: (input) async {
+          engineInputs.add(input);
+          return _notFound('Receipt not found.');
+        },
+        extraVerifyFn: (input) async {
+          extraInputs.add(input);
+          return input.bankId == 'amhara'
+              ? _receiptOk(bank: 'amhara')
+              : _notFound('Receipt not found.');
+        },
+      );
+      c.selectBank(bankById('boa'));
+      c.setReference('FT26140P01YB');
+      c.setAccount('60536171');
+
+      final res = await c.verify();
+      expect(res!.ok, isTrue);
+      // Primary BOA asked first, Amhara (the first viable candidate)
+      // second — CBE Birr never asked (it needs a phone we never had).
+      expect(engineInputs.map((i) => i.bankId), ['boa']);
+      expect(extraInputs.map((i) => i.bankId), ['amhara']);
+      // The form now shows the bank that actually verified.
+      expect(c.effectiveBank?.id, 'amhara');
+      expect(c.manualBank?.id, 'amhara');
+      expect(c.status, VerifyStatus.done);
+    });
+
+    test('when no candidate verifies, the PRIMARY failure message is kept '
+        'and skipped candidates are named in the tips', () async {
+      final asked = <String>[];
+      final c = VerifyController(
+        verifyFn: (input) async {
+          asked.add(input.bankId);
+          return _notFound('should not run');
+        },
+        // The primary here IS Amhara — an extra bank — so it answers
+        // through this fn; no other candidate is viable without fields.
+        extraVerifyFn: (input) async {
+          asked.add(input.bankId);
+          return _notFound('Receipt not found.');
+        },
+      );
+      c.selectBank(bankByIdAll('amhara'));
+      c.setReference('FT26140P01YB'); // BOA + CBE Birr lack their fields
+
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(asked, ['amhara']); // every other candidate needs a field
+      expect(res.failure!.message, 'Receipt not found.');
+      // The skipped banks are the user's next move.
+      final tips = res.failure!.tips.join(' ');
+      expect(tips, contains('Bank of Abyssinia'));
+      expect(tips, contains('CBE Birr'));
+    });
+
+    test('a non-not-failure does not trigger the net', () async {
+      final asked = <String>[];
+      final c = VerifyController(
+        verifyFn: (input) async {
+          asked.add(input.bankId);
+          return VerifyResult.failed(
+            const VerifyFailure(
+                VerifyErrorKind.network, 'Check your connection.'),
+            5,
+          );
+        },
+        extraVerifyFn: (input) async {
+          asked.add(input.bankId);
+          return _notFound('should not run');
+        },
+      );
+      c.selectBank(bankById('boa'));
+      c.setReference('FT26140P01YB');
+      c.setAccount('60536171');
+
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(res.failure!.kind, VerifyErrorKind.network);
+      expect(asked, ['boa']); // network errors keep their own message
+    });
+
+    test('single-candidate shapes never retry — the only candidate is the '
+        'bank already asked', () async {
+      var calls = 0;
+      final c = VerifyController(
+        verifyFn: (input) async {
+          calls++;
+          return _notFound('Receipt not found.');
+        },
+        extraVerifyFn: (input) async {
+          calls++;
+          return _notFound('Receipt not found.');
+        },
+      );
+      // SJ72… auto-detects M-Pesa — its shape has no other owner.
+      c.applyScan('SJ72HK3YZ9');
+      expect(c.effectiveBank?.id, 'mpesa');
+
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(calls, 1);
+      // No shape tip: there is no other bank this shape could belong to.
+      expect(
+        res.failure!.tips.any((t) => t.contains('actually from')),
+        isFalse,
+      );
+    });
+
+    test('a broken alternative never masks the primary answer', () async {
+      final c = VerifyController(
+        verifyFn: (_) async => _notFound('Receipt not found.'),
+        extraVerifyFn: (_) async => throw Exception('boom'),
+      );
+      c.selectBank(bankById('boa'));
+      c.setReference('FT26140P01YB');
+      c.setAccount('60536171');
+
+      final res = await c.verify();
+      expect(res!.ok, isFalse);
+      expect(res.failure!.message, 'Receipt not found.');
+      expect(res.failure!.kind, VerifyErrorKind.notFound);
+    });
+
+    test('an abandoned run delivers nothing even if a candidate answers',
+        () async {
+      final gate = Completer<void>();
+      final c = VerifyController(
+        // Primary (Amhara) fails fast; the retry net reaches BOA, which
+        // hangs on the gate until the run is abandoned.
+        verifyFn: (_) async {
+          await gate.future;
+          return _receiptOk(bank: 'boa');
+        },
+        extraVerifyFn: (_) async => _notFound('Receipt not found.'),
+      );
+      c.selectBank(bankByIdAll('amhara'));
+      c.setReference('FT26140P01YB');
+      c.setAccount('60536171'); // makes BOA viable for the retry net
+
+      final future = c.verify();
+      await pumpEventQueue();
+      expect(c.isVerifying, isTrue);
+      c.stopVerify();
+
+      gate.complete();
+      final res = await future;
+      expect(res, isNull); // the candidate's answer is discarded
+      expect(c.result, isNull);
+      expect(c.status, VerifyStatus.idle);
     });
   });
 

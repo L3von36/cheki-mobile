@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/receipt_verify/parsers.dart';
 import '../core/receipt_verify/extra_banks.dart';
+import '../core/receipt_verify/geo_relay.dart';
+import '../core/receipt_verify/reference_shape.dart';
 import '../core/receipt_verify/verifier.dart';
 import '../core/scan_input.dart';
 
@@ -62,6 +64,13 @@ class VerifyController extends ChangeNotifier {
   /// the raw invoice still verifies instead of dead-ending the user.
   /// Cleared as soon as the user edits the reference.
   String? rawScannedReference;
+
+  /// Banks whose receipts plausibly carry the current bare reference's
+  /// shape (see `bankCandidatesForReference`), most likely first. Empty
+  /// when the reference came from a link/QR (those identify their bank
+  /// outright). The verify controller walks this list after a definitive
+  /// not-found so a wrong bank pick self-heals instead of dead-ending.
+  List<String> shapeCandidates = const [];
 
   VerifyResult? result;
 
@@ -124,21 +133,26 @@ class VerifyController extends ChangeNotifier {
       status = VerifyStatus.idle;
       result = null;
     }
-    _maybeDetectTelebirrBare(value);
+    // Shape candidates only exist for BARE references — a link or QR
+    // identified its bank outright, so nothing is left to guess there.
+    shapeCandidates = (detected != null || looksLikeUrl(reference))
+        ? const []
+        : bankCandidatesForReference(reference);
+    _autoDetectFromShape(reference);
     notifyListeners();
   }
 
-  /// Telebirr invoice numbers carry a distinctive service-code prefix
-  /// (CHQ…, DET…, ADQ…). When a bare typed number matches that shape and
-  /// nothing else detected the bank, pre-select Telebirr instead of
-  /// dead-ending in the manual picker — the user can still change it.
-  void _maybeDetectTelebirrBare(String value) {
+  /// Pre-selects the bank for a bare reference whose shape belongs to
+  /// exactly one supported bank (Telebirr invoice, Zemen ETTB…, Dashen
+  /// digits, a CBE receipt code…). Ambiguous shapes (FT… could be
+  /// Amhara's, BOA's or CBE Birr's) stay unselected — the picker decides
+  /// and the wrong-bank retry net in [verify] covers a wrong guess.
+  void _autoDetectFromShape(String value) {
     if (manualBank != null || detectedBank != null) return;
     final v = value.trim();
     if (v.isEmpty || v.contains('/') || looksLikeUrl(v)) return;
-    if (looksLikeTelebirrReference(v)) {
-      detectedBank = bankById('telebirr');
-    }
+    final id = autoDetectBankForReference(v);
+    if (id != null) detectedBank = bankByIdAll(id);
   }
 
   void setAccount(String value) {
@@ -160,6 +174,10 @@ class VerifyController extends ChangeNotifier {
       final info = detected == null ? null : bankByIdAll(detected.bank);
       detectedBank = info;
       if (detected != null && info != null) reference = detected.reference;
+      shapeCandidates = (detected != null || looksLikeUrl(reference))
+          ? const []
+          : bankCandidatesForReference(reference);
+      _autoDetectFromShape(reference);
     }
     notifyListeners();
   }
@@ -184,6 +202,9 @@ class VerifyController extends ChangeNotifier {
     scannedQr = null;
     forcedBankId = null;
     rawScannedReference = null;
+    // Cleared here; the plain-reference path below re-arms it. Link / QR
+    // payloads identify their bank outright — nothing left to guess.
+    shapeCandidates = const [];
 
     // Receipt markers auto-detect the bank — on any text shape, not just
     // inputs that start with http://.
@@ -239,10 +260,12 @@ class VerifyController extends ChangeNotifier {
       return;
     }
 
-    // Plain reference — the user pairs it with a bank.
+    // Plain reference — the user pairs it with a bank (unless its shape
+    // belongs to exactly one bank, which pre-selects it).
     reference = raw;
     detectedBank = null;
-    _maybeDetectTelebirrBare(raw);
+    shapeCandidates = bankCandidatesForReference(raw);
+    _autoDetectFromShape(raw);
     notifyListeners();
   }
 
@@ -303,6 +326,7 @@ class VerifyController extends ChangeNotifier {
     scannedQr = null;
     forcedBankId = null;
     rawScannedReference = null;
+    shapeCandidates = const [];
     notifyListeners();
   }
 
@@ -318,6 +342,20 @@ class VerifyController extends ChangeNotifier {
     _verifyRun++;
     status = VerifyStatus.idle;
     notifyListeners();
+  }
+
+  /// Runs ONE verification through the right channel: geo-blocked banks
+  /// (Telebirr / M-Pesa) try the Worker relay first when the device looks
+  /// abroad (or on web, where the browser blocks the direct call), and
+  /// whenever the relay has no definitive answer fall back to the regular
+  /// path — extra banks to their verifier, everything else to the verbatim
+  /// stylepos verifier.
+  Future<VerifyResult> _invoke(VerifyInput input) async {
+    if (shouldUseGeoRelay(input.bankId)) {
+      final relayed = await verifyViaGeoRelay(input);
+      if (relayed != null) return relayed;
+    }
+    return (isExtraBank(input.bankId) ? _extraVerifyFn : _verifyFn)(input);
   }
 
   /// Runs the verification through the stylepos verifier.
@@ -336,11 +374,7 @@ class VerifyController extends ChangeNotifier {
 
     VerifyResult res;
     try {
-      // App-side extra banks (Wegagen, Amhara, Awash, CBE) route to their
-      // own verifier; everything else goes through the verbatim stylepos
-      // verifier.
-      final fn = isExtraBank(bankId) ? _extraVerifyFn : _verifyFn;
-      res = await fn(VerifyInput(
+      res = await _invoke(VerifyInput(
         bankId: bankId,
         reference: reference.trim(),
         account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
@@ -371,10 +405,9 @@ class VerifyController extends ChangeNotifier {
         rawInvoice.isNotEmpty &&
         rawInvoice != reference.trim()) {
       try {
-        final retry = await (isExtraBank(bankId) ? _extraVerifyFn : _verifyFn)(
-          VerifyInput(
-            bankId: bankId,
-            reference: rawInvoice,
+        final retry = await _invoke(VerifyInput(
+          bankId: bankId,
+          reference: rawInvoice,
           account: accountNumber.trim().isEmpty ? null : accountNumber.trim(),
           phone: phoneNumber.trim().isEmpty ? null : phoneNumber.trim(),
         ));
@@ -386,6 +419,88 @@ class VerifyController extends ChangeNotifier {
         }
       } catch (_) {
         // The retry is best-effort; keep the first result.
+      }
+    }
+
+    // Wrong-bank net: a bare reference only HINTS at its bank (an FT
+    // number may be Amhara's, BOA's or CBE Birr's, a mixed-case token
+    // CBE's). When the chosen bank answers a definitive not-found,
+    // silently ask the other banks whose receipts carry this shape — one
+    // of them may own it. Only a not-found triggers the net: network
+    // errors and anti-bot gates keep their original message, and a
+    // failed alternative NEVER replaces the primary answer — only a
+    // verified receipt does.
+    if (!res.ok &&
+        res.failure?.kind == VerifyErrorKind.notFound &&
+        shapeCandidates.isNotEmpty) {
+      for (final altId in shapeCandidates) {
+        if (altId == bankId) continue;
+        final alt = bankByIdAll(altId);
+        if (alt == null) continue;
+        // Candidates the form could not fill in are skipped — BOA needs
+        // the receiver's last-5, CBE Birr the payer phone.
+        if (alt.accountDigits > 0 && accountNumber.trim().isEmpty) continue;
+        if (alt.requiresPhone && phoneNumber.trim().isEmpty) continue;
+        VerifyResult altRes;
+        try {
+          altRes = await _invoke(VerifyInput(
+            bankId: altId,
+            reference: reference.trim(),
+            account:
+                accountNumber.trim().isEmpty ? null : accountNumber.trim(),
+            phone: phoneNumber.trim().isEmpty ? null : phoneNumber.trim(),
+          ));
+        } catch (_) {
+          continue; // a broken alternative must not mask the answer
+        }
+        if (run != _verifyRun) return null; // stopped while in flight
+        if (altRes.ok) {
+          res = altRes;
+          // The form must show the bank that actually verified.
+          final altBank = bankByIdAll(altId);
+          if (altBank != null) {
+            if (manualBank != null) {
+              manualBank = altBank;
+            } else {
+              detectedBank = altBank;
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    // Shape-aware escape hatch: candidates skipped for missing account /
+    // phone fields are the user's next move — name them instead of
+    // dead-ending on a bare "not found".
+    if (!res.ok &&
+        res.failure?.kind == VerifyErrorKind.notFound &&
+        shapeCandidates.isNotEmpty &&
+        scannedQr == null) {
+      final skipped = <String>[];
+      for (final altId in shapeCandidates) {
+        if (altId == bankId) continue;
+        final alt = bankByIdAll(altId);
+        if (alt == null) continue;
+        if ((alt.accountDigits > 0 && accountNumber.trim().isEmpty) ||
+            (alt.requiresPhone && phoneNumber.trim().isEmpty)) {
+          skipped.add(alt.name);
+        }
+      }
+      if (skipped.isNotEmpty) {
+        final f = res.failure!;
+        res = VerifyResult.failed(
+          VerifyFailure(
+            f.kind,
+            f.message,
+            tips: [
+              ...f.tips,
+              'If this receipt is actually from ${skipped.join(' or ')}, '
+                  'pick that bank — it needs a detail you can enter there.',
+            ],
+          ),
+          res.durationMs,
+        );
       }
     }
 

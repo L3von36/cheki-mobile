@@ -47,10 +47,13 @@ void main() {
       expect(countChargeable(rows), 1);
     });
 
-    test('bare telebirr-prefix number auto-detects when no bank is '
-        'chosen, but a chosen bank always wins', () {
+    test('a bare unambiguous shape auto-detects when no bank is chosen, '
+        'but a chosen bank always wins', () {
       final auto = parseBatchLines('CHQ261Z4AB2C');
       expect(auto.single.bankId, 'telebirr');
+
+      final shaped = parseBatchLines('ETTB123456789');
+      expect(shaped.single.bankId, 'zemen');
 
       final forced = parseBatchLines(
         'CHQ261Z4AB2C',
@@ -59,9 +62,17 @@ void main() {
       expect(forced.single.bankId, 'mpesa');
     });
 
-    test('plain references without a bank need one', () {
+    test('bare references without a bank need one — unless their shape '
+        'belongs to exactly one bank', () {
+      // FT is genuinely ambiguous (Amhara / BOA / CBE Birr) and
+      // REFERENCE99 matches no known shape — both need a bank pick.
+      final shapeless = parseBatchLines('FT26140P01YB\nREFERENCE99');
+      expect(countNeedingBank(shapeless), 2);
+
+      // An M-Pesa transaction number is unambiguous — auto-detected.
       final rows = parseBatchLines('FT26140P01YB\nSJ72HK3YZ9');
-      expect(countNeedingBank(rows), 2);
+      expect(countNeedingBank(rows), 1);
+      expect(rows[1].bankId, 'mpesa');
     });
   });
 

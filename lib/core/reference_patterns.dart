@@ -18,6 +18,7 @@ library;
 
 import 'receipt_verify/extra_banks.dart';
 import 'receipt_verify/parsers.dart';
+import 'receipt_verify/reference_shape.dart';
 
 /// One candidate reference read from OCR text.
 class ReferenceCandidate {
@@ -195,6 +196,35 @@ List<ReferenceCandidate> extractReferenceCandidates(
 String? bestReferenceCandidate(String text) {
   final candidates = extractReferenceCandidates(text);
   return candidates.isEmpty ? null : candidates.first.value;
+}
+
+/// The one candidate to auto-accept from a deliberate gallery pick — a
+/// receipt screenshot or photo the user chose on purpose, with no camera
+/// stream to confirm agreement (see the QR scanner's OCR fallback).
+///
+/// The camera screen auto-accepts only [autoAcceptMaxRank] or better
+/// because a busy receipt offers many numbers; a gallery pick needs a
+/// slightly different rule:
+///
+///   * rank 1–2 (labeled / RRN shape) — accept outright,
+///   * exactly one candidate with a KNOWN receipt shape (a Telebirr
+///     invoice, an FT number, an M-Pesa code — OCR ranks those as loose
+///     rank-4 tokens, but the shape detectors recognize them),
+///   * a lone candidate of any rank — the alternative is dead-ending a
+///     screenshot that only carries one number,
+///   * otherwise null: several weak readings would need the chip UI of
+///     the number scanner, so the caller points the user there instead of
+///     guessing.
+ReferenceCandidate? bestGalleryCandidate(List<ReferenceCandidate> found) {
+  final ranked = dedupeAndRank(found);
+  if (ranked.isEmpty) return null;
+  if (ranked.first.rank <= autoAcceptMaxRank) return ranked.first;
+
+  final shaped =
+      ranked.where((c) => bankCandidatesForReference(c.value).isNotEmpty);
+  if (shaped.length == 1) return shaped.first;
+  if (ranked.length == 1) return ranked.first;
+  return null;
 }
 
 // ---------------------------------------------------------------------------

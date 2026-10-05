@@ -48,7 +48,8 @@ passwords and no readable history.
 | `/v1/auth/revoke`         | POST   | —/Bearer | `{refreshToken}` → Revokes refresh token                   |
 | `/v1/vault`               | PUT    | Bearer   | `{blob, revision[, baseRevision]}`; 409 conflict check     |
 | `/v1/vault`               | GET    | Bearer   | `{blob, revision, updatedAt}` / 404 empty                  |
-| `/v1/vault`               | DELETE | Bearer   | Remove the cloud copy                                      |
+| `/v1/vault`               | DELETE | Bearer | Remove the cloud copy                              |
+| `/v1/relay`               | POST   | —      | `{bank, url}` → fetches a geo-blocked Telebirr/M-Pesa receipt page (`bank` allowlisted; GET-only, never an open proxy) |
 
 Every request must carry `X-Mahtem-Client` header.
 

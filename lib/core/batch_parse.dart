@@ -21,6 +21,7 @@ import 'receipt_verify/extra_banks.dart'
     show detectExtraBankFromUrl;
 import 'receipt_verify/models.dart';
 import 'receipt_verify/parsers.dart';
+import 'receipt_verify/reference_shape.dart';
 
 /// Safety cap — an end-of-day till rarely exceeds this, and banks
 /// rate-limit aggressive clients.
@@ -207,11 +208,14 @@ BatchLine _parseLine(String line, BankInfo? bank, String? sharedAccount) {
     );
   }
 
-  //    Telebirr prefix auto-detect only when nothing else claimed the
-  //    line — same rule as the single flow (a manual pick always wins).
+  //    Shape auto-detect only when nothing else claimed the line — same
+  //    rule as the single flow (a manual pick always wins): a reference
+  //    whose shape belongs to exactly one bank (Telebirr invoice, Zemen
+  //    ETTB…, Dashen digits, M-Pesa code…) takes that bank. Ambiguous
+  //    shapes (FT…) stay with the batch bank / need-one accounting.
   String? autoBank;
-  if (bank == null && looksLikeTelebirrReference(line)) {
-    autoBank = 'telebirr';
+  if (bank == null) {
+    autoBank = autoDetectBankForReference(line);
   }
 
   return BatchLine(
