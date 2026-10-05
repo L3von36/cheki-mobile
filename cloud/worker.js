@@ -23,10 +23,14 @@
  *   * Backwards Compatibility:
  *     - Existing legacy session tokens continue to be accepted during rollout.
  *
- * ADMIN (owner-only; v1.15.0 dashboard, v1.16.0 email+password sign-in):
+ * ADMIN (owner-only; v1.15.0 dashboard, v1.16.0 email+password sign-in,
+ * v1.17.0 per-account drill-down + 30-day series):
  *   * GET /admin  — single-page owner dashboard (browser, no client header).
  *   * GET /v1/admin/overview — aggregates every account + vault: totals,
- *     bank popularity, 14-day scan series, per-account rows, recent scans.
+ *     bank popularity (with verified counts), 30-day scan series,
+ *     per-account rows, recent scans.
+ *   * GET /v1/admin/account/<8-hex prefix> — one account's detail: bank
+ *     breakdown, 30-day series, recent events (metadata only, no blob).
  *   * Owner account: ONE owner record (email + PBKDF2-SHA-256 hash, 100k
  *     iterations, per-record random salt — the password never touches
  *     storage). First-run setup creates it; login mints opaque 32-byte
@@ -541,6 +545,7 @@ async function buildAdminOverview(env) {
   let verifiedScans = 0;
   let scansToday = 0;
   let scans7d = 0;
+  let scans30d = 0;
 
   for (const name of await listAllKeys(env, 'vault:')) {
     const raw = await env.KV.get(name);
@@ -563,10 +568,12 @@ async function buildAdminOverview(env) {
       if (ev.v === 1) verifiedScans++;
       if (ev.t >= todayStart) scansToday++;
       if (ev.t >= now - 7 * dayMs) scans7d++;
+      if (ev.t >= now - 30 * dayMs) scans30d++;
       const day = new Date(ev.t).toISOString().slice(0, 10);
       perDay.set(day, (perDay.get(day) || 0) + 1);
-      const bk = perBank.get(ev.b) || { id: ev.b, name: ev.b, count: 0 };
+      const bk = perBank.get(ev.b) || { id: ev.b, name: ev.b, count: 0, verified: 0 };
       bk.count++;
+      if (ev.v === 1) bk.verified++;
       if (ev.n) bk.name = ev.n;
       perBank.set(ev.b, bk);
       const bc = (bankCount.get(ev.b) || 0) + 1;
@@ -600,7 +607,7 @@ async function buildAdminOverview(env) {
   const banks = [...perBank.values()].sort((a, b) => b.count - a.count);
   recent.sort((a, b) => b.t - a.t);
   const days = [];
-  for (let i = 13; i >= 0; i--) {
+  for (let i = 29; i >= 0; i--) {
     const d = new Date(todayStart - i * dayMs).toISOString().slice(0, 10);
     days.push({ day: d, count: perDay.get(d) || 0 });
   }
@@ -614,6 +621,7 @@ async function buildAdminOverview(env) {
       verified: verifiedScans,
       scansToday,
       scans7d,
+      scans30d,
       scanningAccounts7d: accountRows.filter(
         (r) => r.lastScanAt && r.lastScanAt >= now - 7 * dayMs,
       ).length,
@@ -622,6 +630,91 @@ async function buildAdminOverview(env) {
     days,
     accounts: accountRows.slice(0, 500),
     recent: recent.slice(0, 100),
+  };
+}
+
+/**
+ * Per-account drill-down for the admin console (v1.17.0). Served from the
+ * same vault record the overview aggregates — still metadata only: bank
+ * names, outcomes and timestamps. The encrypted blob is never returned.
+ */
+async function buildAdminAccountDetail(env, uidPrefix) {
+  const now = Date.now();
+  const dayMs = 24 * 3600 * 1000;
+  const todayStart = Math.floor(now / dayMs) * dayMs;
+
+  // Resolve the prefix (8-hex shown to admins, or a full 64-hex uid) to
+  // exactly one vault. Ambiguous prefixes are rejected so the console can
+  // never show the wrong account's data.
+  const matches = await listAllKeys(env, `vault:${uidPrefix}`);
+  if (matches.length === 0) return { notFound: true };
+  if (matches.length > 1) {
+    return {
+      ambiguous: true,
+      ids: matches.map((n) => n.slice(6, 14)),
+    };
+  }
+  const uid = matches[0].slice(6);
+
+  const [vaultRaw, userRaw] = await Promise.all([
+    env.KV.get(matches[0]),
+    env.KV.get(`user:${uid}`),
+  ]);
+  if (!vaultRaw) return { notFound: true };
+  let vault;
+  try {
+    vault = JSON.parse(vaultRaw);
+  } catch (_) {
+    return { notFound: true };
+  }
+  let createdAt = null;
+  if (userRaw) {
+    try {
+      createdAt = JSON.parse(userRaw).createdAt ?? null;
+    } catch (_) {
+      /* createdAt stays null */
+    }
+  }
+
+  const events = Array.isArray(vault.stats) ? vault.stats : [];
+  const perBank = new Map();
+  const perDay = new Map();
+  let verified = 0;
+  let lastScanAt = null;
+  for (const ev of events) {
+    if (ev.v === 1) verified++;
+    const bk = perBank.get(ev.b) || { id: ev.b, name: ev.b, count: 0, verified: 0 };
+    bk.count++;
+    if (ev.v === 1) bk.verified++;
+    if (ev.n) bk.name = ev.n;
+    perBank.set(ev.b, bk);
+    const day = new Date(ev.t).toISOString().slice(0, 10);
+    perDay.set(day, (perDay.get(day) || 0) + 1);
+    if (lastScanAt === null || ev.t > lastScanAt) lastScanAt = ev.t;
+  }
+  const banks = [...perBank.values()].sort((a, b) => b.count - a.count);
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(todayStart - i * dayMs).toISOString().slice(0, 10);
+    days.push({ day: d, count: perDay.get(d) || 0 });
+  }
+
+  return {
+    id: uid.slice(0, 8),
+    createdAt,
+    revision: vault.revision ?? null,
+    updatedAt: vault.updatedAt ?? null,
+    scans: events.length,
+    verified,
+    lastScanAt,
+    banks,
+    days,
+    events: events.slice(0, 200).map((ev) => ({
+      t: ev.t,
+      b: ev.b,
+      n: ev.n || ev.b,
+      v: ev.v === 1 ? 1 : 0,
+    })),
   };
 }
 
@@ -672,6 +765,26 @@ export default {
     }
 
     try {
+      // ── admin per-account detail (owner-only, dynamic path) ──────────
+      const adminAccount = route.match(/^GET \/v1\/admin\/account\/([0-9a-fA-F]{8,64})$/);
+      if (adminAccount) {
+        const admin = await requireAdmin(request, env);
+        if (!admin.ok) return err(admin.error, admin.status, admin.message);
+        const detail = await buildAdminAccountDetail(env, adminAccount[1].toLowerCase());
+        if (detail.notFound) return err('not_found', 404, 'No account matches this prefix.');
+        if (detail.ambiguous) {
+          return json(
+            {
+              error: 'ambiguous',
+              message: 'Prefix matches several accounts.',
+              ids: detail.ids,
+            },
+            409,
+          );
+        }
+        return json(detail);
+      }
+
       switch (route) {
         case 'GET /v1/health':
           return json({
@@ -1453,7 +1566,7 @@ function adminDashboardHtml() {
         '<div class="num">' + fmt(b.count) + ' · ' + share + '%</div></div>';
     }).join('') : '<div class="skel">No scan analytics yet — data arrives with the next vault upload from the app (v1.15.0+).</div>';
 
-    var days = d.days || [];
+    var days = (d.days || []).slice(-14);
     var maxD = 1;
     days.forEach(function (x) { if (x.count > maxD) maxD = x.count; });
     el('chart').innerHTML = days.map(function (x) {

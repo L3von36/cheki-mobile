@@ -188,9 +188,49 @@ async function run() {
     days: overview.days.length,
     recent: overview.recent.length,
   });
-  if (overview.totals.accounts < 1 || overview.totals.scans !== 2 || overview.days.length !== 14) {
+  if (overview.totals.accounts < 1 || overview.totals.scans !== 2 || overview.days.length !== 30) {
     throw new Error('Admin overview aggregation is wrong!');
   }
+  if (overview.totals.scans30d !== 2 || overview.banks[0].verified === undefined) {
+    throw new Error('Admin overview v1.17.0 fields missing (scans30d / bank.verified)!');
+  }
+
+  // 11b. Per-account detail (v1.17.0)
+  const acctPrefix = [...env.KV.store.keys()].find((k) => k.startsWith('vault:')).slice(6, 14);
+  const noAuthDetail = await worker.fetch(req(`/v1/admin/account/${acctPrefix}`), env);
+  if (noAuthDetail.status !== 401) throw new Error('Account detail must require auth!');
+  const detailRes = await worker.fetch(req(`/v1/admin/account/${acctPrefix}`, {
+    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+  }), env);
+  const detail = await detailRes.json();
+  console.log('Admin account detail:', detailRes.status, {
+    id: detail.id, scans: detail.scans, verified: detail.verified,
+    banks: (detail.banks || []).map((b) => `${b.id}:${b.count}/${b.verified}`).join(','),
+    events: (detail.events || []).length, days: (detail.days || []).length,
+  });
+  if (detailRes.status !== 200 || detail.scans !== 2 || detail.verified !== 1) {
+    throw new Error('Account detail aggregation is wrong!');
+  }
+  if ((detail.days || []).length !== 30 || (detail.events || []).length !== 2) {
+    throw new Error('Account detail series/events wrong!');
+  }
+  const missingDetail = await worker.fetch(req('/v1/admin/account/00000000', {
+    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+  }), env);
+  if (missingDetail.status !== 404) throw new Error('Unknown prefix must 404!');
+  // Forced prefix collision → 409 ambiguous
+  env.KV.store.set('vault:deadbeef-1111', JSON.stringify({ blob: BLOB, revision: 1, updatedAt: Date.now(), stats: [] }));
+  env.KV.store.set('vault:deadbeef-2222', JSON.stringify({ blob: BLOB, revision: 2, updatedAt: Date.now(), stats: [] }));
+  const ambRes = await worker.fetch(req('/v1/admin/account/deadbeef', {
+    headers: { Authorization: `Bearer ${env.ADMIN_KEY}` },
+  }), env);
+  const amb = await ambRes.json();
+  env.KV.store.delete('vault:deadbeef-1111');
+  env.KV.store.delete('vault:deadbeef-2222');
+  if (ambRes.status !== 409 || amb.error !== 'ambiguous' || (amb.ids || []).length !== 2) {
+    throw new Error('Ambiguous prefix must 409 with ids!');
+  }
+  console.log('Account detail auth/404/ambiguous guards: OK');
 
   // 12. /admin dashboard page serves HTML with NO client header (browser)
   const pageRes = await worker.fetch(new Request('http://localhost/admin'), env);
