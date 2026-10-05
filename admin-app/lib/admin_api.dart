@@ -32,6 +32,7 @@ class AdminTotals {
     required this.scansToday,
     required this.scans7d,
     required this.scanningAccounts7d,
+    this.scans30d = 0,
   });
 
   final int accounts;
@@ -42,6 +43,9 @@ class AdminTotals {
   final int scans7d;
   final int scanningAccounts7d;
 
+  /// v1.17+ API — rolling 30-day scan count.
+  final int scans30d;
+
   factory AdminTotals.fromJson(Map<String, dynamic> j) => AdminTotals(
         accounts: _int(j['accounts']),
         vaults: _int(j['vaults']),
@@ -50,20 +54,30 @@ class AdminTotals {
         scansToday: _int(j['scansToday']),
         scans7d: _int(j['scans7d']),
         scanningAccounts7d: _int(j['scanningAccounts7d']),
+        scans30d: _intOrNull(j['scans30d']) ?? 0,
       );
 }
 
 class AdminBank {
-  const AdminBank({required this.id, required this.name, required this.count});
+  const AdminBank({
+    required this.id,
+    required this.name,
+    required this.count,
+    this.verified = 0,
+  });
 
   final String id;
   final String name;
   final int count;
 
+  /// Verified scan count for this bank (v1.17+ API).
+  final int verified;
+
   factory AdminBank.fromJson(Map<String, dynamic> j) => AdminBank(
         id: _str(j['id']),
         name: _str(j['name']),
         count: _int(j['count']),
+        verified: _intOrNull(j['verified']) ?? 0,
       );
 }
 
@@ -209,6 +223,79 @@ class AdminMe {
       );
 }
 
+/// Per-account drill-down (GET /v1/admin/account/<8-hex prefix>, v1.17+).
+class AdminAccountDetail {
+  const AdminAccountDetail({
+    required this.id,
+    required this.createdAt,
+    required this.revision,
+    required this.updatedAt,
+    required this.scans,
+    required this.verified,
+    required this.lastScanAt,
+    required this.banks,
+    required this.days,
+    required this.events,
+  });
+
+  /// 8-hex prefix.
+  final String id;
+  final int? createdAt;
+  final int? revision;
+  final int? updatedAt;
+  final int scans;
+  final int verified;
+  final int? lastScanAt;
+  final List<AdminBank> banks;
+  final List<AdminDay> days;
+  final List<AdminEventDetail> events;
+
+  factory AdminAccountDetail.fromJson(Map<String, dynamic> j) =>
+      AdminAccountDetail(
+        id: _str(j['id']),
+        createdAt: _intOrNull(j['createdAt']),
+        revision: _intOrNull(j['revision']),
+        updatedAt: _intOrNull(j['updatedAt']),
+        scans: _int(j['scans']),
+        verified: _int(j['verified']),
+        lastScanAt: _intOrNull(j['lastScanAt']),
+        banks: (j['banks'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(AdminBank.fromJson)
+            .toList(),
+        days: (j['days'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(AdminDay.fromJson)
+            .toList(),
+        events: (j['events'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(AdminEventDetail.fromJson)
+            .toList(),
+      );
+}
+
+/// One scan event inside [AdminAccountDetail] (no account prefix — implicit).
+class AdminEventDetail {
+  const AdminEventDetail({
+    required this.t,
+    required this.bankId,
+    required this.bankName,
+    required this.verified,
+  });
+
+  final int t;
+  final String bankId;
+  final String bankName;
+  final int verified;
+
+  factory AdminEventDetail.fromJson(Map<String, dynamic> j) => AdminEventDetail(
+        t: _int(j['t']),
+        bankId: _str(j['b']),
+        bankName: _str(j['n']),
+        verified: _int(j['v']),
+      );
+}
+
 // ── Errors ──────────────────────────────────────────────────────────────────
 
 enum AdminErrorType {
@@ -229,6 +316,9 @@ enum AdminErrorType {
 
   /// Password shorter than 10 chars or invalid email shape.
   badInput,
+
+  /// No account matches the requested prefix (404).
+  notFound,
 
   /// Admin never configured on this deployment (503).
   disabled,
@@ -258,6 +348,8 @@ class AdminException implements Exception {
 
 abstract class AdminApiClient {
   Future<AdminOverview> overview(String token);
+
+  Future<AdminAccountDetail> accountDetail(String token, String uid);
 
   Future<bool> hasAdmin();
 
@@ -363,6 +455,10 @@ class AdminApi implements AdminApiClient {
         return AdminErrorType.alreadyExists;
       case 'no_admin':
         return AdminErrorType.noAdmin;
+      case 'not_found':
+        return AdminErrorType.notFound;
+      case 'ambiguous':
+        return AdminErrorType.badInput;
       case 'admin_disabled':
         return AdminErrorType.disabled;
       case 'admin_required':
@@ -399,6 +495,8 @@ class AdminApi implements AdminApiClient {
         return 'No owner account exists yet. Create one first.';
       case AdminErrorType.badInput:
         return 'Check the fields and try again.';
+      case AdminErrorType.notFound:
+        return 'No account matches this prefix.';
       case AdminErrorType.disabled:
         return 'Admin access is not configured on this deployment.';
       case AdminErrorType.network:
@@ -451,6 +549,58 @@ class AdminApi implements AdminApiClient {
         body['days'] is! List ||
         body['accounts'] is! List ||
         body['recent'] is! List) {
+      throw const AdminException(
+        AdminErrorType.invalidResponse,
+        200,
+        'Unexpected response from the Mahtem API.',
+      );
+    }
+  }
+
+  @override
+  Future<AdminAccountDetail> accountDetail(String token, String uid) async {
+    final prefix = uid.toLowerCase();
+    if (prefix.length < 8 || prefix.length > 64 || !RegExp(r'^[0-9a-f]+$').hasMatch(prefix)) {
+      throw const AdminException(
+        AdminErrorType.badInput,
+        0,
+        'Account prefix must be 8-64 hex characters.',
+      );
+    }
+    final res = await _send(
+      () => _client.get(
+            _uri('/v1/admin/account/$prefix'),
+            headers: _headers(token: token),
+          ),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(
+        res.statusCode,
+        await _safeBody(res),
+        res.statusCode == 401
+            ? AdminErrorType.sessionExpired
+            : res.statusCode == 404
+                ? AdminErrorType.notFound
+                : AdminErrorType.server,
+      );
+    }
+    final body = await _readJson(res);
+    try {
+      if (body['id'] is! String ||
+          body['scans'] is! int ||
+          body['banks'] is! List ||
+          body['days'] is! List ||
+          body['events'] is! List) {
+        throw const AdminException(
+          AdminErrorType.invalidResponse,
+          200,
+          'Unexpected response from the Mahtem API.',
+        );
+      }
+      return AdminAccountDetail.fromJson(body);
+    } on AdminException {
+      rethrow;
+    } on Object {
       throw const AdminException(
         AdminErrorType.invalidResponse,
         200,

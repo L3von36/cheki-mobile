@@ -36,6 +36,98 @@ const _validBody = '''
 ''';
 
 void main() {
+  group('AdminApi.accountDetail', () {
+    const detailBody = '''
+{
+  "id": "89da157c",
+  "createdAt": 1791112376385,
+  "revision": 1791116029043,
+  "updatedAt": 1791116051918,
+  "scans": 8,
+  "verified": 6,
+  "lastScanAt": 1791144000000,
+  "banks": [
+    {"id": "cbe", "name": "CBE", "count": 5, "verified": 5},
+    {"id": "telebirr", "name": "Telebirr", "count": 2, "verified": 1}
+  ],
+  "days": [
+    {"day": "2026-10-04", "count": 1},
+    {"day": "2026-10-05", "count": 2}
+  ],
+  "events": [
+    {"t": 1791144000000, "b": "cbe", "n": "CBE", "v": 1},
+    {"t": 1791143900000, "b": "telebirr", "n": "Telebirr", "v": 0}
+  ]
+}
+''';
+
+    test('parses the drill-down document and hits the right path', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(detailBody, 200);
+        }),
+      );
+
+      final detail = await api.accountDetail('a' * 32, '89DA157C');
+
+      expect(captured.url.path, '/v1/admin/account/89da157c');
+      expect(detail.id, '89da157c');
+      expect(detail.scans, 8);
+      expect(detail.verified, 6);
+      expect(detail.banks.first.verified, 5);
+      expect(detail.banks.last.count, 2);
+      expect(detail.days.last.count, 2);
+      expect(detail.events.first.bankName, 'CBE');
+      expect(detail.events.first.verified, 1);
+      expect(detail.events.last.verified, 0);
+    });
+
+    test('rejects malformed prefixes locally', () async {
+      var called = false;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          called = true;
+          return http.Response('{}', 200);
+        }),
+      );
+      await expectLater(
+        api.accountDetail('a' * 32, 'xyz'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.badInput)),
+      );
+      expect(called, isFalse, reason: 'no network round-trip for bad input');
+    });
+
+    test('404 maps to notFound', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'not_found', 'message': 'No account matches this prefix.'}),
+            404)),
+      );
+      await expectLater(
+        api.accountDetail('a' * 32, '89da157c'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.notFound)
+            .having((e) => e.status, 'status', 404)),
+      );
+    });
+
+    test('401 maps to sessionExpired', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'admin_session_expired', 'message': 'Sign in again.'}),
+            401)),
+      );
+      await expectLater(
+        api.accountDetail('a' * 32, '89da157c'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.sessionExpired)),
+      );
+    });
+  });
+
   group('AdminApi.overview', () {
     test('parses the full overview document and sends the right headers', () async {
       late http.Request captured;

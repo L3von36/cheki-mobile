@@ -55,6 +55,25 @@ class FakeAdminApi implements AdminApiClient {
     return _overview();
   }
 
+  int detailCalls = 0;
+
+  @override
+  Future<AdminAccountDetail> accountDetail(String token, String uid) async {
+    detailCalls++;
+    return AdminAccountDetail(
+      id: uid,
+      createdAt: 1700000000000,
+      revision: 3,
+      updatedAt: 1700000100000,
+      scans: 2,
+      verified: 1,
+      lastScanAt: 1700000090000,
+      banks: const [AdminBank(id: 'cbe', name: 'CBE', count: 2, verified: 1)],
+      days: const [AdminDay(day: '2026-10-05', count: 2)],
+      events: const [],
+    );
+  }
+
   @override
   Future<bool> hasAdmin() async => ownerEmail.isNotEmpty;
 
@@ -429,6 +448,28 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('mahtem.admin.autorefresh'), isFalse);
+    });
+
+    test('accountDetail() caches per account within the TTL window', () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      final first = await controller.accountDetail('89da157c');
+      final second = await controller.accountDetail('89da157c');
+      expect(api.detailCalls, 1, reason: 'second call hits the 60s cache');
+      expect(first.id, '89da157c');
+      expect(second.id, first.id);
+
+      await controller.accountDetail('9dbba391');
+      expect(api.detailCalls, 2, reason: 'a different account is a fresh fetch');
+
+      await controller.signOut();
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+      await controller.accountDetail('89da157c');
+      expect(api.detailCalls, 3,
+          reason: 'sign-out/sign-in clears the drill-down cache');
     });
   });
 }

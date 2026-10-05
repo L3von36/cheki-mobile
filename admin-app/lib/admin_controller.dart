@@ -222,6 +222,40 @@ class AdminController extends ChangeNotifier {
     return _load(token, silent: silent);
   }
 
+  static const _detailCacheTtlMs = 60 * 1000;
+
+  final Map<String, AdminAccountDetail> _detailCache = {};
+  final Map<String, int> _detailFetchedAt = {};
+
+  /// Per-account drill-down with a 60s per-account cache.
+  /// Throws [AdminException] on failure (session expired, not found, …).
+  Future<AdminAccountDetail> accountDetail(String uid) async {
+    final token = _token;
+    if (token == null) {
+      throw const AdminException(
+        AdminErrorType.sessionExpired,
+        401,
+        'Session expired — sign in again.',
+      );
+    }
+    final fresh = _detailCache[uid];
+    final at = _detailFetchedAt[uid] ?? 0;
+    if (fresh != null &&
+        DateTime.now().millisecondsSinceEpoch - at < _detailCacheTtlMs) {
+      return fresh;
+    }
+    final detail = await api.accountDetail(token, uid);
+    _detailCache[uid] = detail;
+    _detailFetchedAt[uid] = DateTime.now().millisecondsSinceEpoch;
+    return detail;
+  }
+
+  /// Drop cached drill-downs (used when the session rotates).
+  void clearDetailCache() {
+    _detailCache.clear();
+    _detailFetchedAt.clear();
+  }
+
   Future<bool> _load(String token, {bool silent = false}) async {
     if (!silent) {
       busy = true;
@@ -250,6 +284,7 @@ class AdminController extends ChangeNotifier {
   Future<void> _adoptSession(AdminSession session) async {
     _token = session.token;
     email = session.email;
+    clearDetailCache();
     error = null;
     lastErrorType = null;
     final prefs = await _prefsFuture;
@@ -279,6 +314,7 @@ class AdminController extends ChangeNotifier {
     email = null;
     overview = null;
     lastUpdatedMs = null;
+    clearDetailCache();
     error = null;
     lastErrorType = null;
     restoreFailed = false;

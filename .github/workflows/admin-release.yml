@@ -154,13 +154,23 @@ jobs:
             network — every account, every synced scan, bank popularity and
             live activity, in your pocket.
 
+            ### What's new in v1.2.0
+            - **Bottom navigation bar** — app-style tabs: Home, Accounts,
+              Activity, Banks and Settings, each with live count badges
+            - **Account drill-down** — tap any account for its scans,
+              verification rate, per-bank breakdown and event timeline
+            - **Filterable activity feed** — outcome + bank filters, grouped
+              by day
+            - Full bank ranking with per-bank verification success
+            - Settings tab: owner profile, change password, sign out,
+              auto-refresh preference
+
             ### What it shows
             - Registered accounts & cloud-synced vaults
-            - Total scans, verification success rate, scans today / 7 days
-            - 14-day scan activity chart
+            - Total scans, verification success rate, scans today / 7 / 30 days
+            - 14-day scan activity chart (30-day series on every account)
             - **Most-used banks** ranking (which bank do people verify most?)
             - Recent scan activity feed
-            - Per-account overview with CSV-style details
 
             ### Sign-in
             Real owner account — **email + password** (v1.1.0+). On the very
