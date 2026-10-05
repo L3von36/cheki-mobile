@@ -132,7 +132,7 @@ jobs:
 
             **Mahtem** (ማህተም — Amharic for *"stamp / seal"*) — free Ethiopian
             bank receipt verification. CBE, Telebirr, BOA, M-Pesa, Dashen,
-            Awash, Zemen, CBE Birr, Siinqee and eBirr.
+            Awash, Wegagen, Amhara, Abay, Zemen, CBE Birr, Siinqee and eBirr.
 
             ### Install
             1. Download **`mahtem-${{ github.ref_name }}-arm64.apk`** — fits almost
