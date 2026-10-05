@@ -656,10 +656,7 @@ async function buildAdminAccountDetail(env, uidPrefix) {
   }
   const uid = matches[0].slice(6);
 
-  const [vaultRaw, userRaw] = await Promise.all([
-    env.KV.get(matches[0]),
-    env.KV.get(`user:${uid}`),
-  ]);
+  const vaultRaw = await env.KV.get(matches[0]);
   if (!vaultRaw) return { notFound: true };
   let vault;
   try {
@@ -667,12 +664,20 @@ async function buildAdminAccountDetail(env, uidPrefix) {
   } catch (_) {
     return { notFound: true };
   }
+  // createdAt lives on user:<identifierHash> records keyed by record.id —
+  // resolve it by id match (the vault key uses the account uuid).
   let createdAt = null;
-  if (userRaw) {
+  for (const name of await listAllKeys(env, 'user:')) {
+    const raw = await env.KV.get(name);
+    if (!raw) continue;
     try {
-      createdAt = JSON.parse(userRaw).createdAt ?? null;
+      const r = JSON.parse(raw);
+      if (r.id === uid) {
+        createdAt = r.createdAt ?? null;
+        break;
+      }
     } catch (_) {
-      /* createdAt stays null */
+      /* skip corrupt record */
     }
   }
 
