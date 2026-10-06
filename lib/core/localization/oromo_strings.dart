@@ -406,6 +406,27 @@ final class OromoStrings extends AppStrings {
   String get bankShortLabel => 'Baankii';
 
   @override
+  String get addReasonAction => 'Sababa dabalaa';
+
+  @override
+  String get editReasonAction => 'Sababa gulaalaa';
+
+  @override
+  String get reasonSheetTitle => 'Yaalichi kun maalaf ture?';
+
+  @override
+  String get reasonSheetHint => 'Fakkeenyaaf: qacara, bittaa, ajaja #12';
+
+  @override
+  String get reasonSaveButton => 'Olkaa\u2019i';
+
+  @override
+  String get reasonSavedToast => 'Sababichi seenaa keessatti olkaa\u2019eera.';
+
+  @override
+  String get yourReasonLabel => 'Sababa kee';
+
+  @override
   String shareText({
     required String bankName,
     required String reference,

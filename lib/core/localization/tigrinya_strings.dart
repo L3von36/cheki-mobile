@@ -397,6 +397,27 @@ final class TigrinyaStrings extends AppStrings {
   String get bankShortLabel => 'ባንክ';
 
   @override
+  String get addReasonAction => 'ምኽንያት ወስኸሉ';
+
+  @override
+  String get editReasonAction => 'ምኽንያት ኣስተካክሉ';
+
+  @override
+  String get reasonSheetTitle => 'እዚ ፍተሻ ንምንድን ነይሩ?';
+
+  @override
+  String get reasonSheetHint => 'ከም ኣብኣት፡ ኪራይ፣ ዕድጊ፣ ትእዛዝ #12';
+
+  @override
+  String get reasonSaveButton => 'ኣቐምጥ';
+
+  @override
+  String get reasonSavedToast => 'ምኽንያቱ ኣብ ታሪኽ ተቐሚጡ እዩ።';
+
+  @override
+  String get yourReasonLabel => 'ምኽንያትካ';
+
+  @override
   String shareText({
     required String bankName,
     required String reference,

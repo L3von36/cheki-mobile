@@ -281,7 +281,7 @@ void main() {
     final lines = csv.trim().split('\n');
 
     expect(lines.first,
-        'Checked at,Status,Bank,Reference,Amount,Currency,Sender,Receiver,Receipt date,Note');
+        'Checked at,Status,Bank,Reference,Amount,Currency,Sender,Receiver,Receipt date,Note,Reason');
     // Chronological export: the 30-day-old CBE row leads, the newest is last.
     expect(lines[1], contains('CBE'));
     expect(lines[2], contains('Telebirr'));

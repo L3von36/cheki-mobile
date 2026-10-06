@@ -53,13 +53,42 @@ class CloudSession {
 
   const CloudSession({
     required this.sessionToken,
-    this.refreshToken,
+    required this.refreshToken,
     required this.userId,
     required this.expiresAtMs,
   });
 
   /// Alias for OAuth 2.0 terminology.
   String get accessToken => sessionToken;
+}
+
+/// A broadcast the owner composes in the admin console; the Worker
+/// serves active announcements to every install at /v1/announcements.
+class CloudAnnouncement {
+  final String id;
+  final String message;
+
+  /// 'info' | 'warn' | 'critical'.
+  final String level;
+  final int createdAtMs;
+
+  const CloudAnnouncement({
+    required this.id,
+    required this.message,
+    required this.level,
+    required this.createdAtMs,
+  });
+
+  bool get isCritical => level == 'critical';
+  bool get isWarn => level == 'warn';
+
+  factory CloudAnnouncement.fromJson(Map<String, dynamic> j) =>
+      CloudAnnouncement(
+        id: j['id'] as String? ?? '',
+        message: j['message'] as String? ?? '',
+        level: j['level'] as String? ?? 'info',
+        createdAtMs: (j['createdAt'] as num?)?.toInt() ?? 0,
+      );
 }
 
 class CloudVaultRemote {
@@ -298,4 +327,17 @@ class CloudApi {
 
   Future<void> deleteVault(String sessionToken) =>
       _send('DELETE', '/v1/vault', bearer: sessionToken);
+
+  /// The owner's broadcasts, active-only (newest first). Cheap, public
+  /// and best-effort — offline installs skip the banner.
+  Future<List<CloudAnnouncement>> fetchAnnouncements() async {
+    final r = await _send('GET', '/v1/announcements');
+    final list = r['announcements'];
+    if (list is! List) return const [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(CloudAnnouncement.fromJson)
+        .where((a) => a.id.isNotEmpty && a.message.isNotEmpty)
+        .toList();
+  }
 }

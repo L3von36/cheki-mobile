@@ -240,6 +240,31 @@ abstract base class AppStrings {
   String get statusLabel;
   String get bankShortLabel;
 
+  // ----------------------------------------------- check reason (v1.16.0)
+
+  /// Button on the result screen / history details sheet — write a short
+  /// note of what this verified receipt was for.
+  String get addReasonAction;
+
+  /// Same button once a reason already exists.
+  String get editReasonAction;
+
+  /// Title of the reason sheet.
+  String get reasonSheetTitle;
+
+  /// Hint inside the reason text field.
+  String get reasonSheetHint;
+
+  /// Save button inside the reason sheet.
+  String get reasonSaveButton;
+
+  /// Toast after the reason was stored.
+  String get reasonSavedToast;
+
+  /// Row/card label for the user's own reason note (distinct from the
+  /// bank-reported payment [reasonLabel] on the receipt).
+  String get yourReasonLabel;
+
   /// The multi-line text the share sheet receives after a verified
   /// receipt.
   String shareText({

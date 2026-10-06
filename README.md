@@ -97,9 +97,16 @@ your first 5 checks are free.
   verify. No banners, no clutter. Light & dark themes.
 - **Payment History** — every check is saved on-device with a summary
   strip (checks / verified / total), Today / Yesterday / This week /
-  Earlier date groups, search, status filters, swipe-to-delete with undo
-  (long-press works too), "Verify again" prefill, and a one-tap CSV
-  share of the whole history
+  Earlier date groups, search (covers your reason notes too), status
+  filters, swipe-to-delete with undo (long-press works too),
+  "Verify again" prefill, and a one-tap CSV share of the whole history
+- **Reason notes** — once a receipt verifies, jot down why you checked it
+  ("rent", "order #12"). The note shows on the history tile, the details
+  sheet and the result screen, exports with the CSV, and rides the
+  encrypted cloud vault like the rest of your history
+- **Service announcements** — when the Mahtem team broadcasts a notice
+  from the admin console (planned maintenance, a bank outage, a new bank
+  going live), a dismissible banner shows it on the Verify tab
 - **Honest failures** — receipt not found or bank down? The result screen
   says exactly why and lists what to do next
 - **Crash reports (opt-in Sentry)** — release APKs built with a Sentry
@@ -114,12 +121,16 @@ your first 5 checks are free.
 ## Mahtem Admin — owner console (`admin-app/`)
 
 A separate, owner-only Android app lives in [`admin-app/`](admin-app/): every
-account, every synced scan, 14-day activity, **bank popularity** (which bank
-do people verify most?) and a live scan feed — with the same zero-knowledge
-guarantees (receipt contents stay encrypted; the console sees banks,
-outcomes and counts only). Sign in once with the Worker's `ADMIN_KEY`
-secret; it stays on the device. Releases are tagged `admin-vX.Y.Z` and
-published by `.github/workflows/admin-release.yml`
+account, every synced scan, bank popularity (which bank do people verify
+most?) and a live scan feed — plus the full operations panel: **suspend /
+delete any account** (typed confirmation, sessions wiped on sight), **post
+announcements** that show up in every user's app, **allow/block new
+sign-ups**, toggle **maintenance mode**, manage additional **admin
+accounts**, and read the server-side **audit trail** of every action. All
+with the same zero-knowledge guarantees (receipt contents stay encrypted;
+the console sees banks, outcomes and counts only). Sign in once with the
+owner email + password; it stays on the device. Releases are tagged
+`admin-vX.Y.Z` and published by `.github/workflows/admin-release.yml`
 (`mahtem-admin-<tag>-arm64/arm32/universal.apk`).
 
 ## How verification works

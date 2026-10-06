@@ -13,6 +13,7 @@ import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/bank_avatar.dart';
 import '../widgets/pressable.dart';
+import '../widgets/reason_sheet.dart';
 import '../../state/cloud_controller.dart';
 
 /// Status filter above the history list.
@@ -47,6 +48,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final cloud = context.read<CloudController>();
         final history = context.read<VerifyHistory>();
         cloud.pollNow(history);
+        cloud.refreshAnnouncements();
       }
     });
   }
@@ -66,7 +68,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         hit(entry.bankName) ||
         hit(entry.title) ||
         hit(entry.senderName) ||
-        hit(entry.receiverName);
+        hit(entry.receiverName) ||
+        hit(entry.reason);
   }
 
   List<HistoryEntry> _filtered(List<HistoryEntry> entries) {
@@ -175,31 +178,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return rows;
   }
 
-  /// "Verify again": prefill the form with this entry's bank + reference,
-  /// switch to the Verify tab and let the user run the check. No network
-  /// call fires here — the user stays in control (and no check burns).
-  void _verifyAgain(BuildContext context, HistoryEntry entry) {
-    final reference = entry.reference.trim();
-    if (reference.isEmpty) return;
-    // Capture everything the toast needs BEFORE the sheet pops — the
-    // sheet's context is defunct afterwards.
-    final strings = context.read<LocaleController>().strings;
-    final controller = context.read<VerifyController>();
-    controller.resetAll();
-    final bank = bankByIdAll(entry.bankId);
-    if (bank != null) controller.manualBank = bank;
-    controller.setReference(reference);
-    context.read<AppTab>().switchTo(0);
-    HapticFeedback.selectionClick();
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop(); // close the details sheet
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(strings.prefilledToast),
-      ),
-    );
-  }
+  /// "Verify again" now lives on [_DetailsSheet] so the details sheet can
+  /// trigger it directly with its own context.
 
   void _closeSearch() {
     setState(() {
@@ -271,6 +251,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           final cloud = context.read<CloudController>();
           final history = context.read<VerifyHistory>();
           await cloud.pollNow(history);
+          await cloud.refreshAnnouncements();
         },
         child: entries.isEmpty
             ? LayoutBuilder(
@@ -380,116 +361,205 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _showDetails(BuildContext context, HistoryEntry entry) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final s = context.read<LocaleController>().strings;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) {
-        return SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context) => _DetailsSheet(entryId: entry.id),
+    );
+  }
+}
+
+/// Details sheet for one entry. Watches history so edits made while it
+/// is open — a reason note saved from its own "Add reason" button —
+/// show up immediately without reopening the sheet.
+class _DetailsSheet extends StatelessWidget {
+  final String entryId;
+
+  const _DetailsSheet({required this.entryId});
+
+  @override
+  Widget build(BuildContext context) {
+    final history = context.watch<VerifyHistory>();
+    final entry = history.getById(entryId);
+    if (entry == null) return const SizedBox.shrink();
+    final s = context.watch<LocaleController>().strings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      entry.isVerified
-                          ? Icons.check_circle_rounded
-                          : Icons.cancel_rounded,
-                      color: entry.isVerified
-                          ? MahtemPalette.green
-                          : MahtemPalette.red,
-                      size: 20,
+                Icon(
+                  entry.isVerified
+                      ? Icons.check_circle_rounded
+                      : Icons.cancel_rounded,
+                  color: entry.isVerified
+                      ? MahtemPalette.green
+                      : MahtemPalette.red,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    entry.isVerified
+                        ? s.verifiedPaymentLabel
+                        : s.notVerifiedLabel,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? MahtemPalette.dInk
+                          : MahtemPalette.navy,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        entry.isVerified
-                            ? s.verifiedPaymentLabel
-                            : s.notVerifiedLabel,
-                        style: TextStyle(
-                          fontSize: 14,
+                  ),
+                ),
+                Text(
+                  formatAmount(entry.amount, entry.currency),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: entry.isVerified
+                        ? MahtemPalette.green
+                        : MahtemPalette.red,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _Detail(label: s.bankShortLabel, value: entry.bankName),
+            _Detail(label: s.referenceShortLabel, value: entry.reference),
+            if (entry.title.isNotEmpty)
+              _Detail(label: s.senderLabel, value: entry.title),
+            if ((entry.receiverName ?? '').isNotEmpty)
+              _Detail(label: s.receiverLabel, value: entry.receiverName!),
+            if ((entry.receiptDate ?? '').isNotEmpty)
+              _Detail(label: s.dateLabel, value: entry.receiptDate!),
+            _Detail(
+              label: s.checkedLabel,
+              value: formatReceiptDate(
+                DateTime.fromMillisecondsSinceEpoch(entry.verifiedAt)
+                    .toIso8601String(),
+              ),
+            ),
+            if ((entry.message ?? '').isNotEmpty)
+              _Detail(label: s.noteLabel, value: entry.message!),
+            if ((entry.reason ?? '').isNotEmpty)
+              _Detail(label: s.yourReasonLabel, value: entry.reason!),
+            if (entry.reference.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Pressable(
+                onTap: () => _verifyAgain(context, entry),
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: MahtemPalette.buttonGradient,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white,
+                        size: 17,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        s.verifyAgain,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? MahtemPalette.dInk
-                              : MahtemPalette.navy,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: isDark
+                        ? MahtemPalette.dBorder
+                        : MahtemPalette.lBorder,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () => showReasonSheet(context, entryId),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      (entry.reason ?? '').isEmpty
+                          ? Icons.add_comment_outlined
+                          : Icons.edit_outlined,
+                      size: 16,
+                      color: isDark
+                          ? MahtemPalette.dInkDim
+                          : MahtemPalette.lInkDim,
                     ),
+                    const SizedBox(width: 7),
                     Text(
-                      formatAmount(entry.amount, entry.currency),
+                      (entry.reason ?? '').isEmpty
+                          ? s.addReasonAction
+                          : s.editReasonAction,
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: entry.isVerified
-                            ? MahtemPalette.green
-                            : MahtemPalette.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? MahtemPalette.dInkDim
+                            : MahtemPalette.lInkDim,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                _Detail(label: s.bankShortLabel, value: entry.bankName),
-                _Detail(label: s.referenceShortLabel, value: entry.reference),
-                if (entry.title.isNotEmpty)
-                  _Detail(label: s.senderLabel, value: entry.title),
-                if ((entry.receiverName ?? '').isNotEmpty)
-                  _Detail(label: s.receiverLabel, value: entry.receiverName!),
-                if ((entry.receiptDate ?? '').isNotEmpty)
-                  _Detail(label: s.dateLabel, value: entry.receiptDate!),
-                _Detail(
-                  label: s.checkedLabel,
-                  value: formatReceiptDate(
-                    DateTime.fromMillisecondsSinceEpoch(entry.verifiedAt)
-                        .toIso8601String(),
-                  ),
-                ),
-                if ((entry.message ?? '').isNotEmpty)
-                  _Detail(label: s.noteLabel, value: entry.message!),
-                if (entry.reference.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Pressable(
-                    onTap: () => _verifyAgain(context, entry),
-                    child: Container(
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: MahtemPalette.buttonGradient,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.refresh_rounded,
-                            color: Colors.white,
-                            size: 17,
-                          ),
-                          const SizedBox(width: 7),
-                          Text(
-                            s.verifyAgain,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "Verify again": prefill the form with this entry's bank + reference,
+  /// switch to the Verify tab and let the user run the check. No network
+  /// call fires here — the user stays in control (and no check burns).
+  void _verifyAgain(BuildContext context, HistoryEntry entry) {
+    final reference = entry.reference.trim();
+    if (reference.isEmpty) return;
+    // Capture everything the toast needs BEFORE the sheet pops — the
+    // sheet's context is defunct afterwards.
+    final strings = context.read<LocaleController>().strings;
+    final controller = context.read<VerifyController>();
+    controller.resetAll();
+    final bank = bankByIdAll(entry.bankId);
+    if (bank != null) controller.manualBank = bank;
+    controller.setReference(reference);
+    context.read<AppTab>().switchTo(0);
+    HapticFeedback.selectionClick();
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop(); // close the details sheet
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(strings.prefilledToast),
+      ),
     );
   }
 }
@@ -856,6 +926,36 @@ class _EntryCard extends StatelessWidget {
                           : MahtemPalette.lInkDim,
                     ),
                   ),
+                  if ((entry.reason ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.notes_rounded,
+                            size: 11,
+                            color: MahtemPalette.green
+                                .withValues(alpha: isDark ? 0.8 : 1),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              entry.reason!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? MahtemPalette.dInkDim
+                                    : MahtemPalette.lInkDim,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -134,9 +134,12 @@ Future<void> runVerificationFlow(BuildContext context) async {
     }
   }
 
-  // Record the check in local history (verified AND failed).
+  // Record the check in local history (verified AND failed). The entry's
+  // id travels to the result screen so a verified receipt can be given
+  // a reason note right away.
+  String? recordedId;
   try {
-    await context.read<VerifyHistory>().record(
+    final recorded = await context.read<VerifyHistory>().record(
           result,
           bankId: controller.effectiveBank?.id ??
               result.receipt?.bankCode ??
@@ -146,6 +149,7 @@ Future<void> runVerificationFlow(BuildContext context) async {
               'Bank',
           referenceFallback: controller.reference.trim(),
         );
+    recordedId = recorded.id;
   } catch (_) {
     // History must never block verification.
   }
@@ -158,7 +162,7 @@ Future<void> runVerificationFlow(BuildContext context) async {
   await Navigator.of(context).push<void>(
     PageRouteBuilder<void>(
       pageBuilder: (context, animation, secondaryAnimation) =>
-          const ResultScreen(),
+          ResultScreen(historyEntryId: recordedId),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
           parent: animation,

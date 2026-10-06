@@ -32,6 +32,11 @@ class HistoryEntry {
   /// Error / failure message for failed checks.
   final String? message;
 
+  /// Why this receipt was checked — a short note the user writes after a
+  /// verification ("rent", "order #12") so the history explains itself.
+  /// Optional and new: rows saved by older versions simply decode as null.
+  final String? reason;
+
   const HistoryEntry({
     required this.id,
     required this.bankId,
@@ -45,6 +50,7 @@ class HistoryEntry {
     required this.verifiedAt,
     required this.status,
     this.message,
+    this.reason,
   });
 
   bool get isVerified => status == 'verified';
@@ -71,6 +77,7 @@ class HistoryEntry {
         'verifiedAt': verifiedAt,
         'status': status,
         if (message != null) 'message': message,
+        if (reason != null) 'reason': reason,
       };
 
   factory HistoryEntry.fromJson(Map<String, dynamic> json) => HistoryEntry(
@@ -86,6 +93,7 @@ class HistoryEntry {
         verifiedAt: json['verifiedAt'] as int? ?? 0,
         status: json['status'] as String? ?? 'failed',
         message: json['message'] as String?,
+        reason: json['reason'] as String?,
       );
 
   /// Builds an entry from a stylepos verification result.
@@ -198,7 +206,9 @@ class VerifyHistory extends ChangeNotifier {
 
   /// Prepends a new entry and persists. Local scans enter the analytics
   /// pending queue here — the single choke point for user-driven checks.
-  Future<void> add(HistoryEntry entry) async {
+  /// Returns the stored entry so callers can link follow-up actions
+  /// (e.g. "add a reason" on the result screen) to the fresh row.
+  Future<HistoryEntry> add(HistoryEntry entry) async {
     await ensureLoaded();
     _entries.insert(0, entry);
     if (_entries.length > _maxEntries) _entries.removeRange(_maxEntries, _entries.length);
@@ -209,10 +219,12 @@ class VerifyHistory extends ChangeNotifier {
     notifyListeners();
     await _persist();
     _persistPending();
+    return entry;
   }
 
-  /// Convenience: record straight from a stylepos [VerifyResult].
-  Future<void> record(
+  /// Convenience: record straight from a stylepos [VerifyResult]. Returns
+  /// the stored entry (see [add]).
+  Future<HistoryEntry> record(
     VerifyResult result, {
     required String bankId,
     required String bankName,
@@ -224,6 +236,37 @@ class VerifyHistory extends ChangeNotifier {
         bankName: bankName,
         referenceFallback: referenceFallback,
       ));
+
+  /// Sets (or clears, when [reason] is blank) the user's reason note on
+  /// an existing entry. The id and every other field stay untouched, so
+  /// cloud merges keep deduping by id and the local copy wins — the note
+  /// propagates to the encrypted vault on the next auto-sync.
+  Future<void> setReason(String id, String? reason) async {
+    await ensureLoaded();
+    final trimmed = reason?.trim() ?? '';
+    final value = trimmed.isEmpty ? null : trimmed;
+    final i = _entries.indexWhere((e) => e.id == id);
+    if (i < 0) return;
+    final old = _entries[i];
+    if (old.reason == value) return;
+    _entries[i] = HistoryEntry(
+      id: old.id,
+      bankId: old.bankId,
+      bankName: old.bankName,
+      reference: old.reference,
+      senderName: old.senderName,
+      receiverName: old.receiverName,
+      amount: old.amount,
+      currency: old.currency,
+      receiptDate: old.receiptDate,
+      verifiedAt: old.verifiedAt,
+      status: old.status,
+      message: old.message,
+      reason: value,
+    );
+    notifyListeners();
+    await _persist();
+  }
 
   Future<void> remove(String id) async {
     await ensureLoaded();
@@ -293,7 +336,7 @@ class VerifyHistory extends ChangeNotifier {
 
     final buf = StringBuffer(
       'Checked at,Status,Bank,Reference,Amount,Currency,Sender,Receiver,'
-      'Receipt date,Note\n',
+      'Receipt date,Note,Reason\n',
     );
     // entries are newest-first; reverse for a chronological export.
     for (final e in _entries.reversed) {
@@ -310,6 +353,7 @@ class VerifyHistory extends ChangeNotifier {
         e.receiverName ?? '',
         e.receiptDate ?? '',
         e.message ?? '',
+        e.reason ?? '',
       ].map(cell).join(','));
     }
     return buf.toString();

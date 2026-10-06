@@ -385,6 +385,27 @@ final class EnglishStrings extends AppStrings {
   String get bankShortLabel => 'Bank';
 
   @override
+  String get addReasonAction => 'Add reason';
+
+  @override
+  String get editReasonAction => 'Edit reason';
+
+  @override
+  String get reasonSheetTitle => 'What was this check for?';
+
+  @override
+  String get reasonSheetHint => 'e.g. Rent, purchase, order #12';
+
+  @override
+  String get reasonSaveButton => 'Save';
+
+  @override
+  String get reasonSavedToast => 'Reason saved to history';
+
+  @override
+  String get yourReasonLabel => 'Your reason';
+
+  @override
   String shareText({
     required String bankName,
     required String reference,

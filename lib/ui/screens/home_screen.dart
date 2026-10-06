@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/cloud/cloud_api.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/receipt_verify/models.dart';
+import '../../state/cloud_controller.dart';
 import '../../state/license_controller.dart';
 import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';
@@ -17,7 +21,9 @@ import '../widgets/settings_sheet.dart';
 
 /// Verify tab — deliberately minimal:
 ///   bank selector → reference → (account / phone when required) → VERIFY.
-/// No banners, no tiles, no marketing. Everything else lives one tap away.
+/// One reserved slot above the form for the OWNER's broadcast (a
+/// cloud-service notice from the Mahtem Admin console) — no banners,
+/// no tiles, no marketing of our own.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -29,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _referenceCtrl = TextEditingController();
   final _accountCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _dismissedAnnouncements = <String>{};
   bool _syncing = false;
 
   @override
@@ -36,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     final controller = context.read<VerifyController>();
     _syncFromController(controller);
+    // Owner broadcasts via the admin console — best-effort, never blocks.
+    unawaited(context.read<CloudController>().refreshAnnouncements());
   }
 
   void _syncFromController(VerifyController controller) {
@@ -58,7 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final controller = context.watch<VerifyController>();
     final strings = context.watch<LocaleController>().strings;
+    final cloud = context.watch<CloudController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final banners = cloud.announcements
+        .where((a) => !_dismissedAnnouncements.contains(a.id))
+        .toList();
 
     return Scaffold(
       appBar: _buildAppBar(isDark),
@@ -66,6 +79,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
+            if (banners.isNotEmpty) ...[
+              _AnnouncementBanner(
+                announcement: banners.first,
+                onDismiss: () => setState(
+                    () => _dismissedAnnouncements.add(banners.first.id)),
+              ),
+              const SizedBox(height: 12),
+            ],
             _BankSelector(controller: controller),
             const SizedBox(height: 12),
             _Field(
@@ -370,6 +391,62 @@ class _LicenseChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------- widgets
+
+/// One-slot owner broadcast: the admin console's active announcements
+/// surface here (info / warn / critical), dismissible per id.
+class _AnnouncementBanner extends StatelessWidget {
+  final CloudAnnouncement announcement;
+  final VoidCallback onDismiss;
+
+  const _AnnouncementBanner({
+    required this.announcement,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final (color, icon) = announcement.isCritical
+        ? (MahtemPalette.red, Icons.dangerous_rounded)
+        : announcement.isWarn
+            ? (MahtemPalette.amber, Icons.warning_rounded)
+            : (MahtemPalette.blue, Icons.info_outline_rounded);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.13 : 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              announcement.message,
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.45,
+                color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onDismiss,
+            child: Icon(
+              Icons.close_rounded,
+              size: 15,
+              color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Square red stop control shown next to VERIFY while a check runs —
 /// previously there was no way to cancel a slow verification.

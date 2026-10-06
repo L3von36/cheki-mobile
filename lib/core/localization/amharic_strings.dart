@@ -380,6 +380,27 @@ final class AmharicStrings extends AppStrings {
   String get bankShortLabel => 'ባንክ';
 
   @override
+  String get addReasonAction => 'ምክንያት ይጨምሩ';
+
+  @override
+  String get editReasonAction => 'ምክንያት ያስተካክሉ';
+
+  @override
+  String get reasonSheetTitle => 'ይህ ፍተሻ ለምን የተደረገ ነበር?';
+
+  @override
+  String get reasonSheetHint => 'ለምሳሌ፡ የቤት ኪራይ፣ ግዥ፣ ትእዛዝ #12';
+
+  @override
+  String get reasonSaveButton => 'አስቀምጥ';
+
+  @override
+  String get reasonSavedToast => 'ምክንያቱ ወደ ታሪክ ተቀምጧል።';
+
+  @override
+  String get yourReasonLabel => 'የእርስዎ ምክንያት';
+
+  @override
   String shareText({
     required String bankName,
     required String reference,

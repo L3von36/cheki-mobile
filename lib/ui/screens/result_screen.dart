@@ -4,18 +4,26 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/receipt_verify/models.dart';
+import '../../core/verify_history.dart';
 import '../../core/localization/app_strings.dart';
 import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';
 import '../../theme/mahtem_theme.dart';
 import '../../util/format.dart';
 import '../widgets/confetti.dart';
+import '../widgets/reason_sheet.dart';
 
 /// Result — one status circle, the amount, the details that matter, and
 /// clear next actions. Data comes straight from the stylepos verifier's
 /// [VerifyResult]: either a [ReceiptData] or a [VerifyFailure] with tips.
+///
+/// When [historyEntryId] is set (the just-recorded history row), a
+/// verified receipt offers "Add reason" so the check explains itself in
+/// the history list from the very first moment.
 class ResultScreen extends StatelessWidget {
-  const ResultScreen({super.key});
+  final String? historyEntryId;
+
+  const ResultScreen({super.key, this.historyEntryId});
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +132,10 @@ class ResultScreen extends StatelessWidget {
                       receipt.note!.trim().isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _NoteCard(note: receipt.note!),
+                  ],
+                  if (historyEntryId != null) ...[
+                    const SizedBox(height: 10),
+                    _ReasonSection(entryId: historyEntryId!),
                   ],
                 ],
                 const SizedBox(height: 14),
@@ -245,6 +257,88 @@ class _TipsCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Why was this receipt checked?" — after a verified check the user can
+/// write a one-line reason right on the result screen. Once set it turns
+/// into a tappable card (tap to edit); the note lives on the history
+/// entry and syncs with the encrypted vault like everything else.
+class _ReasonSection extends StatelessWidget {
+  final String entryId;
+
+  const _ReasonSection({required this.entryId});
+
+  @override
+  Widget build(BuildContext context) {
+    final history = context.watch<VerifyHistory>();
+    final entry = history.getById(entryId);
+    if (entry == null) return const SizedBox.shrink();
+    final s = context.watch<LocaleController>().strings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reason = entry.reason ?? '';
+
+    if (reason.isEmpty) {
+      return SizedBox(
+        width: double.infinity,
+        child: _GhostButton(
+          label: s.addReasonAction,
+          onTap: () => showReasonSheet(context, entryId),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => showReasonSheet(context, entryId),
+      child: Container(
+        decoration: BoxDecoration(
+          color: MahtemPalette.greenSoft.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.notes_rounded,
+                size: 15, color: MahtemPalette.green),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.yourReasonLabel,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color:
+                          isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    reason,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                      color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.edit_rounded,
+              size: 14,
+              color: isDark ? MahtemPalette.dInkFaint : MahtemPalette.lInkFaint,
+            ),
+          ],
+        ),
       ),
     );
   }

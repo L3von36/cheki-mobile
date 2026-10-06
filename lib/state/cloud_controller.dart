@@ -157,6 +157,12 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   int? _lastRemoteRevision;
   bool _isPulling = false;
 
+  /// Banners the owner broadcasts from the admin console (v1.18 API) —
+  /// active-only, newest first. Best-effort: a disabled console
+  /// (tests), an offline device or a server hiccup simply leaves the
+  /// last good list in place, and an authoritative empty list clears it.
+  List<CloudAnnouncement> announcements = const [];
+
   // ---------------------------------------------------------------- accessors
   bool get enabled => _enabled;
   bool get isWorking => _step == CloudStep.working;
@@ -460,6 +466,22 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       return 0;
     } finally {
       _isPulling = false;
+    }
+  }
+
+  /// Fetches the owner's active announcements for the banner on the
+  /// Verify tab. No-op when the cloud is disabled (prefs-less, as in
+  /// tests); failures keep the last good list; the server's list is
+  /// authoritative when it answers.
+  Future<void> refreshAnnouncements() async {
+    if (_prefs == null) return;
+    try {
+      final list = await _api.fetchAnnouncements();
+      list.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+      announcements = list;
+      notifyListeners();
+    } catch (_) {
+      // offline / 5xx — keep showing the last successfully loaded set
     }
   }
 
