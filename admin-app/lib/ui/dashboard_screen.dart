@@ -114,7 +114,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final data = controller.overview;
-    final isLoading = data == null && !controller.busy;
+    final isLoading = data == null && controller.busy;
     final loadFailed = data == null && controller.error != null;
 
     if (isLoading) {
