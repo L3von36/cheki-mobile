@@ -318,7 +318,17 @@ class AdminController extends ChangeNotifier {
     final prefs = await _prefsFuture;
     await prefs.setString(_tokenPref, session.token);
     await prefs.setString(_emailPref, session.email);
-    await _load(session.token, silent: true);
+    final ok = await _load(session.token, silent: true);
+    if (!ok && _token != null) {
+      // Load failed - clear the session so the user sees the error screen
+      await _clearSession(prefs);
+      _token = null;
+      email = null;
+      role = null;
+      overview = null;
+      unlocked = false;
+      notifyListeners();
+    }
   }
 
   /// Toggle the 30s live auto-refresh; the preference persists.
