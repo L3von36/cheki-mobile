@@ -114,7 +114,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final data = controller.overview;
-    if (data == null) {
+    final isLoading = data == null && !controller.busy;
+    final loadFailed = data == null && controller.error != null;
+
+    if (isLoading) {
       return const Scaffold(
         body: Center(
           child: SizedBox(
@@ -128,6 +131,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
+
+    if (loadFailed) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded, size: 38, color: AdminColors.faint),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to load dashboard',
+                  style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  controller.error ?? 'Unknown error',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, height: 1.5, color: AdminColors.muted),
+                ),
+                const SizedBox(height: 22),
+                FilledButton(
+                  onPressed: controller.refresh,
+                  child: const Text('Retry'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: controller.signOut,
+                  child: const Text('Sign out', style: TextStyle(color: AdminColors.muted)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final tabs = [
