@@ -10,12 +10,13 @@ import 'tabs/accounts_tab.dart';
 import 'tabs/activity_tab.dart';
 import 'tabs/banks_tab.dart';
 import 'tabs/home_tab.dart';
+import 'tabs/manage_tab.dart';
 import 'tabs/settings_tab.dart';
 
 /// App-style shell: slim status app bar, one focused tab at a time and a
 /// Material 3 bottom [NavigationBar] (Home / Accounts / Activity / Banks /
-/// Settings). Each tab keeps its scroll position via [IndexedStack]; data
-/// refreshes itself every 30s or on pull.
+/// Manage / Settings). Each tab keeps its scroll position via [IndexedStack];
+/// data refreshes itself every 30s or on pull.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({required this.controller, super.key});
 
@@ -34,6 +35,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     (Icons.badge_outlined, Icons.badge_rounded, 'Accounts'),
     (Icons.sensors_rounded, Icons.sensors_rounded, 'Activity'),
     (Icons.account_balance_outlined, Icons.account_balance_rounded, 'Banks'),
+    (Icons.admin_panel_settings_outlined, Icons.admin_panel_settings_rounded, 'Manage'),
     (Icons.settings_outlined, Icons.settings_rounded, 'Settings'),
   ];
 
@@ -119,6 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       AccountsTab(controller: controller, data: data, now: now),
       ActivityTab(controller: controller, data: data, now: now),
       BanksTab(controller: controller, data: data),
+      ManageTab(controller: controller),
       SettingsTab(
         controller: controller,
         data: data,
@@ -127,7 +130,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     ];
 
-    final titles = const ['Home', 'Accounts', 'Activity', 'Banks', 'Settings'];
+    final titles = const [
+      'Home',
+      'Accounts',
+      'Activity',
+      'Banks',
+      'Manage',
+      'Settings',
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -196,7 +206,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (i) {
+          setState(() => _tab = i);
+          // The Manage tab fetches its own documents lazily — once when
+          // first opened, then only on pull-to-refresh / manual reload.
+          if (i == 4) controller.loadManageDataIfStale();
+        },
         height: 64,
         backgroundColor: AdminColors.card,
         indicatorColor: AdminColors.emerald.withValues(alpha: 0.16),

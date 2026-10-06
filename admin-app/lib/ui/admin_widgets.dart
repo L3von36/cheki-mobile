@@ -1,10 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../admin_api.dart';
 import '../format.dart';
 import 'theme.dart';
 
 /// Shared building blocks for every admin tab.
+
+/// Copies [csv] to the clipboard and confirms with a snackbar — the
+/// console stays dependency-light (no share_plus).
+void copyCsvToClipboard(BuildContext context, String csv, String what) {
+  Clipboard.setData(ClipboardData(text: csv));
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AdminColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AdminColors.border),
+      ),
+      content: Text(
+        '$what copied to the clipboard as CSV.',
+        style: const TextStyle(fontSize: 13),
+      ),
+    ),
+  );
+}
 
 // ── Section headers ────────────────────────────────────────────────────────
 
@@ -36,7 +57,7 @@ class SectionHeader extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 14.5, fontWeight: FontWeight.w600)),
             ),
-            if (trailing != null) trailing!,
+            trailing?,
           ],
         ),
         const SizedBox(height: 3),
@@ -355,10 +376,18 @@ class PulseStrip extends StatelessWidget {
 // ── Activity chart (custom painter, no chart dependency) ───────────────────
 
 class ActivityCard extends StatelessWidget {
-  const ActivityCard({required this.days, this.title = 'Scan activity', super.key});
+  const ActivityCard({
+    required this.days,
+    this.title = 'Scan activity',
+    this.subtitle,
+    this.trailing,
+    super.key,
+  });
 
   final List<AdminDay> days;
   final String title;
+  final String? subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -382,12 +411,17 @@ class ActivityCard extends StatelessWidget {
                               fontSize: 14.5, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 3),
                       Text(
-                        'Receipt verifications per day (UTC)',
+                        subtitle ?? 'Receipt verifications per day (UTC)',
                         style: const TextStyle(fontSize: 11.5, color: AdminColors.faint),
                       ),
                     ],
                   ),
                 ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                  const SizedBox(width: 8),
+                ],
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [

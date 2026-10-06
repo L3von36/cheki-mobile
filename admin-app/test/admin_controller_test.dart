@@ -15,12 +15,25 @@ class FakeAdminApi implements AdminApiClient {
   String ownerPassword = '';
   int setupCalls = 0;
 
+  /// Session role per minted token (worker resolves it per email).
+  final Map<String, AdminRole> tokenRoles = {};
+
   Object? throwOnOverview;
   Object? throwOnSignIn;
 
   int overviewCalls = 0;
   int logoutCalls = 0;
   AdminException? lastLogoutException;
+
+  // ── management twin state (mirrors the Worker's KV) ───────────────────
+  AdminSettings settingsDoc =
+      const AdminSettings(signupsEnabled: true, maintenanceMode: false);
+  final Map<String, AdminUser> adminUsers = {};
+  final List<Announcement> announcementList = [];
+  final List<AuditEntry> auditTrail = [];
+  final Map<String, bool> suspendedAccounts = {};
+  final Map<String, AccountDeleteResult> deletedAccounts = {};
+  String? deleteAccountConfirmSent;
 
   static const _existingToken = 'tok-existing-session-token-0001';
   final List<String> mintedTokens = [];
@@ -30,6 +43,13 @@ class FakeAdminApi implements AdminApiClient {
     ownerPassword = password;
     acceptedTokens ??= {};
     acceptedTokens!.add(_existingToken);
+    tokenRoles[_existingToken] = AdminRole.owner;
+  }
+
+  /// Adds an additional admin (worker: POST /v1/admin/users).
+  void provisionAdmin(String email, String id) {
+    adminUsers[id] = AdminUser(
+        id: id, email: email, createdAt: 1700000000000, createdBy: ownerEmail);
   }
 
   AdminException _throw(Object? what) => what is AdminException
@@ -39,6 +59,41 @@ class FakeAdminApi implements AdminApiClient {
           500,
           what?.toString() ?? 'boom',
         );
+
+  void _requireSession(String token) {
+    final accepted = acceptedTokens;
+    if (accepted != null && !accepted.contains(token)) {
+      throw const AdminException(
+        AdminErrorType.sessionExpired,
+        401,
+        'Session expired — sign in again.',
+      );
+    }
+  }
+
+  /// Mirrors the Worker: owner-only actions throw 403 for admins.
+  void _requireOwner(String token) {
+    if (tokenRoles[token] != AdminRole.owner) {
+      throw const AdminException(
+        AdminErrorType.forbidden,
+        403,
+        'Only the owner account can do this.',
+      );
+    }
+  }
+
+  void _audit(String action, {String? target, String? detail}) {
+    auditTrail.insert(
+      0,
+      AuditEntry(
+        t: DateTime.now().millisecondsSinceEpoch,
+        actor: ownerEmail,
+        action: action,
+        target: target,
+        detail: detail,
+      ),
+    );
+  }
 
   @override
   Future<AdminOverview> overview(String token) async {
@@ -68,6 +123,7 @@ class FakeAdminApi implements AdminApiClient {
       scans: 2,
       verified: 1,
       lastScanAt: 1700000090000,
+      suspended: suspendedAccounts[uid] ?? false,
       banks: const [AdminBank(id: 'cbe', name: 'CBE', count: 2, verified: 1)],
       days: const [AdminDay(day: '2026-10-05', count: 2)],
       events: const [],
@@ -94,7 +150,9 @@ class FakeAdminApi implements AdminApiClient {
         'Wrong email or password.',
       );
     }
-    return _mint(email);
+    final session = _mint(email);
+    _audit('login', detail: email == ownerEmail ? 'owner' : 'admin');
+    return session;
   }
 
   @override
@@ -128,7 +186,11 @@ class FakeAdminApi implements AdminApiClient {
         'Session expired — sign in again.',
       );
     }
-    return AdminMe(email: ownerEmail, expiresAt: 9999999999999);
+    return AdminMe(
+      email: ownerEmail,
+      expiresAt: 9999999999999,
+      role: tokenRoles[token] ?? AdminRole.owner,
+    );
   }
 
   @override
@@ -177,7 +239,165 @@ class FakeAdminApi implements AdminApiClient {
     mintedTokens.add(token);
     acceptedTokens ??= {};
     acceptedTokens!.add(token);
+    tokenRoles[token] =
+        email == ownerEmail ? AdminRole.owner : AdminRole.admin;
     return AdminSession(token: token, email: email, expiresAt: 9999999999999);
+  }
+
+  // ── management twin (mirrors the Worker's v1.19 endpoints) ─────────────
+
+  @override
+  Future<AdminSettings> settings(String token) async {
+    _requireSession(token);
+    return settingsDoc;
+  }
+
+  @override
+  Future<AdminSettings> updateSettings(
+    String token, {
+    bool? signupsEnabled,
+    bool? maintenanceMode,
+  }) async {
+    _requireSession(token);
+    _requireOwner(token);
+    settingsDoc = AdminSettings(
+      signupsEnabled: signupsEnabled ?? settingsDoc.signupsEnabled,
+      maintenanceMode: maintenanceMode ?? settingsDoc.maintenanceMode,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      updatedBy: ownerEmail,
+    );
+    _audit('settings_updated');
+    return settingsDoc;
+  }
+
+  @override
+  Future<AdminUsersDoc> users(String token) async {
+    _requireSession(token);
+    return AdminUsersDoc(
+      ownerEmail: ownerEmail.isEmpty ? null : ownerEmail,
+      ownerCreatedAt: ownerEmail.isEmpty ? null : 1700000000000,
+      admins: adminUsers.values.toList(),
+    );
+  }
+
+  @override
+  Future<AdminUser> addUser(String token, String email, String password) async {
+    _requireSession(token);
+    _requireOwner(token);
+    if (adminUsers.values.any((u) => u.email == email) || email == ownerEmail) {
+      throw const AdminException(
+          AdminErrorType.alreadyExists, 409, 'An admin with this email already exists.');
+    }
+    if (password.length < 10) {
+      throw const AdminException(
+          AdminErrorType.badInput, 400, 'Password must be at least 10 characters.');
+    }
+    final user = AdminUser(
+      id: 'id-${adminUsers.length + 1}',
+      email: email,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      createdBy: ownerEmail,
+    );
+    adminUsers[user.id] = user;
+    _audit('admin_created', target: email);
+    return user;
+  }
+
+  @override
+  Future<void> resetUserPassword(
+      String token, String id, String newPassword) async {
+    _requireSession(token);
+    _requireOwner(token);
+    if (adminUsers[id] == null) {
+      throw const AdminException(AdminErrorType.notFound, 404, 'No such admin account.');
+    }
+    if (newPassword.length < 10) {
+      throw const AdminException(
+          AdminErrorType.badInput, 400, 'New password must be at least 10 characters.');
+    }
+    _audit('admin_password_reset', target: adminUsers[id]!.email);
+  }
+
+  @override
+  Future<void> removeUser(String token, String id) async {
+    _requireSession(token);
+    _requireOwner(token);
+    if (adminUsers.remove(id) == null) {
+      throw const AdminException(AdminErrorType.notFound, 404, 'No such admin account.');
+    }
+    _audit('admin_removed', target: id);
+  }
+
+  @override
+  Future<List<Announcement>> announcements(String token) async {
+    _requireSession(token);
+    return List.of(announcementList);
+  }
+
+  @override
+  Future<Announcement> createAnnouncement(
+      String token, String message, String level) async {
+    _requireSession(token);
+    if (message.trim().length < 3 || message.length > 500) {
+      throw const AdminException(
+          AdminErrorType.badInput, 400, 'Message must be 3-500 characters.');
+    }
+    if (announcementList.length >= 5) {
+      throw const AdminException(
+          AdminErrorType.alreadyExists, 409, 'At most 5 announcements can be stored.');
+    }
+    final a = Announcement(
+      id: 'ann-${announcementList.length + 1}',
+      message: message.trim(),
+      level: level == 'warn' || level == 'critical' ? level : 'info',
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      createdBy: ownerEmail,
+    );
+    announcementList.insert(0, a);
+    _audit('announcement_created', target: a.id, detail: message);
+    return a;
+  }
+
+  @override
+  Future<void> deleteAnnouncement(String token, String id) async {
+    _requireSession(token);
+    announcementList.removeWhere((a) => a.id == id);
+    _audit('announcement_deleted', target: id);
+  }
+
+  @override
+  Future<List<AuditEntry>> audit(String token) async {
+    _requireSession(token);
+    return List.of(auditTrail);
+  }
+
+  @override
+  Future<void> setAccountSuspended(
+      String token, String uid, bool suspended) async {
+    _requireSession(token);
+    suspendedAccounts[uid] = suspended;
+    _audit(suspended ? 'account_suspended' : 'account_unsuspended', target: uid);
+  }
+
+  @override
+  Future<AccountDeleteResult> deleteAccount(
+      String token, String uid, String confirmId) async {
+    _requireSession(token);
+    deleteAccountConfirmSent = confirmId;
+    if (confirmId.toLowerCase() != uid.toLowerCase()) {
+      throw AdminException(
+        AdminErrorType.badInput, 400, 'Type "$uid" in the confirm field.',
+      );
+    }
+    final result = AccountDeleteResult(
+      id: uid,
+      userRemoved: true,
+      sessions: 2,
+      refreshTokens: 1,
+    );
+    deletedAccounts[uid] = result;
+    _audit('account_deleted', target: uid);
+    return result;
   }
 }
 
@@ -470,6 +690,209 @@ void main() {
       await controller.accountDetail('89da157c');
       expect(api.detailCalls, 3,
           reason: 'sign-out/sign-in clears the drill-down cache');
+    });
+  });
+
+  group('AdminController — management (v1.19 console)', () {
+    test('loadManageData populates settings, users, announcements and audit',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      expect(await controller.loadManageData(), isTrue);
+      expect(controller.manageError, isNull);
+      expect(controller.settings!.signupsEnabled, isTrue);
+      expect(controller.settings!.maintenanceMode, isFalse);
+      expect(controller.users!.ownerEmail, 'owner@mahtem.app');
+      expect(controller.announcements, isEmpty);
+      expect(controller.auditEntries, isNotEmpty,
+          reason: 'signing in audited a login');
+
+      // The lazy loader is a no-op once loaded.
+      await controller.loadManageDataIfStale();
+    });
+
+    test('updateSettings flips switches, persists server-side and audits',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      expect(
+        await controller.updateSettings(maintenanceMode: true),
+        isTrue,
+        reason: controller.manageError,
+      );
+      expect(controller.settings!.maintenanceMode, isTrue);
+      expect(controller.settings!.signupsEnabled, isTrue,
+          reason: 'untouched switches keep their value');
+      expect(controller.settings!.updatedBy, 'owner@mahtem.app');
+      expect(
+        controller.auditEntries!.any((e) => e.action == 'settings_updated'),
+        isTrue,
+        reason: 'the action lands in the audit trail',
+      );
+
+      expect(await controller.updateSettings(signupsEnabled: false), isTrue);
+      expect(controller.settings!.signupsEnabled, isFalse);
+      expect(controller.settings!.maintenanceMode, isTrue);
+    });
+
+    test('admin-user lifecycle: add, reset, remove — and the audit follows',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      expect(
+        await controller.addAdminUser('helper@mahtem.app', 'helper-pass-123'),
+        isTrue,
+        reason: controller.manageError,
+      );
+      expect(
+        controller.users!.admins.map((u) => u.email).toList(),
+        contains('helper@mahtem.app'),
+      );
+
+      final id = controller.users!.admins
+          .firstWhere((u) => u.email == 'helper@mahtem.app')
+          .id;
+      expect(
+        await controller.resetAdminPassword(id, 'fresh-pass-4567'),
+        isTrue,
+        reason: controller.manageError,
+      );
+      expect(await controller.removeAdminUser(id), isTrue);
+      expect(controller.users!.admins, isEmpty,
+          reason: 'the list reloaded without the removed admin');
+      expect(controller.auditEntries!.any((e) => e.action == 'admin_removed'),
+          isTrue);
+    });
+
+    test('announcements: create, list, delete', () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      expect(
+        await controller.createAnnouncement(
+            'Telebirr receipts may be slow tonight', 'warn'),
+        isTrue,
+        reason: controller.manageError,
+      );
+      expect(controller.announcements, hasLength(1));
+      expect(controller.announcements!.first.isWarn, isTrue);
+      expect(controller.announcements!.first.createdBy, 'owner@mahtem.app');
+
+      expect(
+        await controller.deleteAnnouncement(controller.announcements!.first.id),
+        isTrue,
+      );
+      expect(controller.announcements, isEmpty);
+    });
+
+    test('suspend toggles the flag, refreshes the overview and clears the cache',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      final overviewCallsBefore = api.overviewCalls;
+      await controller.accountDetail('89da157c'); // warm the detail cache
+
+      expect(
+        await controller.setAccountSuspended('89da157c', true),
+        isTrue,
+        reason: controller.manageError,
+      );
+      expect(api.suspendedAccounts['89da157c'], isTrue);
+      expect(api.overviewCalls, greaterThan(overviewCallsBefore),
+          reason: 'the overview re-polls after a moderation action');
+      expect(
+        await controller.accountDetail('89da157c'),
+        isA<AdminAccountDetail>(),
+      );
+      expect(api.detailCalls, 2,
+          reason: 'the suspend cleared the 60s detail cache');
+
+      expect(await controller.setAccountSuspended('89da157c', false), isTrue);
+      expect(api.suspendedAccounts['89da157c'], isFalse);
+    });
+
+    test('deleteAccount forwards the typed confirm id and reports the wipe',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      final result =
+          await controller.deleteAccount('89da157c', '89DA157C');
+      expect(result, isNotNull);
+      expect(result!.userRemoved, isTrue);
+      expect(result.sessions, 2);
+      expect(api.deleteAccountConfirmSent, '89DA157C',
+          reason: 'the typed confirm travels to the Worker verbatim');
+      expect(api.deletedAccounts.containsKey('89da157c'), isTrue);
+      expect(controller.auditEntries!.any((e) => e.action == 'account_deleted'),
+          isTrue);
+    });
+
+    test('a failed management action surfaces manageError and never throws',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+
+      final ok = await controller.deleteAccount('89da157c', 'wrong-id');
+      expect(ok, isNull);
+      expect(controller.manageError, contains('confirm'));
+      expect(controller.manageBusy, isFalse);
+    });
+
+    test('an admin session learns its role and owner-only actions fail with 403',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'mahtem.admin.token': 'tok-existing-session-token-0001',
+        'mahtem.admin.email': 'helper@mahtem.app',
+      });
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      api.provisionAdmin('helper@mahtem.app', 'id-9');
+      api.tokenRoles['tok-existing-session-token-0001'] = AdminRole.admin;
+
+      final controller = AdminController(api: api);
+      await controller.restore();
+
+      expect(controller.unlocked, isTrue);
+      expect(controller.role, AdminRole.admin, reason: 'restore() resolved the role via me()');
+      expect(controller.isOwner, isFalse);
+
+      final ok = await controller.updateSettings(maintenanceMode: true);
+      expect(ok, isFalse);
+      expect(controller.manageError, contains('owner'));
+    });
+
+    test('signOut clears the management caches too', () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = FakeAdminApi()..provisionOwner('owner@mahtem.app', 'long-pass-1234');
+      final controller = AdminController(api: api);
+      await controller.signIn('owner@mahtem.app', 'long-pass-1234');
+      await controller.loadManageData();
+      expect(controller.settings, isNotNull);
+
+      await controller.signOut();
+      expect(controller.settings, isNull);
+      expect(controller.users, isNull);
+      expect(controller.announcements, isNull);
+      expect(controller.auditEntries, isNull);
+      expect(controller.role, isNull);
     });
   });
 }

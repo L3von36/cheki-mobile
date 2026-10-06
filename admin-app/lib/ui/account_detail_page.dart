@@ -149,6 +149,32 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
           ),
         ],
       ),
+      if (d.suspended) ...[
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AdminColors.rose.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AdminColors.rose.withValues(alpha: 0.35)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.block_rounded, size: 15, color: AdminColors.rose),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Suspended — this account cannot sign in or sync its vault '
+                  'until re-enabled.',
+                  style: TextStyle(
+                      fontSize: 12.5, height: 1.4, color: AdminColors.rose),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
       const SizedBox(height: 8),
       Text(
         d.createdAt != null
@@ -245,6 +271,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         ),
       ),
       const SizedBox(height: 12),
+
+      _ManagementCard(page: this, detail: d),
+      const SizedBox(height: 12),
       const PrivacyCard(),
     ];
   }
@@ -313,6 +342,279 @@ class _ErrorView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Account controls (v1.19 console): suspend / re-enable with instant
+/// session revocation, and the irreversible wipe behind a typed
+/// confirmation. Any signed-in admin may use these — the Worker
+/// enforces the session and writes every action to the audit trail.
+class _ManagementCard extends StatelessWidget {
+  const _ManagementCard({required this.page, required this.detail});
+
+  final _AccountDetailPageState page;
+  final AdminAccountDetail detail;
+
+  AdminController get controller => page.widget.controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final busy = controller.manageBusy;
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(
+                  icon: Icons.shield_outlined,
+                  title: 'Account controls',
+                  subtitle: 'Suspension blocks sign-in + sync instantly and is reversible',
+                ),
+                const SizedBox(height: 6),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: Icon(
+                    detail.suspended ? Icons.block_rounded : Icons.check_circle_outline_rounded,
+                    size: 20,
+                    color: detail.suspended ? AdminColors.rose : AdminColors.emerald,
+                  ),
+                  title: const Text('Suspended',
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
+                  subtitle: Text(
+                    detail.suspended
+                        ? 'Tap to re-enable — the account signs in and syncs again'
+                        : 'Tap to suspend — sessions are revoked on the spot',
+                    style: const TextStyle(fontSize: 11.5, color: AdminColors.faint),
+                  ),
+                  value: detail.suspended,
+                  onChanged: busy ? null : (_) => _toggleSuspend(context),
+                ),
+                const Divider(height: 1, color: AdminColors.border),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.dangerous_outlined,
+                        size: 18, color: AdminColors.rose),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Danger zone',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Deleting wipes the encrypted vault, the account '
+                            'record and every session for good. Nothing can '
+                            'bring it back.',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                height: 1.45,
+                                color: AdminColors.faint),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AdminColors.rose,
+                        side: const BorderSide(
+                            color: AdminColors.rose, width: 0.8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                      ),
+                      onPressed: busy ? null : () => _confirmDelete(context),
+                      child: const Text('Delete…',
+                          style: TextStyle(fontSize: 12.5)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleSuspend(BuildContext context) async {
+    // Capture everything that outlives the await BEFORE it — the card's
+    // context is defunct once the async gap opens.
+    final messenger = ScaffoldMessenger.of(context);
+    final target = !detail.suspended;
+    final ok = await controller.setAccountSuspended(detail.id, target);
+    if (!page.mounted) return;
+    if (ok) {
+      await page._load(); // re-read the drill-down (flag + banner update)
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AdminColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          content: Text(
+            target
+                ? 'Account #${detail.id} suspended — sessions revoked.'
+                : 'Account #${detail.id} re-enabled.',
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final id = detail.id;
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await showDialog<AccountDeleteResult?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _DeleteAccountDialog(
+        controller: controller,
+        id: id,
+      ),
+    );
+    if (result == null) return;
+    // The account no longer exists — leave the drill-down.
+    navigator.pop();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AdminColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AdminColors.border),
+        ),
+        content: Text(
+          'Account #$id deleted — vault wiped, ${result.sessions} session(s) '
+          'and ${result.refreshTokens} refresh token(s) revoked.',
+          style: const TextStyle(fontSize: 13),
+        ),
+      ),
+    );
+  }
+}
+
+/// Typed-confirmation delete: the owner must repeat the 8-hex prefix —
+/// the exact guard the Worker enforces server-side.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog({required this.controller, required this.id});
+
+  final AdminController controller;
+  final String id;
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _confirm = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    if (_confirm.text.trim().toLowerCase() != widget.id) {
+      setState(() => _error = 'Type ${widget.id} to confirm.');
+      return;
+    }
+    final result =
+        await widget.controller.deleteAccount(widget.id, _confirm.text.trim());
+    if (!mounted) return;
+    if (result != null) {
+      Navigator.of(context).pop(result);
+    } else {
+      setState(() => _error = widget.controller.manageError);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final busy = widget.controller.manageBusy;
+        return AlertDialog(
+          backgroundColor: AdminColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          title: const Text('Delete this account?', style: TextStyle(fontSize: 17)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This permanently removes the encrypted vault, the account '
+                'record and every active session. A tombstone stops cached '
+                'devices from re-creating the vault.',
+                style: TextStyle(
+                    fontSize: 12.5, height: 1.5, color: AdminColors.muted),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Type ${widget.id} to confirm:',
+                style: const TextStyle(fontSize: 12.5, color: AdminColors.text),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _confirm,
+                autofocus: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(
+                    fontSize: 13.5,
+                    fontFeatures: [FontFeature.tabularFigures()]),
+                decoration: const InputDecoration(hintText: '8-hex account id'),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!,
+                    style: const TextStyle(fontSize: 12.5, color: AdminColors.rose)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel', style: TextStyle(color: AdminColors.muted)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AdminColors.rose,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: busy ? null : _delete,
+              child: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: Colors.white),
+                    )
+                  : const Text('Delete forever'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

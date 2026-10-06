@@ -4,6 +4,7 @@ import '../../admin_api.dart';
 import '../../admin_controller.dart';
 import '../../format.dart';
 import '../account_detail_page.dart';
+import '../admin_widgets.dart' show copyCsvToClipboard;
 import '../theme.dart';
 
 enum _AccountSort { scans, lastScan, synced, created }
@@ -60,6 +61,31 @@ class _AccountsTabState extends State<AccountsTab> {
     return rows;
   }
 
+  /// RFC 4180-friendly CSV of the current (filtered + sorted) rows.
+  String _accountsCsv(List<AdminAccountRow> rows) {
+    String cell(String c) =>
+        c.contains(',') || c.contains('"') || c.contains('\n')
+            ? '"${c.replaceAll('"', '""')}"'
+            : c;
+    final buf = StringBuffer(
+        'id,created,last synced,last scan,scans,top bank,suspended\n');
+    for (final a in rows) {
+      String iso(int? ts) => ts == null
+          ? ''
+          : DateTime.fromMillisecondsSinceEpoch(ts).toIso8601String();
+      buf.writeln([
+        a.id,
+        iso(a.createdAt),
+        iso(a.updatedAt),
+        iso(a.lastScanAt),
+        '${a.scans}',
+        a.topBank ?? '',
+        a.suspended ? 'yes' : '',
+      ].map(cell).join(','));
+    }
+    return buf.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = widget.now;
@@ -81,7 +107,22 @@ class _AccountsTabState extends State<AccountsTab> {
             'identities stay hashed',
             style: const TextStyle(fontSize: 12.5, color: AdminColors.muted),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => copyCsvToClipboard(
+                  context, _accountsCsv(rows), '${rows.length} accounts'),
+              icon: const Icon(Icons.copy_rounded, size: 15),
+              label: const Text('Copy CSV', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                minimumSize: Size.zero,
+                foregroundColor: AdminColors.muted,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           TextField(
             onChanged: (v) => setState(() => _query = v),
             textInputAction: TextInputAction.search,
@@ -183,13 +224,42 @@ class _AccountCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '#${row.id}',
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AdminColors.text,
-                            fontFeatures: [FontFeature.tabularFigures()]),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '#${row.id}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AdminColors.text,
+                                  fontFeatures: [FontFeature.tabularFigures()]),
+                            ),
+                          ),
+                          if (row.suspended) ...[
+                            const SizedBox(width: 7),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: AdminColors.rose.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: AdminColors.rose.withValues(alpha: 0.4)),
+                              ),
+                              child: const Text(
+                                'SUSPENDED',
+                                style: TextStyle(
+                                    fontSize: 8.5,
+                                    letterSpacing: 0.6,
+                                    fontWeight: FontWeight.w600,
+                                    color: AdminColors.rose),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 3),
                       Row(

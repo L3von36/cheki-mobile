@@ -16,6 +16,20 @@ import 'package:http/http.dart' as http;
 ///   POST /v1/admin/auth/change-password → AdminSession (rotated)
 ///   GET  /v1/admin/overview             → overview document    (session)
 ///
+/// Management (v1.19 console):
+///   GET    /v1/admin/settings            → AdminSettings        (session)
+///   PUT    /v1/admin/settings           → AdminSettings        (owner)
+///   GET    /v1/admin/users              → AdminUsersDoc        (session)
+///   POST   /v1/admin/users              → AdminUser            (owner)
+///   POST   /v1/admin/users/`<id>`/reset-password              (owner)
+///   DELETE /v1/admin/users/`<id>`                              (owner)
+///   GET    /v1/admin/announcements      → [Announcement]       (session)
+///   POST   /v1/admin/announcements      → Announcement          (session)
+///   DELETE /v1/admin/announcements/`<id>`                     (session)
+///   GET    /v1/admin/audit              → [AuditEntry]         (session)
+///   PATCH  /v1/admin/account/`<prefix>`  → suspend / unsuspend  (session)
+///   DELETE /v1/admin/account/`<prefix>`  → wipe + tombstone      (session)
+///
 /// Authenticated calls carry `Authorization: Bearer <session token>` plus
 /// the `X-Mahtem-Client` bot-screen header. Native HTTP — no CORS involved.
 /// The password is only ever sent to the auth endpoints; the Worker stores
@@ -103,6 +117,7 @@ class AdminAccountRow {
     required this.scans,
     required this.lastScanAt,
     required this.topBank,
+    this.suspended = false,
   });
 
   /// 8-hex prefix — the server never exposes full identifier digests.
@@ -114,6 +129,9 @@ class AdminAccountRow {
   final int? lastScanAt;
   final String? topBank;
 
+  /// v1.19+ API — suspended accounts cannot sign in or sync.
+  final bool suspended;
+
   factory AdminAccountRow.fromJson(Map<String, dynamic> j) => AdminAccountRow(
         id: _str(j['id']),
         createdAt: _intOrNull(j['createdAt']),
@@ -122,6 +140,7 @@ class AdminAccountRow {
         scans: _int(j['scans']),
         lastScanAt: _intOrNull(j['lastScanAt']),
         topBank: _strOrNull(j['topBank']),
+        suspended: j['suspended'] == true,
       );
 }
 
@@ -188,6 +207,7 @@ class AdminSession {
     required this.token,
     required this.email,
     required this.expiresAt,
+    this.role = AdminRole.owner,
   });
 
   final String token;
@@ -196,11 +216,24 @@ class AdminSession {
   /// Epoch ms.
   final int expiresAt;
 
+  /// 'owner' | 'admin' — gates owner-only management actions.
+  final AdminRole role;
+
   factory AdminSession.fromJson(Map<String, dynamic> j) => AdminSession(
         token: _str(j['token']),
         email: _str(j['email']),
         expiresAt: _intOrNull(j['expiresAt']) ?? 0,
+        role: AdminRole.fromCode(j['role']),
       );
+}
+
+/// The console's two session roles. The Worker resolves the role per
+/// email on every call; the app only uses it to shape the UI.
+enum AdminRole {
+  owner,
+  admin;
+
+  static AdminRole fromCode(Object? v) => v == 'admin' ? AdminRole.admin : AdminRole.owner;
 }
 
 class AdminMe {
@@ -208,6 +241,7 @@ class AdminMe {
     required this.email,
     required this.expiresAt,
     this.ownerCreatedAt,
+    this.role = AdminRole.owner,
   });
 
   final String email;
@@ -215,11 +249,13 @@ class AdminMe {
   /// Epoch ms, when this session dies.
   final int? expiresAt;
   final int? ownerCreatedAt;
+  final AdminRole role;
 
   factory AdminMe.fromJson(Map<String, dynamic> j) => AdminMe(
         email: _str(j['email']),
         expiresAt: _intOrNull(j['expiresAt']),
         ownerCreatedAt: _intOrNull(j['ownerCreatedAt']),
+        role: AdminRole.fromCode(j['role']),
       );
 }
 
@@ -236,6 +272,7 @@ class AdminAccountDetail {
     required this.banks,
     required this.days,
     required this.events,
+    this.suspended = false,
   });
 
   /// 8-hex prefix.
@@ -250,6 +287,9 @@ class AdminAccountDetail {
   final List<AdminDay> days;
   final List<AdminEventDetail> events;
 
+  /// v1.19+ API — the suspension flag as stored on the server.
+  final bool suspended;
+
   factory AdminAccountDetail.fromJson(Map<String, dynamic> j) =>
       AdminAccountDetail(
         id: _str(j['id']),
@@ -259,6 +299,7 @@ class AdminAccountDetail {
         scans: _int(j['scans']),
         verified: _int(j['verified']),
         lastScanAt: _intOrNull(j['lastScanAt']),
+        suspended: j['suspended'] == true,
         banks: (j['banks'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(AdminBank.fromJson)
@@ -296,6 +337,153 @@ class AdminEventDetail {
       );
 }
 
+// ── Management models (v1.19 console) ────────────────────────────────────────
+
+/// Service-wide switches (GET/PUT /v1/admin/settings).
+class AdminSettings {
+  const AdminSettings({
+    required this.signupsEnabled,
+    required this.maintenanceMode,
+    this.updatedAt,
+    this.updatedBy,
+  });
+
+  /// When false the Worker refuses new account sign-ups (403).
+  final bool signupsEnabled;
+
+  /// When true every vault write answers 503 `maintenance`.
+  final bool maintenanceMode;
+  final int? updatedAt;
+  final String? updatedBy;
+
+  factory AdminSettings.fromJson(Map<String, dynamic> j) => AdminSettings(
+        signupsEnabled: j['signupsEnabled'] != false,
+        maintenanceMode: j['maintenanceMode'] == true,
+        updatedAt: _intOrNull(j['updatedAt']),
+        updatedBy: _strOrNull(j['updatedBy']),
+      );
+}
+
+/// One additional admin account (POST /v1/admin/users) — the owner is a
+/// separate record and is not part of [AdminUsersDoc.admins].
+class AdminUser {
+  const AdminUser({
+    required this.id,
+    required this.email,
+    this.createdAt,
+    this.createdBy,
+  });
+
+  final String id;
+  final String email;
+  final int? createdAt;
+  final String? createdBy;
+
+  factory AdminUser.fromJson(Map<String, dynamic> j) => AdminUser(
+        id: _str(j['id']),
+        email: _str(j['email']),
+        createdAt: _intOrNull(j['createdAt']),
+        createdBy: _strOrNull(j['createdBy']),
+      );
+}
+
+/// GET /v1/admin/users — the owner record plus additional admins.
+class AdminUsersDoc {
+  const AdminUsersDoc({required this.admins, this.ownerEmail, this.ownerCreatedAt});
+
+  final String? ownerEmail;
+  final int? ownerCreatedAt;
+  final List<AdminUser> admins;
+
+  factory AdminUsersDoc.fromJson(Map<String, dynamic> j) {
+    final owner = j['owner'];
+    return AdminUsersDoc(
+      ownerEmail: owner is Map<String, dynamic> ? _strOrNull(owner['email']) : null,
+      ownerCreatedAt:
+          owner is Map<String, dynamic> ? _intOrNull(owner['createdAt']) : null,
+      admins: _list(j['admins']).map(AdminUser.fromJson).toList(),
+    );
+  }
+}
+
+/// Broadcast shown inside every user's app (active announcements only).
+class Announcement {
+  const Announcement({
+    required this.id,
+    required this.message,
+    required this.level,
+    required this.createdAt,
+    this.createdBy,
+  });
+
+  /// 'info' | 'warn' | 'critical'.
+  final String id;
+  final String message;
+  final String level;
+  final int createdAt;
+  final String? createdBy;
+
+  bool get isCritical => level == 'critical';
+  bool get isWarn => level == 'warn';
+
+  factory Announcement.fromJson(Map<String, dynamic> j) => Announcement(
+        id: _str(j['id']),
+        message: _str(j['message']),
+        level: _str(j['level']),
+        createdAt: _int(j['createdAt']),
+        createdBy: _strOrNull(j['createdBy']),
+      );
+}
+
+/// One line of the admin audit trail (GET /v1/admin/audit).
+class AuditEntry {
+  const AuditEntry({
+    required this.t,
+    required this.actor,
+    required this.action,
+    this.target,
+    this.detail,
+  });
+
+  final int t;
+  final String actor;
+  final String action;
+  final String? target;
+  final String? detail;
+
+  factory AuditEntry.fromJson(Map<String, dynamic> j) => AuditEntry(
+        t: _int(j['t']),
+        actor: _str(j['actor']),
+        action: _str(j['action']),
+        target: _strOrNull(j['target']),
+        detail: _strOrNull(j['detail']),
+      );
+}
+
+/// Result of wiping an account (DELETE /v1/admin/account/`<prefix>`) — what
+/// was revoked, for the confirmation snackbar / audit display.
+class AccountDeleteResult {
+  const AccountDeleteResult({
+    required this.id,
+    required this.userRemoved,
+    required this.sessions,
+    required this.refreshTokens,
+  });
+
+  final String id;
+  final bool userRemoved;
+  final int sessions;
+  final int refreshTokens;
+
+  factory AccountDeleteResult.fromJson(Map<String, dynamic> j) =>
+      AccountDeleteResult(
+        id: _str(j['id']),
+        userRemoved: j['userRemoved'] == true,
+        sessions: _int(j['sessions']),
+        refreshTokens: _int(j['refreshTokens']),
+      );
+}
+
 // ── Errors ──────────────────────────────────────────────────────────────────
 
 enum AdminErrorType {
@@ -322,6 +510,9 @@ enum AdminErrorType {
 
   /// Admin never configured on this deployment (503).
   disabled,
+
+  /// The signed-in role may not perform this action (owner-only).
+  forbidden,
 
   /// Socket / timeout / unreachable.
   network,
@@ -366,6 +557,40 @@ abstract class AdminApiClient {
     String currentPassword,
     String newPassword,
   );
+
+  // ── management (v1.19 console) ─────────────────────────────────────────
+
+  Future<AdminSettings> settings(String token);
+
+  Future<AdminSettings> updateSettings(
+    String token, {
+    bool? signupsEnabled,
+    bool? maintenanceMode,
+  });
+
+  Future<AdminUsersDoc> users(String token);
+
+  Future<AdminUser> addUser(String token, String email, String password);
+
+  Future<void> resetUserPassword(String token, String id, String newPassword);
+
+  Future<void> removeUser(String token, String id);
+
+  Future<List<Announcement>> announcements(String token);
+
+  Future<Announcement> createAnnouncement(
+    String token,
+    String message,
+    String level,
+  );
+
+  Future<void> deleteAnnouncement(String token, String id);
+
+  Future<List<AuditEntry>> audit(String token);
+
+  Future<void> setAccountSuspended(String token, String uid, bool suspended);
+
+  Future<AccountDeleteResult> deleteAccount(String token, String uid, String confirmId);
 }
 
 class AdminApi implements AdminApiClient {
@@ -459,8 +684,12 @@ class AdminApi implements AdminApiClient {
         return AdminErrorType.notFound;
       case 'ambiguous':
         return AdminErrorType.badInput;
+      case 'confirm_required':
+        return AdminErrorType.badInput;
       case 'admin_disabled':
         return AdminErrorType.disabled;
+      case 'forbidden':
+        return AdminErrorType.forbidden;
       case 'admin_required':
         return status == 503
             ? AdminErrorType.disabled
@@ -499,6 +728,8 @@ class AdminApi implements AdminApiClient {
         return 'No account matches this prefix.';
       case AdminErrorType.disabled:
         return 'Admin access is not configured on this deployment.';
+      case AdminErrorType.forbidden:
+        return 'Only the owner account can do this.';
       case AdminErrorType.network:
         return "Can't reach the Mahtem API.";
       case AdminErrorType.invalidResponse:
@@ -728,6 +959,154 @@ class AdminApi implements AdminApiClient {
       );
     }
     return session;
+  }
+
+  // ── management (v1.19 console) ──────────────────────────────────────────
+
+  Future<Map<String, dynamic>> _getJson(String token, String path) async {
+    final res = await _send(
+      () => _client.get(_uri(path), headers: _headers(token: token)),
+    );
+    if (res.statusCode != 200) {
+      _throwHttp(
+        res.statusCode,
+        await _safeBody(res),
+        res.statusCode == 401 ? AdminErrorType.sessionExpired : AdminErrorType.server,
+      );
+    }
+    return _readJson(res);
+  }
+
+  Future<Map<String, dynamic>> _sendJson(
+    String token,
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    bool created = false,
+  }) async {
+    final res = await _send(
+      () => _client.send(
+        http.Request(method, _uri(path))
+          ..headers.addAll({
+            ..._headers(token: token),
+            'Content-Type': 'application/json',
+          })
+          ..body = jsonEncode(body ?? const <String, dynamic>{}),
+      ).then(http.Response.fromStream),
+    );
+    final okStatus = created ? res.statusCode == 201 : res.statusCode == 200;
+    if (!okStatus) {
+      _throwHttp(
+        res.statusCode,
+        await _safeBody(res),
+        res.statusCode == 401 ? AdminErrorType.sessionExpired : AdminErrorType.server,
+      );
+    }
+    return _readJson(res);
+  }
+
+  @override
+  Future<AdminSettings> settings(String token) async =>
+      AdminSettings.fromJson(await _getJson(token, '/v1/admin/settings'));
+
+  @override
+  Future<AdminSettings> updateSettings(
+    String token, {
+    bool? signupsEnabled,
+    bool? maintenanceMode,
+  }) async =>
+      AdminSettings.fromJson(await _sendJson(
+        token,
+        'PUT',
+        '/v1/admin/settings',
+        body: {
+          'signupsEnabled': ?signupsEnabled,
+          'maintenanceMode': ?maintenanceMode,
+        },
+      ));
+
+  @override
+  Future<AdminUsersDoc> users(String token) async =>
+      AdminUsersDoc.fromJson(await _getJson(token, '/v1/admin/users'));
+
+  @override
+  Future<AdminUser> addUser(String token, String email, String password) async =>
+      AdminUser.fromJson(await _sendJson(
+        token,
+        'POST',
+        '/v1/admin/users',
+        body: {'email': email, 'password': password},
+        created: true,
+      ));
+
+  @override
+  Future<void> resetUserPassword(String token, String id, String newPassword) =>
+      _sendJson(
+        token,
+        'POST',
+        '/v1/admin/users/$id/reset-password',
+        body: {'newPassword': newPassword},
+      );
+
+  @override
+  Future<void> removeUser(String token, String id) =>
+      _sendJson(token, 'DELETE', '/v1/admin/users/$id');
+
+  @override
+  Future<List<Announcement>> announcements(String token) async {
+    final body = await _getJson(token, '/v1/admin/announcements');
+    return _list(body['announcements']).map(Announcement.fromJson).toList();
+  }
+
+  @override
+  Future<Announcement> createAnnouncement(
+    String token,
+    String message,
+    String level,
+  ) async =>
+      Announcement.fromJson(await _sendJson(
+        token,
+        'POST',
+        '/v1/admin/announcements',
+        body: {'message': message, 'level': level},
+        created: true,
+      ));
+
+  @override
+  Future<void> deleteAnnouncement(String token, String id) =>
+      _sendJson(token, 'DELETE', '/v1/admin/announcements/$id');
+
+  @override
+  Future<List<AuditEntry>> audit(String token) async {
+    final body = await _getJson(token, '/v1/admin/audit');
+    return _list(body['entries']).map(AuditEntry.fromJson).toList();
+  }
+
+  @override
+  Future<void> setAccountSuspended(String token, String uid, bool suspended) async {
+    final prefix = uid.toLowerCase();
+    await _sendJson(
+      token,
+      'PATCH',
+      '/v1/admin/account/$prefix',
+      body: {'suspended': suspended},
+    );
+  }
+
+  @override
+  Future<AccountDeleteResult> deleteAccount(
+    String token,
+    String uid,
+    String confirmId,
+  ) async {
+    final prefix = uid.toLowerCase();
+    final body = await _sendJson(
+      token,
+      'DELETE',
+      '/v1/admin/account/$prefix',
+      body: {'confirm': confirmId.toLowerCase()},
+    );
+    return AccountDeleteResult.fromJson(body);
   }
 }
 

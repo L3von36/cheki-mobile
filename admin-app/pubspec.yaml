@@ -1,11 +1,12 @@
 name: mahtem_admin
 description: >-
   Mahtem Admin — owner-only analytics console for the Mahtem receipt
-  verification network (Ethiopia). Read-only: accounts, scans, bank
-  popularity. Zero-knowledge preserved; the owner signs in with email +
+  verification network (Ethiopia). Analytics, account controls
+  (suspend / delete), announcements, service switches and the audit
+  trail. Zero-knowledge preserved; the owner signs in with email +
   password and the device keeps only a 30-day session token.
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: '>=3.9.0 <4.0.0'

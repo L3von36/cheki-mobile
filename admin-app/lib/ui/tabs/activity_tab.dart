@@ -55,6 +55,24 @@ class _ActivityTabState extends State<ActivityTab> {
     return '${wd[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
   }
 
+  /// CSV of the currently filtered events (time, bank, outcome, account).
+  String _eventsCsv(List<AdminRecentEvent> events) {
+    String cell(String c) =>
+        c.contains(',') || c.contains('"') || c.contains('\n')
+            ? '"${c.replaceAll('"', '""')}"'
+            : c;
+    final buf = StringBuffer('time,bank,outcome,account\n');
+    for (final e in events) {
+      buf.writeln([
+        DateTime.fromMillisecondsSinceEpoch(e.t).toIso8601String(),
+        e.bankName,
+        e.verified == 1 ? 'verified' : 'not verified',
+        e.userId,
+      ].map(cell).join(','));
+    }
+    return buf.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = widget.now;
@@ -78,7 +96,23 @@ class _ActivityTabState extends State<ActivityTab> {
                     ' · $verifiedCount verified',
             style: const TextStyle(fontSize: 12.5, color: AdminColors.muted),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => copyCsvToClipboard(
+                  context, _eventsCsv(events), '${events.length} events'),
+              icon: const Icon(Icons.copy_rounded, size: 15),
+              label: const Text('Copy CSV', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                minimumSize: Size.zero,
+                foregroundColor: AdminColors.muted,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
 
           // Outcome filter chips
           Wrap(

@@ -47,6 +47,20 @@ class AdminController extends ChangeNotifier {
   /// The signed-in owner's email (null on the login screen).
   String? email;
 
+  /// Session role — 'owner' can do everything, 'admin' is read + accounts
+  /// + announcements. Learned from the sign-in response / me().
+  AdminRole? role;
+
+  bool get isOwner => role == null || role == AdminRole.owner;
+
+  // ── management state (Manage tab, v1.19 console) ─────────────────────
+  AdminSettings? settings;
+  AdminUsersDoc? users;
+  List<Announcement>? announcements;
+  List<AuditEntry>? auditEntries;
+  bool manageBusy = false;
+  String? manageError;
+
   String? _token;
   Timer? _timer;
 
@@ -79,12 +93,25 @@ class AdminController extends ChangeNotifier {
     final ok = await _load(stored, silent: true);
     if (ok) {
       unlocked = true;
+      await _learnRole(stored);
     } else if (lastErrorType == AdminErrorType.sessionExpired ||
         lastErrorType == AdminErrorType.disabled) {
       await _clearSession(prefs);
       unlocked = false;
     } else {
       restoreFailed = true;
+    }
+    notifyListeners();
+  }
+
+  /// Resolves the session role for a restored token (sign-in learns it
+  /// from the login response). Failures leave the role unknown — the
+  /// server still enforces owner-only actions regardless.
+  Future<void> _learnRole(String token) async {
+    try {
+      role = (await api.me(token)).role;
+    } on AdminException {
+      role = null;
     }
     notifyListeners();
   }
@@ -284,6 +311,7 @@ class AdminController extends ChangeNotifier {
   Future<void> _adoptSession(AdminSession session) async {
     _token = session.token;
     email = session.email;
+    role = session.role;
     clearDetailCache();
     error = null;
     lastErrorType = null;
@@ -312,8 +340,14 @@ class AdminController extends ChangeNotifier {
     }
     _token = null;
     email = null;
+    role = null;
     overview = null;
     lastUpdatedMs = null;
+    settings = null;
+    users = null;
+    announcements = null;
+    auditEntries = null;
+    manageError = null;
     clearDetailCache();
     error = null;
     lastErrorType = null;
@@ -321,6 +355,196 @@ class AdminController extends ChangeNotifier {
     unlocked = false;
     final prefs = await _prefsFuture;
     await _clearSession(prefs);
+    notifyListeners();
+  }
+
+  // ── management actions (Manage tab, v1.19 console) ────────────────────
+
+  /// Runs a management call with busy/error bookkeeping. Returns false
+  /// and surfaces [manageError] on failure — the server stays the final
+  /// authority on owner-only actions.
+  Future<bool> _manage(Future<void> Function(String token) fn) async {
+    final token = _token;
+    if (token == null) return false;
+    manageBusy = true;
+    manageError = null;
+    notifyListeners();
+    try {
+      await fn(token);
+      manageBusy = false;
+      notifyListeners();
+      return true;
+    } on AdminException catch (e) {
+      manageBusy = false;
+      manageError = e.message;
+      lastErrorType = e.type;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Loads every Manage-tab document (settings, users, announcements,
+  /// audit) in one pass. Partial failures keep what loaded and report.
+  Future<bool> loadManageData() async {
+    final token = _token;
+    if (token == null) return false;
+    manageBusy = true;
+    manageError = null;
+    notifyListeners();
+    var ok = true;
+    String? firstError;
+    Future<void> part(Future<void> Function() fn) async {
+      try {
+        await fn();
+      } on AdminException catch (e) {
+        ok = false;
+        firstError ??= e.message;
+      }
+    }
+
+    await part(() async => settings = await api.settings(token));
+    await part(() async => users = await api.users(token));
+    await part(() async => announcements = await api.announcements(token));
+    await part(() async => auditEntries = await api.audit(token));
+    manageBusy = false;
+    manageError = firstError;
+    notifyListeners();
+    return ok;
+  }
+
+  /// One lazy load per session: the Manage tab fetches when it is first
+  /// opened; afterwards pull-to-refresh (or an action) refreshes it.
+  Future<bool> loadManageDataIfStale() async {
+    if (settings == null || users == null) return loadManageData();
+    return true;
+  }
+
+  Future<bool> updateSettings({
+    bool? signupsEnabled,
+    bool? maintenanceMode,
+  }) async {
+    final ok = await _manage((token) async {
+      settings = await api.updateSettings(
+        token,
+        signupsEnabled: signupsEnabled,
+        maintenanceMode: maintenanceMode,
+      );
+    });
+    if (ok) await _refreshAudit();
+    return ok;
+  }
+
+  Future<bool> addAdminUser(String email, String password) async {
+    final ok = await _manage(
+      (token) async => await api.addUser(token, email, password),
+    );
+    if (ok) {
+      await _reloadUsers();
+      await _refreshAudit();
+    }
+    return ok;
+  }
+
+  Future<bool> resetAdminPassword(String id, String newPassword) async {
+    final ok = await _manage(
+      (token) async => await api.resetUserPassword(token, id, newPassword),
+    );
+    if (ok) await _refreshAudit();
+    return ok;
+  }
+
+  Future<bool> removeAdminUser(String id) async {
+    final ok = await _manage((token) async => await api.removeUser(token, id));
+    if (ok) {
+      await _reloadUsers();
+      await _refreshAudit();
+    }
+    return ok;
+  }
+
+  Future<bool> createAnnouncement(String message, String level) async {
+    final ok = await _manage(
+      (token) async => await api.createAnnouncement(token, message, level),
+    );
+    if (ok) {
+      await _reloadAnnouncements();
+      await _refreshAudit();
+    }
+    return ok;
+  }
+
+  Future<bool> deleteAnnouncement(String id) async {
+    final ok = await _manage(
+      (token) async => await api.deleteAnnouncement(token, id),
+    );
+    if (ok) {
+      await _reloadAnnouncements();
+      await _refreshAudit();
+    }
+    return ok;
+  }
+
+  /// Suspend (or re-enable) an account: suspension kills its sessions
+  /// immediately; the account cannot sign in or sync until re-enabled.
+  Future<bool> setAccountSuspended(String uid, bool suspended) async {
+    final ok = await _manage(
+      (token) async => await api.setAccountSuspended(token, uid, suspended),
+    );
+    if (ok) {
+      _detailCache.remove(uid);
+      _detailFetchedAt.remove(uid);
+      await refresh(silent: true);
+      await _refreshAudit();
+    }
+    return ok;
+  }
+
+  /// Wipes an account for good: vault, user record, sessions and refresh
+  /// tokens, plus a tombstone that blocks zombie JWT writes. [confirmId]
+  /// must be the 8-hex prefix (typed by the owner in the UI dialog).
+  Future<AccountDeleteResult?> deleteAccount(String uid, String confirmId) async {
+    AccountDeleteResult? result;
+    final ok = await _manage((token) async {
+      result = await api.deleteAccount(token, uid, confirmId);
+    });
+    if (ok) {
+      _detailCache.remove(uid);
+      _detailFetchedAt.remove(uid);
+      await refresh(silent: true);
+      await _refreshAudit();
+      return result;
+    }
+    return null;
+  }
+
+  Future<void> _reloadUsers() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      users = await api.users(token);
+    } on AdminException {
+      /* keep the previous list */
+    }
+  }
+
+  Future<void> _reloadAnnouncements() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      announcements = await api.announcements(token);
+    } on AdminException {
+      /* keep the previous list */
+    }
+  }
+
+  Future<void> _refreshAudit() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      auditEntries = await api.audit(token);
+    } on AdminException {
+      /* keep the previous trail */
+    }
     notifyListeners();
   }
 

@@ -7,8 +7,9 @@ import '../account_detail_page.dart';
 import '../admin_widgets.dart';
 import '../theme.dart';
 
-/// Home tab — KPIs, pulse, 14-day chart, top banks and latest scans.
-class HomeTab extends StatelessWidget {
+/// Home tab — KPIs, pulse, the activity chart with a 7/14/30-day range,
+/// top banks and latest scans.
+class HomeTab extends StatefulWidget {
   const HomeTab({
     required this.controller,
     required this.data,
@@ -21,10 +22,24 @@ class HomeTab extends StatelessWidget {
   final int now;
 
   @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  int _range = 14;
+
+  @override
   Widget build(BuildContext context) {
+    final data = widget.data;
+    final now = widget.now;
     final attributed = data.banks.fold<int>(0, (acc, b) => acc + b.count);
     final maxBank = data.banks.isEmpty ? 0 : data.banks.first.count;
     final latest = data.recent.take(8).toList();
+    final days = data.days.length > _range
+        ? data.days.sublist(data.days.length - _range)
+        : data.days;
+    final rangeTotal =
+        days.fold<int>(0, (acc, d) => acc + d.count);
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -34,7 +49,7 @@ class HomeTab extends StatelessWidget {
           'Every account, every synced scan — snapshot taken ${timeAgo(data.generatedAt, now)}',
           style: const TextStyle(fontSize: 12.5, color: AdminColors.muted),
         ),
-        StaleBanner(error: controller.error),
+        StaleBanner(error: widget.controller.error),
         if (data.totals.scans == 0) ...[
           const SizedBox(height: 12),
           const WarmingBanner(),
@@ -44,7 +59,12 @@ class HomeTab extends StatelessWidget {
         const SizedBox(height: 12),
         PulseStrip(data: data),
         const SizedBox(height: 12),
-        ActivityCard(days: data.days.length > 14 ? data.days.sublist(data.days.length - 14) : data.days),
+        ActivityCard(
+          days: days,
+          title: 'Scan activity',
+          subtitle: '${thousands(rangeTotal)} checks in the last $_range days (UTC)',
+          trailing: _rangeSelector(),
+        ),
         const SizedBox(height: 12),
 
         // Top banks mini
@@ -138,10 +158,51 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  /// 7 / 14 / 30-day quick ranges for the activity chart.
+  Widget _rangeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (days, label) in const [(7, '7d'), (14, '14d'), (30, '30d')]) ...[
+          if (days != 7) const SizedBox(width: 6),
+          _rangeChip(days, label),
+        ],
+      ],
+    );
+  }
+
+  Widget _rangeChip(int days, String label) {
+    final selected = _range == days;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setState(() => _range = days),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? AdminColors.emerald
+              : AdminColors.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? AdminColors.emerald : AdminColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? const Color(0xFF052E22) : AdminColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openAccount(BuildContext context, String uid) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => AccountDetailPage(controller: controller, uid: uid),
+        builder: (_) => AccountDetailPage(controller: widget.controller, uid: uid),
       ),
     );
   }

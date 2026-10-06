@@ -511,4 +511,274 @@ void main() {
       );
     });
   });
+
+  group('AdminApi.management', () {
+    test('settings() parses the switches; updateSettings() PUTs only deltas',
+        () async {
+      late http.Request captured;
+      var call = 0;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          call++;
+          return http.Response(
+            jsonEncode(call == 1
+                ? {
+                    'signupsEnabled': false,
+                    'maintenanceMode': true,
+                    'updatedAt': 1799000000000,
+                    'updatedBy': 'owner@mahtem.app',
+                  }
+                : {
+                    'signupsEnabled': true,
+                    'maintenanceMode': false,
+                    'updatedAt': 1799000001000,
+                    'updatedBy': 'owner@mahtem.app',
+                  }),
+            200,
+          );
+        }),
+      );
+
+      final current = await api.settings('a' * 32);
+      expect(captured.method, 'GET');
+      expect(captured.url.path, '/v1/admin/settings');
+      expect(current.signupsEnabled, isFalse);
+      expect(current.maintenanceMode, isTrue);
+      expect(current.updatedBy, 'owner@mahtem.app');
+
+      final next = await api.updateSettings('a' * 32, signupsEnabled: true);
+      expect(captured.method, 'PUT');
+      expect(captured.url.path, '/v1/admin/settings');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent.keys, ['signupsEnabled'], reason: 'untouched switches are not sent');
+      expect(sent['signupsEnabled'], isTrue);
+      expect(next.signupsEnabled, isTrue);
+      expect(next.maintenanceMode, isFalse);
+    });
+
+    test('updateSettings() 403 forbidden maps to the forbidden type',
+        () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'forbidden', 'message': 'Only the owner account can do this.'}),
+            403)),
+      );
+      await expectLater(
+        api.updateSettings('a' * 32, maintenanceMode: true),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.forbidden)
+            .having((e) => e.status, 'status', 403)),
+      );
+    });
+
+    test('users() parses the owner and admin list', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'owner': {'email': 'owner@mahtem.app', 'createdAt': 1791112376385},
+              'admins': [
+                {'id': 'a1b2c3d4', 'email': 'helper@mahtem.app',
+                 'createdAt': 1791200000000, 'createdBy': 'owner@mahtem.app'},
+                'garbage',
+              ],
+            }),
+            200)),
+      );
+      final doc = await api.users('a' * 32);
+      expect(doc.ownerEmail, 'owner@mahtem.app');
+      expect(doc.ownerCreatedAt, 1791112376385);
+      expect(doc.admins, hasLength(1), reason: 'corrupt entries are skipped');
+      expect(doc.admins.first.email, 'helper@mahtem.app');
+      expect(doc.admins.first.createdBy, 'owner@mahtem.app');
+    });
+
+    test('addUser() posts to /users and accepts 201', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode({
+              'id': 'a1b2c3d4',
+              'email': 'helper@mahtem.app',
+              'createdAt': 1791200000000,
+              'createdBy': 'owner@mahtem.app',
+            }),
+            201,
+          );
+        }),
+      );
+      final user = await api.addUser('a' * 32, 'helper@mahtem.app', 'helper-pass-1');
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/v1/admin/users');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['email'], 'helper@mahtem.app');
+      expect(sent['password'], 'helper-pass-1');
+      expect(user.id, 'a1b2c3d4');
+    });
+
+    test('resetUserPassword / removeUser hit their exact paths and methods',
+        () async {
+      final captured = <http.Request>[];
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured.add(request);
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }),
+      );
+      await api.resetUserPassword('a' * 32, 'a1b2c3d4', 'fresh-pass-99');
+      await api.removeUser('a' * 32, 'a1b2c3d4');
+
+      expect(captured[0].method, 'POST');
+      expect(captured[0].url.path, '/v1/admin/users/a1b2c3d4/reset-password');
+      final sent = jsonDecode(captured[0].body) as Map<String, dynamic>;
+      expect(sent['newPassword'], 'fresh-pass-99');
+
+      expect(captured[1].method, 'DELETE');
+      expect(captured[1].url.path, '/v1/admin/users/a1b2c3d4');
+    });
+
+    test('announcements: list parses, create posts message+level at 201',
+        () async {
+      late http.Request captured;
+      var call = 0;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          call++;
+          return http.Response(
+            call == 1
+                ? jsonEncode({
+                    'announcements': [
+                      {'id': 'ann1', 'message': 'Service degraded',
+                       'level': 'warn', 'active': true,
+                       'createdAt': 1791200000000, 'createdBy': 'owner@mahtem.app'},
+                      {'id': 'ann2', 'message': 'All clear', 'level': 'info',
+                       'active': true, 'createdAt': 1791200001000},
+                    ],
+                  })
+                : jsonEncode({
+                    'id': 'ann3',
+                    'message': 'Emergency maintenance',
+                    'level': 'critical',
+                    'active': true,
+                    'createdAt': 1791200002000,
+                    'createdBy': 'owner@mahtem.app',
+                  }),
+            call == 1 ? 200 : 201,
+          );
+        }),
+      );
+
+      final list = await api.announcements('a' * 32);
+      expect(captured.url.path, '/v1/admin/announcements');
+      expect(list, hasLength(2));
+      expect(list.first.isWarn, isTrue);
+      expect(list.first.message, 'Service degraded');
+      expect(list.last.isCritical, isFalse);
+
+      final created =
+          await api.createAnnouncement('a' * 32, 'Emergency maintenance', 'critical');
+      expect(captured.method, 'POST');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['message'], 'Emergency maintenance');
+      expect(sent['level'], 'critical');
+      expect(created.isCritical, isTrue);
+      expect(created.createdBy, 'owner@mahtem.app');
+    });
+
+    test('deleteAnnouncement() DELETEs the exact id path', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }),
+      );
+      await api.deleteAnnouncement('a' * 32, 'ann1');
+      expect(captured.method, 'DELETE');
+      expect(captured.url.path, '/v1/admin/announcements/ann1');
+    });
+
+    test('audit() parses the trail (corrupt entries skipped)', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'entries': [
+                {'t': 1791200000000, 'actor': 'owner@mahtem.app',
+                 'action': 'account_suspended', 'target': '89da157c', 'detail': null},
+                'garbage',
+                {'t': 1791190000000, 'actor': 'owner@mahtem.app',
+                 'action': 'settings_updated', 'target': null,
+                 'detail': 'signups=on, maintenance=off'},
+              ],
+            }),
+            200)),
+      );
+      final entries = await api.audit('a' * 32);
+      expect(entries, hasLength(2));
+      expect(entries.first.action, 'account_suspended');
+      expect(entries.first.target, '89da157c');
+      expect(entries.last.detail, contains('maintenance=off'));
+    });
+
+    test('setAccountSuspended() PATCHes the flag body', () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+              jsonEncode({'ok': true, 'id': '89da157c', 'suspended': true}),
+              200);
+        }),
+      );
+      await api.setAccountSuspended('a' * 32, '89DA157C', true);
+      expect(captured.method, 'PATCH');
+      expect(captured.url.path, '/v1/admin/account/89da157c');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['suspended'], isTrue);
+    });
+
+    test('deleteAccount() DELETEs with the typed confirm and parses the wipe',
+        () async {
+      late http.Request captured;
+      final api = AdminApi(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'id': '89da157c',
+              'userRemoved': true,
+              'sessions': 3,
+              'refreshTokens': 2,
+            }),
+            200,
+          );
+        }),
+      );
+      final result = await api.deleteAccount('a' * 32, '89da157c', '89DA157C');
+      expect(captured.method, 'DELETE');
+      expect(captured.url.path, '/v1/admin/account/89da157c');
+      final sent = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(sent['confirm'], '89da157c', reason: 'confirm is lowercased to the prefix');
+      expect(result.userRemoved, isTrue);
+      expect(result.sessions, 3);
+      expect(result.refreshTokens, 2);
+    });
+
+    test('deleteAccount() 400 confirm_required maps to badInput', () async {
+      final api = AdminApi(
+        client: MockClient((_) async => http.Response(
+            jsonEncode({'error': 'confirm_required', 'message': 'Type "89da157c" in the confirm field.'}),
+            400)),
+      );
+      await expectLater(
+        api.deleteAccount('a' * 32, '89da157c', 'nope'),
+        throwsA(isA<AdminException>()
+            .having((e) => e.type, 'type', AdminErrorType.badInput)),
+      );
+    });
+  });
 }

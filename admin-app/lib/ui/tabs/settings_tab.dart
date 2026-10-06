@@ -69,9 +69,11 @@ class SettingsTab extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
-                      const Text(
-                        'Owner · full read access · sessions last 30 days',
-                        style: TextStyle(fontSize: 11.5, color: AdminColors.faint),
+                      Text(
+                        controller.isOwner
+                            ? 'Owner · full access · sessions last 30 days'
+                            : 'Admin · analytics, accounts & announcements · sessions last 30 days',
+                        style: const TextStyle(fontSize: 11.5, color: AdminColors.faint),
                       ),
                     ],
                   ),
@@ -175,7 +177,7 @@ class SettingsTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Mahtem Admin · app v1.2.0 · API v1.17 · snapshot '
+                  'Mahtem Admin · app v1.3.0 · API v1.19 · snapshot '
                   '${fmtSnapshot(data.generatedAt)}',
                   style: const TextStyle(
                       fontSize: 11,
