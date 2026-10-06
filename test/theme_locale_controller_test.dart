@@ -11,7 +11,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
 
     final controller = ThemeController(prefs: prefs)..ensureLoaded();
-    expect(controller.mode, ThemeMode.system);
+    expect(controller.mode, ThemeMode.light); // default with nothing saved
 
     await controller.setMode(ThemeMode.dark);
     expect(controller.mode, ThemeMode.dark);
@@ -20,16 +20,23 @@ void main() {
     expect(restored.mode, ThemeMode.dark);
   });
 
-  test('theme cycle walks system → light → dark → system', () async {
+  test('theme cycle walks light → dark → system → light', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final controller = ThemeController(prefs: prefs)..ensureLoaded();
 
     await controller.cycle();
-    expect(controller.mode, ThemeMode.light);
-    await controller.cycle();
     expect(controller.mode, ThemeMode.dark);
     await controller.cycle();
+    expect(controller.mode, ThemeMode.system);
+    await controller.cycle();
+    expect(controller.mode, ThemeMode.light);
+  });
+
+  test('explicit system choice still restores as system', () async {
+    SharedPreferences.setMockInitialValues({'mahtem.theme_mode': 'system'});
+    final prefs = await SharedPreferences.getInstance();
+    final controller = ThemeController(prefs: prefs)..ensureLoaded();
     expect(controller.mode, ThemeMode.system);
   });
 

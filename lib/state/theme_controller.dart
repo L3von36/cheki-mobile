@@ -11,11 +11,12 @@ class ThemeController extends ChangeNotifier {
 
   static const String _kKey = 'mahtem.theme_mode';
 
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.light;
 
   ThemeMode get mode => _mode;
 
-  /// Restores the persisted choice (defaults to following the system).
+  /// Restores the persisted choice; with nothing saved yet the app
+  /// defaults to light mode (System is only used when explicitly picked).
   /// Safe to call more than once.
   void ensureLoaded() {
     final raw = _prefs?.getString(_kKey);
@@ -53,6 +54,8 @@ class ThemeController extends ChangeNotifier {
   static ThemeMode _decode(String? raw) => switch (raw) {
     'light' => ThemeMode.light,
     'dark' => ThemeMode.dark,
-    _ => ThemeMode.system,
+    'system' => ThemeMode.system,
+    // First launch / no saved choice: ship light by default.
+    _ => ThemeMode.light,
   };
 }
