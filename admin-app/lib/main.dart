@@ -9,6 +9,41 @@ import 'ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Any build-time failure lands in the details of a calm error card
+  // instead of a grey screen — release builds too.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+  ErrorWidget.builder = (details) => Material(
+        color: const Color(0xFF09090B),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.report_problem_outlined,
+                      color: Color(0xFFF43F5E), size: 34),
+                  const SizedBox(height: 10),
+                  const Text('Something went wrong',
+                      style: TextStyle(
+                          color: Color(0xFFF4F4F5),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15)),
+                  const SizedBox(height: 8),
+                  Text(
+                    details.exceptionAsString(),
+                    style: const TextStyle(
+                        color: Color(0xFFA1A1AA), fontSize: 11.5, height: 1.4),
+                    textAlign: TextAlign.left,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
   final controller = AdminController();
   unawaited(controller.restore());
   runApp(MahtemAdminApp(controller: controller));

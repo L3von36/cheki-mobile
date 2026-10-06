@@ -113,7 +113,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final data = controller.overview!;
+    final data = controller.overview;
+    if (data == null) {
+      return const Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: AdminColors.emerald,
+            ),
+          ),
+        ),
+      );
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final tabs = [
