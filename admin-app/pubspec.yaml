@@ -6,7 +6,7 @@ description: >-
   trail. Zero-knowledge preserved; the owner signs in with email +
   password and the device keeps only a 30-day session token.
 publish_to: 'none'
-version: 1.3.0+4
+version: 1.3.1+5
 
 environment:
   sdk: '>=3.9.0 <4.0.0'
