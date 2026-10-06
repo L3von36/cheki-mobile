@@ -1020,8 +1020,8 @@ class AdminApi implements AdminApiClient {
         'PUT',
         '/v1/admin/settings',
         body: {
-          'signupsEnabled': ?signupsEnabled,
-          'maintenanceMode': ?maintenanceMode,
+          if (signupsEnabled != null) 'signupsEnabled': signupsEnabled,
+          if (maintenanceMode != null) 'maintenanceMode': maintenanceMode,
         },
       ));
 

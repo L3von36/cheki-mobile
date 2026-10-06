@@ -57,7 +57,7 @@ class SectionHeader extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 14.5, fontWeight: FontWeight.w600)),
             ),
-            trailing?,
+            if (trailing != null) trailing!,
           ],
         ),
         const SizedBox(height: 3),
