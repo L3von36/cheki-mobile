@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../admin_controller.dart';
 import '../../admin_api.dart';
+import '../../main.dart' show themeModeNotifier;
 import '../admin_widgets.dart';
 import '../theme.dart';
 
@@ -145,6 +146,48 @@ class SettingsTab extends StatelessWidget {
                     ),
                     value: controller.autoRefresh,
                     onChanged: controller.setAutoRefresh,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Appearance
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(
+                  icon: Icons.palette_outlined,
+                  title: 'Appearance',
+                  subtitle: 'Choose your preferred theme',
+                ),
+                const SizedBox(height: 6),
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: themeModeNotifier,
+                  builder: (context, mode, _) => Column(
+                    children: [
+                      for (final (m, label, icon) in const [
+                        (ThemeMode.light, 'Light', Icons.light_mode_rounded),
+                        (ThemeMode.dark, 'Dark', Icons.dark_mode_rounded),
+                        (ThemeMode.system, 'System', Icons.settings_brightness_rounded),
+                      ]) ...[
+                        RadioListTile<ThemeMode>(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          value: m,
+                          groupValue: mode,
+                          onChanged: (v) => themeModeNotifier.setMode(v!),
+                          title: Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
+                          secondary: Icon(icon, size: 20, color: mode == m ? AdminColors.emerald : AdminColors.faint),
+                        ),
+                        if (m != ThemeMode.system) const Divider(height: 1, color: AdminColors.border),
+                      ],
+                    ],
                   ),
                 ),
               ],

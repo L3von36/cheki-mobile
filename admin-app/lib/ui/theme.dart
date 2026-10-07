@@ -14,6 +14,20 @@ abstract final class AdminColors {
   static const rose = Color(0xFFF43F5E);
 }
 
+/// Light theme tokens — clean zinc + emerald for day use.
+abstract final class AdminLightColors {
+  static const background = Color(0xFFFAFAFA);
+  static const card = Color(0xFFFFFFFF);
+  static const border = Color(0xFFE4E4E7);
+  static const emerald = Color(0xFF059669);
+  static const emeraldDim = Color(0xFF064E3B);
+  static const text = Color(0xFF18181B);
+  static const muted = Color(0xFF71717A);
+  static const faint = Color(0xFFA1A1AA);
+  static const amber = Color(0xFFB45309);
+  static const rose = Color(0xFFE11D48);
+}
+
 ThemeData adminTheme() {
   final scheme = ColorScheme.dark(
     primary: AdminColors.emerald,
@@ -81,5 +95,75 @@ ThemeData adminTheme() {
       ),
     ),
     dividerTheme: const DividerThemeData(color: AdminColors.border, thickness: 1),
+  );
+}
+
+ThemeData adminLightTheme() {
+  final scheme = ColorScheme.light(
+    primary: AdminLightColors.emerald,
+    onPrimary: Colors.white,
+    secondary: AdminLightColors.emerald,
+    surface: AdminLightColors.card,
+    onSurface: AdminLightColors.text,
+    error: AdminLightColors.rose,
+    outline: AdminLightColors.border,
+  );
+  final base = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: AdminLightColors.background,
+  );
+  return base.copyWith(
+    textTheme: base.textTheme.apply(bodyColor: AdminLightColors.text, displayColor: AdminLightColors.text),
+    cardTheme: CardThemeData(
+      color: AdminLightColors.card,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AdminLightColors.border),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFFF4F4F5),
+      hintStyle: const TextStyle(color: AdminLightColors.faint),
+      labelStyle: const TextStyle(color: AdminLightColors.muted),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AdminLightColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AdminLightColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AdminLightColors.emerald, width: 1.4),
+      ),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? Colors.white
+            : AdminLightColors.faint,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? AdminLightColors.emerald
+            : AdminLightColors.border,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: AdminLightColors.emerald,
+        foregroundColor: Colors.white,
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        minimumSize: const Size.fromHeight(52),
+      ),
+    ),
+    dividerTheme: const DividerThemeData(color: AdminLightColors.border, thickness: 1),
   );
 }

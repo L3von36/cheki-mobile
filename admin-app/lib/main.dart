@@ -1,13 +1,41 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_controller.dart';
 import 'ui/dashboard_screen.dart';
 import 'ui/login_screen.dart';
 import 'ui/theme.dart';
 
-void main() {
+const _themeModeKey = 'theme_mode';
+
+/// Global theme mode notifier — initialised in main() after loading prefs.
+late final ThemeModeNotifier themeModeNotifier;
+
+/// Loads the saved theme mode (defaults to dark).
+Future<ThemeMode> _loadThemeMode() async {
+  final prefs = await SharedPreferences.getInstance();
+  final index = prefs.getInt(_themeModeKey) ?? 1; // 0=light, 1=dark, 2=system
+  return ThemeMode.values[index];
+}
+
+/// Saves the theme mode.
+Future<void> _saveThemeMode(ThemeMode mode) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_themeModeKey, mode.index);
+}
+
+class ThemeModeNotifier extends ValueNotifier<ThemeMode> {
+  ThemeModeNotifier(super.value);
+
+  Future<void> setMode(ThemeMode mode) async {
+    value = mode;
+    await _saveThemeMode(mode);
+  }
+}
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Any build-time failure lands in the details of a calm error card
   // instead of a grey screen — release builds too.
@@ -46,6 +74,8 @@ void main() {
       );
   final controller = AdminController();
   unawaited(controller.restore());
+  final themeMode = await _loadThemeMode();
+  themeModeNotifier = ThemeModeNotifier(themeMode);
   runApp(MahtemAdminApp(controller: controller));
 }
 
@@ -56,11 +86,18 @@ class MahtemAdminApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Mahtem Admin',
-      debugShowCheckedModeBanner: false,
-      theme: adminTheme(),
-      home: AdminShell(controller: controller),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'Mahtem Admin',
+          debugShowCheckedModeBanner: false,
+          theme: adminLightTheme(),
+          darkTheme: adminTheme(),
+          themeMode: mode,
+          home: AdminShell(controller: controller),
+        );
+      },
     );
   }
 }
