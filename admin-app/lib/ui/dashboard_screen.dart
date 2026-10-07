@@ -172,14 +172,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final tabs = [
-      HomeTab(controller: controller, data: data, now: now),
-      AccountsTab(controller: controller, data: data, now: now),
-      ActivityTab(controller: controller, data: data, now: now),
-      BanksTab(controller: controller, data: data),
+      HomeTab(controller: controller, data: data!, now: now),
+      AccountsTab(controller: controller, data: data!, now: now),
+      ActivityTab(controller: controller, data: data!, now: now),
+      BanksTab(controller: controller, data: data!),
       ManageTab(controller: controller),
       SettingsTab(
         controller: controller,
-        data: data,
+        data: data!,
         onChangePassword: _showChangePassword,
         onSignOut: _confirmSignOut,
       ),
