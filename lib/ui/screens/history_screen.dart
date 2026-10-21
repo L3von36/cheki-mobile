@@ -48,7 +48,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final cloud = context.read<CloudController>();
         final history = context.read<VerifyHistory>();
         cloud.pollNow(history);
-        cloud.refreshAnnouncements();
       }
     });
   }
@@ -251,7 +250,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           final cloud = context.read<CloudController>();
           final history = context.read<VerifyHistory>();
           await cloud.pollNow(history);
-          await cloud.refreshAnnouncements();
         },
         child: entries.isEmpty
             ? LayoutBuilder(

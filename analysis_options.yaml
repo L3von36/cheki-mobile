@@ -4,10 +4,6 @@ analyzer:
   language:
     strict-casts: true
     strict-inference: true
-  exclude:
-    # Separate package with its own analysis context (built & analyzed by
-    # .github/workflows/admin-release.yml) — the root CI must not touch it.
-    - admin-app/**
 
 linter:
   rules:

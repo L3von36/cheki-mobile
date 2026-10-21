@@ -35,7 +35,6 @@ jobs:
           KV_NAMESPACE_ID: "f317f08d8e384fc4ae23c9ed62cd9471"
         run: |
           set -euo pipefail
-          # keep_bindings preserves secret bindings (e.g. ADMIN_KEY) across
           # module uploads — metadata.bindings alone would drop them.
           printf '{"main_module":"worker.js","compatibility_date":"2026-09-01","keep_bindings":["secret_text"],"bindings":[{"type":"kv_namespace","name":"KV","namespace_id":"%s"}]}' \
             "$KV_NAMESPACE_ID" > metadata.json
@@ -77,10 +76,3 @@ jobs:
             echo "Health check failed after 3 attempts"
             exit 1
           fi
-          # Admin dashboard must serve its HTML page (no client header needed).
-          code=$(curl -s -o /dev/null -w "%{http_code}" https://mahtem-api.mahtem.workers.dev/admin)
-          if [ "$code" != "200" ]; then
-            echo "Admin dashboard smoke test failed: HTTP $code"
-            exit 1
-          fi
-          echo "Admin dashboard smoke test passed: HTTP 200"

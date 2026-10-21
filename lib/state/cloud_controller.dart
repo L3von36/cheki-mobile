@@ -42,11 +42,6 @@
 /// triggers exactly one refresh-and-continue, and a dead refresh token is
 /// the only thing that still forces a re-sign-in.
 ///
-/// v1.15.0 — ANALYTICS PIGGYBACK: local scans queued by [VerifyHistory]
-/// ride on vault uploads as plaintext bank-only metadata (bank id/name,
-/// timestamp, pass/fail) so the owner's /admin dashboard can show usage
-/// and bank popularity WITHOUT any receipt content ever leaving the
-/// encrypted blob. No session → no uploads → no analytics.
 library;
 
 import 'dart:async';
@@ -156,12 +151,6 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _realtimeTimer;
   int? _lastRemoteRevision;
   bool _isPulling = false;
-
-  /// Banners the owner broadcasts from the admin console (v1.18 API) —
-  /// active-only, newest first. Best-effort: a disabled console
-  /// (tests), an offline device or a server hiccup simply leaves the
-  /// last good list in place, and an authoritative empty list clears it.
-  List<CloudAnnouncement> announcements = const [];
 
   // ---------------------------------------------------------------- accessors
   bool get enabled => _enabled;
@@ -466,22 +455,6 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       return 0;
     } finally {
       _isPulling = false;
-    }
-  }
-
-  /// Fetches the owner's active announcements for the banner on the
-  /// Verify tab. No-op when the cloud is disabled (prefs-less, as in
-  /// tests); failures keep the last good list; the server's list is
-  /// authoritative when it answers.
-  Future<void> refreshAnnouncements() async {
-    if (_prefs == null) return;
-    try {
-      final list = await _api.fetchAnnouncements();
-      list.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
-      announcements = list;
-      notifyListeners();
-    } catch (_) {
-      // offline / 5xx — keep showing the last successfully loaded set
     }
   }
 
@@ -805,16 +778,6 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _mergeUpload(VerifyHistory history) async {
     await history.ensureLoaded();
     final key = hexToBytes(_vaultKeyHex!);
-    // v1.15.0 analytics: local scans queued by the history store ride
-    // along as bank-only plaintext metadata. Peeked BEFORE the write and
-    // acked only AFTER it succeeds, so a failed upload never loses them.
-    final pendingStats = history.peekPendingReport();
-    final stats = pendingStats.map((e) => <String, Object>{
-          'b': e.bankId,
-          'n': e.bankName,
-          't': e.verifiedAt,
-          'v': e.isVerified ? 1 : 0,
-        }).toList();
     for (var attempt = 0; attempt < 2; attempt++) {
       final remote = await _api.getVault(_sessionToken!);
       List<HistoryEntry> remoteEntries = const [];
@@ -835,7 +798,6 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
           blob: blob,
           revision: rev,
           baseRevision: remote?.revision,
-          stats: stats.isEmpty ? null : stats,
         );
       } on CloudApiException catch (e) {
         if (e.error != CloudApiError.conflict || attempt == 1) rethrow;
@@ -843,9 +805,6 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       }
       _lastRemoteRevision = rev;
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
-      if (pendingStats.isNotEmpty) {
-        history.ackPendingReport(pendingStats.length);
-      }
       return;
     }
   }

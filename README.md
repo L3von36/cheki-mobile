@@ -104,9 +104,6 @@ your first 5 checks are free.
   ("rent", "order #12"). The note shows on the history tile, the details
   sheet and the result screen, exports with the CSV, and rides the
   encrypted cloud vault like the rest of your history
-- **Service announcements** — when the Mahtem team broadcasts a notice
-  from the admin console (planned maintenance, a bank outage, a new bank
-  going live), a dismissible banner shows it on the Verify tab
 - **Honest failures** — receipt not found or bank down? The result screen
   says exactly why and lists what to do next
 - **Crash reports (opt-in Sentry)** — release APKs built with a Sentry
@@ -117,21 +114,6 @@ your first 5 checks are free.
 - **Private** — history never leaves the device; nothing to sign up for.
   The receipt-number OCR runs on-device too (ML Kit) — camera frames are
   never uploaded
-
-## Mahtem Admin — owner console (`admin-app/`)
-
-A separate, owner-only Android app lives in [`admin-app/`](admin-app/): every
-account, every synced scan, bank popularity (which bank do people verify
-most?) and a live scan feed — plus the full operations panel: **suspend /
-delete any account** (typed confirmation, sessions wiped on sight), **post
-announcements** that show up in every user's app, **allow/block new
-sign-ups**, toggle **maintenance mode**, manage additional **admin
-accounts**, and read the server-side **audit trail** of every action. All
-with the same zero-knowledge guarantees (receipt contents stay encrypted;
-the console sees banks, outcomes and counts only). Sign in once with the
-owner email + password; it stays on the device. Releases are tagged
-`admin-vX.Y.Z` and published by `.github/workflows/admin-release.yml`
-(`mahtem-admin-<tag>-arm64/arm32/universal.apk`).
 
 ## How verification works
 

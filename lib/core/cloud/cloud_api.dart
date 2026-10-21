@@ -62,35 +62,6 @@ class CloudSession {
   String get accessToken => sessionToken;
 }
 
-/// A broadcast the owner composes in the admin console; the Worker
-/// serves active announcements to every install at /v1/announcements.
-class CloudAnnouncement {
-  final String id;
-  final String message;
-
-  /// 'info' | 'warn' | 'critical'.
-  final String level;
-  final int createdAtMs;
-
-  const CloudAnnouncement({
-    required this.id,
-    required this.message,
-    required this.level,
-    required this.createdAtMs,
-  });
-
-  bool get isCritical => level == 'critical';
-  bool get isWarn => level == 'warn';
-
-  factory CloudAnnouncement.fromJson(Map<String, dynamic> j) =>
-      CloudAnnouncement(
-        id: j['id'] as String? ?? '',
-        message: j['message'] as String? ?? '',
-        level: j['level'] as String? ?? 'info',
-        createdAtMs: (j['createdAt'] as num?)?.toInt() ?? 0,
-      );
-}
-
 class CloudVaultRemote {
   final String blob;
   final int revision;
@@ -274,24 +245,7 @@ class CloudApi {
   /// is optimistic: a newer stored revision raises
   /// [CloudApiError.conflict] (with `serverRevision`).
   ///
-  /// [stats] rides alongside the blob as PLAINTEXT metadata for the admin
-  /// analytics dashboard (v1.15.0): `{b: bankId, n: bankName, t: epochMs,
-  /// v: 1|0}`. Deliberately tiny and non-sensitive — no references, names,
-  /// amounts or receipt contents ever leave the encrypted blob.
-  Future<void> putVault({
-    required String sessionToken,
-    required String blob,
-    required int revision,
-    int? baseRevision,
-    List<Map<String, Object?>>? stats,
-  }) =>
-      _send('PUT', '/v1/vault', bearer: sessionToken, body: {
-        'blob': blob,
-        'revision': revision,
-        if (baseRevision != null) 'baseRevision': baseRevision,
-        'stats': ?stats,
-      });
-
+  /// Uploads the encrypted vault with optimistic concurrency control.
   /// Returns null when the server holds no vault yet (404 `empty`).
   Future<CloudVaultRemote?> getVault(
     String sessionToken, {
@@ -328,16 +282,5 @@ class CloudApi {
   Future<void> deleteVault(String sessionToken) =>
       _send('DELETE', '/v1/vault', bearer: sessionToken);
 
-  /// The owner's broadcasts, active-only (newest first). Cheap, public
-  /// and best-effort — offline installs skip the banner.
-  Future<List<CloudAnnouncement>> fetchAnnouncements() async {
-    final r = await _send('GET', '/v1/announcements');
-    final list = r['announcements'];
-    if (list is! List) return const [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(CloudAnnouncement.fromJson)
-        .where((a) => a.id.isNotEmpty && a.message.isNotEmpty)
-        .toList();
-  }
+
 }
