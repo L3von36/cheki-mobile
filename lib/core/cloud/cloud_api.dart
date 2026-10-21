@@ -24,6 +24,7 @@ enum CloudApiError {
   badCredentials,
   unauthorized,
   conflict,
+  receiptUsed,
   empty,
   notFound,
   server,
@@ -39,6 +40,16 @@ class CloudApiException implements Exception {
 
   @override
   String toString() => 'CloudApiException(${error.name}, $statusCode)';
+}
+
+class CloudReceiptClaim {
+  final int expiresAtMs;
+  final bool alreadyClaimed;
+
+  const CloudReceiptClaim({
+    required this.expiresAtMs,
+    required this.alreadyClaimed,
+  });
 }
 
 class CloudSession {
@@ -151,6 +162,8 @@ class CloudApi {
         return CloudApiError.unauthorized;
       case 'conflict':
         return CloudApiError.conflict;
+      case 'receipt_used':
+        return CloudApiError.receiptUsed;
       case 'empty':
         return CloudApiError.empty;
       case 'bad_input':
@@ -293,5 +306,30 @@ class CloudApi {
   Future<void> deleteVault(String sessionToken) =>
       _send('DELETE', '/v1/vault', bearer: sessionToken);
 
+  Future<CloudReceiptClaim> claimProReceipt({
+    required String sessionToken,
+    required String receiptHash,
+    required double amountEtb,
+    required int planDays,
+    int? paidAtMs,
+  }) async {
+    final r = await _send('POST', '/v1/pro/claim', bearer: sessionToken, body: {
+      'receiptHash': receiptHash,
+      'amountEtb': amountEtb,
+      'planDays': planDays,
+      if (paidAtMs != null) 'paidAtMs': paidAtMs,
+    });
+    return CloudReceiptClaim(
+      expiresAtMs: (r['expiresAt'] as num?)?.toInt() ?? 0,
+      alreadyClaimed: r['alreadyClaimed'] == true,
+    );
+  }
 
+  Future<DateTime?> getProExpiry(String sessionToken) async {
+    final r = await _send('GET', '/v1/pro/status', bearer: sessionToken);
+    final expiresAt = (r['expiresAt'] as num?)?.toInt();
+    return expiresAt == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(expiresAt, isUtc: true);
+  }
 }

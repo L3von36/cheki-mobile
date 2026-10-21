@@ -8,7 +8,7 @@
 ///
 ///   * the receipt exists at Telebirr (verified live),
 ///   * the transaction completed successfully,
-///   * the settled amount equals a plan price exactly (10 / 100 ETB),
+///   * the settled amount equals the 300 ETB monthly plan exactly,
 ///   * the money went to the owner (credited account digits or name),
 ///   * the receipt is fresh (paid within the last few days).
 ///
@@ -89,7 +89,6 @@ class ReceiptActivationSuccess extends ReceiptActivation {
 /// The plan prices that unlock the app, with their durations in days.
 const Map<int, int> kPlanPricesEtb = {
   kMonthlyPriceEtb: kMonthlyPlanDays,
-  kYearlyPriceEtb: kYearlyPlanDays,
 };
 
 /// Exact (± half a cent) match against the plan price table.
@@ -173,8 +172,8 @@ ReceiptActivation evaluateActivationReceipt(
   if (days == null) {
     return ReceiptActivationRejected(
       'This receipt is for ${_fmtAmount(receipt.amount ?? 0)} ETB — activation '
-      'needs exactly $kMonthlyPriceEtb ETB (1 month) or $kYearlyPriceEtb ETB '
-      '(1 year) sent to $kPayTelebirrNumber.',
+      'needs exactly $kMonthlyPriceEtb ETB for one month sent to '
+      '$kPayTelebirrNumber.',
       reason: ActivationRejectReason.wrongAmount,
     );
   }

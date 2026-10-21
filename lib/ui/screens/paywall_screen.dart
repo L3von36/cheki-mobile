@@ -421,12 +421,6 @@ class _PriceCard extends StatelessWidget {
             s.priceUnlimitedBody,
             style: TextStyle(color: dim, fontSize: 12.5, height: 1.5),
           ),
-          const SizedBox(height: 4),
-          Text(
-            s.priceYearlyOnce('$kYearlyPriceEtb'),
-            style: TextStyle(
-                color: ink, fontSize: 12.5, fontWeight: FontWeight.w700),
-          ),
         ],
       ),
     );
@@ -469,7 +463,7 @@ class _StepsCard extends StatelessWidget {
           const SizedBox(height: 14),
           _Step(
             n: 1,
-            title: s.step1Title('$kMonthlyPriceEtb', '$kYearlyPriceEtb'),
+            title: s.step1Title('$kMonthlyPriceEtb', ''),
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

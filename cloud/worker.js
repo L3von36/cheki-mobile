@@ -23,7 +23,9 @@
  *   * Backwards Compatibility:
  *     - Existing legacy session tokens continue to be accepted during rollout.
  *
- * The API exposes account authentication and encrypted vault sync only.
+ * The API exposes account authentication, encrypted vault sync, and a
+ * server-side monthly Pro receipt ledger. Receipt references are stored only
+ * as SHA-256 fingerprints and are bound to one authenticated user.
  */
 
 const CLIENT_HEADER = 'x-mahtem-client';
@@ -496,6 +498,73 @@ export default {
           }
           await env.KV.delete(`vault:${session.userId}`);
           return json({ ok: true });
+        }
+
+        // ── monthly Pro receipt ledger ──────────────────────────────────
+        // The app verifies the Telebirr receipt first, then submits only its
+        // SHA-256 reference fingerprint through the user's normal session.
+        // No extra ingest token or raw receipt content is required.
+        case 'POST /v1/pro/claim': {
+          const session = await requireSession(request, env);
+          if (!session.ok) return err(session.error, session.status, session.message);
+          const body = await readJson(request);
+          const receiptHash = body?.receiptHash;
+          const amountEtb = Number(body?.amountEtb);
+          const planDays = Number(body?.planDays);
+          const paidAtMs = Number(body?.paidAtMs);
+          if (!isHex64(receiptHash) || amountEtb !== 300 || planDays !== 31) {
+            return err('bad_input', 400, 'A monthly claim requires a receipt hash, 300 ETB, and 31 days.');
+          }
+          const receiptKey = `pro:receipt:${receiptHash}`;
+          const existingRaw = await env.KV.get(receiptKey);
+          if (existingRaw) {
+            let existing;
+            try {
+              existing = JSON.parse(existingRaw);
+            } catch (_) {
+              return err('server', 500, 'Receipt ledger record is corrupted.');
+            }
+            if (existing.userId !== session.userId) {
+              return err('receipt_used', 409, 'This payment has already been used by another account.');
+            }
+            return json({ ok: true, alreadyClaimed: true, expiresAt: Number(existing.expiresAt) || Date.now() });
+          }
+          const userKey = `pro:user:${session.userId}`;
+          const userRaw = await env.KV.get(userKey);
+          let currentExpiry = 0;
+          if (userRaw) {
+            try {
+              currentExpiry = Number(JSON.parse(userRaw).expiresAt) || 0;
+            } catch (_) {
+              currentExpiry = 0;
+            }
+          }
+          const expiresAt = Math.max(Date.now(), currentExpiry) + 31 * 24 * 60 * 60 * 1000;
+          const record = {
+            userId: session.userId,
+            amountEtb,
+            planDays,
+            paidAtMs: Number.isFinite(paidAtMs) ? paidAtMs : null,
+            claimedAt: Date.now(),
+            expiresAt,
+          };
+          await env.KV.put(receiptKey, JSON.stringify(record));
+          await env.KV.put(userKey, JSON.stringify({ expiresAt, updatedAt: Date.now() }));
+          return json({ ok: true, alreadyClaimed: false, expiresAt });
+        }
+
+        case 'GET /v1/pro/status': {
+          const session = await requireSession(request, env);
+          if (!session.ok) return err(session.error, session.status, session.message);
+          const raw = await env.KV.get(`pro:user:${session.userId}`);
+          if (!raw) return json({ entitled: false, expiresAt: null });
+          try {
+            const record = JSON.parse(raw);
+            const expiresAt = Number(record.expiresAt) || 0;
+            return json({ entitled: expiresAt > Date.now(), expiresAt });
+          } catch (_) {
+            return err('server', 500, 'Entitlement record is corrupted.');
+          }
         }
 
         // ── geo-block relay ─────────────────────────────────────────────

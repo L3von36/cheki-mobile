@@ -550,7 +550,7 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String get stackingNote =>
-      'One receipt activates one plan on this device. To renew, pay again '
+      'One receipt activates one plan for one Mahtem account. To renew, pay again '
       'and paste the fresh receipt number — paid days always stack.';
 
   @override
@@ -602,7 +602,7 @@ final class EnglishStrings extends AppStrings {
 
   @override
   String step1Title(String monthly, String yearly) =>
-      'Pay $monthly ETB (or $yearly ETB / year) via Telebirr';
+      'Pay $monthly ETB each month via Telebirr';
 
   @override
   String get step1Body =>

@@ -50,8 +50,8 @@ void main() {
 
   group('planDaysForAmount', () {
     test('exact plan prices unlock their plan', () {
-      expect(planDaysForAmount(10), kMonthlyPlanDays);
-      expect(planDaysForAmount(100), kYearlyPlanDays);
+      expect(planDaysForAmount(300), kMonthlyPlanDays);
+      expect(planDaysForAmount(100), isNull);
     });
 
     test('anything else unlocks nothing', () {
@@ -93,15 +93,14 @@ void main() {
       final out = evaluateActivationReceipt(_receipt(), now: now);
       expect(out, isA<ReceiptActivationAccepted>());
       final ok = out as ReceiptActivationAccepted;
-      expect(ok.amountEtb, 10);
+      expect(ok.amountEtb, 300);
       expect(ok.planDays, kMonthlyPlanDays);
     });
 
-    test('a yearly payment is accepted for the yearly plan', () {
+    test('an annual amount is rejected for the monthly plan', () {
       final out = evaluateActivationReceipt(
-          _receipt(amount: 100), now: now);
-      expect(out, isA<ReceiptActivationAccepted>());
-      expect((out as ReceiptActivationAccepted).planDays, kYearlyPlanDays);
+          _receipt(amount: 3000), now: now);
+      expect(out, isA<ReceiptActivationRejected>());
     });
 
     test('only Telebirr receipts count', () {
@@ -114,7 +113,7 @@ void main() {
       final out = evaluateActivationReceipt(_receipt(amount: 50), now: now);
       expect(out, isA<ReceiptActivationRejected>());
       expect((out as ReceiptActivationRejected).message,
-          contains('exactly 10 ETB'));
+          contains('exactly 300 ETB'));
     });
 
     test('a missing amount is rejected', () {

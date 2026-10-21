@@ -180,6 +180,40 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// True when a local change has not reached the cloud yet.
   bool get hasUnsyncedChanges => _dirty;
 
+  /// Claims a verified monthly receipt against the signed-in Mahtem account.
+  /// The Worker stores only the receipt fingerprint and enforces global
+  /// one-account-per-receipt use.
+  Future<CloudReceiptClaim> claimProReceipt({
+    required String receiptHash,
+    required double amountEtb,
+    required int planDays,
+    int? paidAtMs,
+  }) async {
+    if (!await _ensureFreshSession()) {
+      throw const CloudApiException(CloudApiError.unauthorized, 401);
+    }
+    try {
+      return await _api.claimProReceipt(
+        sessionToken: _sessionToken!,
+        receiptHash: receiptHash,
+        amountEtb: amountEtb,
+        planDays: planDays,
+        paidAtMs: paidAtMs,
+      );
+    } on CloudApiException catch (e) {
+      if (e.error == CloudApiError.unauthorized && await _refreshSession()) {
+        return _api.claimProReceipt(
+          sessionToken: _sessionToken!,
+          receiptHash: receiptHash,
+          amountEtb: amountEtb,
+          planDays: planDays,
+          paidAtMs: paidAtMs,
+        );
+      }
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------- wiring
   /// Hooks the history store so every local change can auto-sync while a
   /// backup session is live. Idempotent for the same instance (the proxy
@@ -852,6 +886,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       case CloudApiError.notFound:
         return CloudFailure.server;
       case CloudApiError.conflict:
+      case CloudApiError.receiptUsed:
       case CloudApiError.badInput:
       case CloudApiError.empty:
       case CloudApiError.network:

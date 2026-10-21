@@ -74,7 +74,9 @@ class MahtemApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppTab()),
         // Licensing loads in the background — the paywall/gate awaits it.
         ChangeNotifierProvider(
-          create: (_) => LicenseController()..ensureLoaded(),
+          create: (context) => LicenseController(
+            receiptClaim: context.read<CloudController>().claimProReceipt,
+          )..ensureLoaded(),
         ),
         // Appearance + language restore synchronously from prefs.
         ChangeNotifierProvider(

@@ -35,9 +35,9 @@ LicenseController _controller(
 }
 
 /// A verified Telebirr receipt the fake engine hands back: a genuine
-/// 10 ETB payment to the owner, paid 2026-09-20 (fresh vs the clock).
+/// 300 ETB payment to the owner, paid 2026-09-20 (fresh vs the clock).
 ReceiptData _paidReceipt({
-  double amount = 10,
+  double amount = 300,
   String invoice = 'CHQ261Z4AB2C',
   String receiverAccount = '989680816',
   String receiverName = 'NOVEL WOLDE MICHAEL',
@@ -204,7 +204,7 @@ void main() {
   });
 
   group('receipt self-activation', () {
-    test('a genuine 10 ETB receipt to the owner unlocks instantly',
+    test('a genuine 300 ETB receipt to the owner unlocks instantly',
         () async {
       final (store, now) = fixtures();
       VerifyInput? seen;
@@ -267,7 +267,7 @@ void main() {
       final out = await c.activateWithReceipt('CHQ261Z4AB2C');
       expect(out, isA<ReceiptActivationRejected>());
       expect((out as ReceiptActivationRejected).message,
-          contains('exactly 10 ETB'));
+          contains('exactly 300 ETB'));
       expect(c.isEntitled, isFalse);
       // Trials were untouched — the user can still fall back to them.
       expect(c.canVerifyNow, isTrue);

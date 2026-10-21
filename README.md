@@ -49,12 +49,14 @@ your first 5 checks are free.
 
 - **5 free checks, then Mahtem Pro** — every install verifies 5 receipts
   for free. After that an in-app subscription unlocks unlimited checks
-  (10 ETB/month or 100 ETB/year): pay via Telebirr to the owner's
+  (300 ETB/month): pay via Telebirr to the owner's
   account, paste the receipt number from the confirmation SMS, and the
   app verifies that receipt with its own engine — amount and recipient
   are checked against the plan — and unlocks instantly. Zero human in the
-  loop. Anti-abuse: each receipt grants one plan on one device, used
-  receipts are remembered, and stale receipts are refused. Owner-minted
+  loop. Anti-abuse: each verified receipt is recorded by the authenticated
+  Mahtem account in the cloud ledger, so the same receipt cannot activate a
+  different account or be claimed twice. Used receipts are also remembered
+  locally, and stale receipts are refused. Owner-minted
   activation codes (Ed25519-signed, device-bound, offline verification)
   remain available as a fallback (`lib/core/licensing/`, code generator
   in `tool/make_license.dart`).

@@ -8,11 +8,18 @@ import '../core/licensing/license.dart';
 import '../core/licensing/license_store.dart';
 import '../core/licensing/paywall_config.dart';
 import '../core/licensing/receipt_activation.dart';
+import '../core/cloud/cloud_api.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/receipt_verify/verifier.dart';
 
 /// Signature of the receipt engine the self-activation flow calls.
 typedef ReceiptVerifyFn = Future<VerifyResult> Function(VerifyInput input);
+typedef ReceiptClaimFn = Future<CloudReceiptClaim> Function({
+  required String receiptHash,
+  required double amountEtb,
+  required int planDays,
+  int? paidAtMs,
+});
 
 /// Central licensing state: free-trial counter, activation status and the
 /// device identity users quote when buying a code. Exposed app-wide via
@@ -33,18 +40,21 @@ class LicenseController extends ChangeNotifier {
     DateTime Function()? now,
     String publicKeyHex = kLicensePublicKeyV1,
     ReceiptVerifyFn? receiptVerifier,
+    ReceiptClaimFn? receiptClaim,
   })  : _store = store ?? SecureLicenseStore(),
         _deviceKeySource =
             deviceKeySource ?? (() => const AndroidId().getId()),
         _now = now ?? (() => DateTime.now().toUtc()),
         _publicKeyHex = publicKeyHex,
-        _receiptVerifier = receiptVerifier ?? ReceiptVerifier.I.verify;
+        _receiptVerifier = receiptVerifier ?? ReceiptVerifier.I.verify,
+        _receiptClaim = receiptClaim;
 
   final LicenseKeyValue _store;
   final Future<String?> Function() _deviceKeySource;
   final DateTime Function() _now;
   final String _publicKeyHex;
   final ReceiptVerifyFn _receiptVerifier;
+  final ReceiptClaimFn? _receiptClaim;
 
   static const String _kTrialsKey = 'trial_checks';
   static const String _kTokenKey = 'license_token';
@@ -297,7 +307,7 @@ class LicenseController extends ChangeNotifier {
     }
     if (_usedReceipts.contains(refHash)) {
       return const ReceiptActivationRejected(
-        'This receipt has already been used to activate on this device. '
+        'This receipt has already been used to activate on another Mahtem account. '
         'When your plan expires, pay again and paste the new receipt.',
         reason: ActivationRejectReason.alreadyUsed,
       );
@@ -307,6 +317,36 @@ class LicenseController extends ChangeNotifier {
     if (check is! ReceiptActivationAccepted) return check;
     final accepted = check;
 
+    CloudReceiptClaim? remoteClaim;
+    if (_receiptClaim != null) {
+      try {
+        final paidAt = parseTelebirrReceiptDate(receipt.date);
+        remoteClaim = await _receiptClaim!(
+          receiptHash: refHash,
+          amountEtb: accepted.amountEtb,
+          planDays: accepted.planDays,
+          paidAtMs: paidAt?.millisecondsSinceEpoch,
+        );
+      } on CloudApiException catch (e) {
+        if (e.error == CloudApiError.receiptUsed) {
+          return const ReceiptActivationRejected(
+            'This payment receipt has already been used by another Mahtem account.',
+            reason: ActivationRejectReason.alreadyUsed,
+          );
+        }
+        return const ReceiptActivationError(VerifyFailure(
+          VerifyErrorKind.network,
+          'Your payment was verified, but Mahtem could not record it right now. Please try again.',
+          tips: ['Keep your internet connection on and submit the same receipt again.'],
+        ));
+      } catch (_) {
+        return const ReceiptActivationError(VerifyFailure(
+          VerifyErrorKind.network,
+          'Your payment was verified, but Mahtem could not record it right now. Please try again.',
+        ));
+      }
+    }
+
     // Stack on top of the current entitlement (a code month plus a receipt
     // month simply add up; renewing early never loses paid days).
     final nowUtc = _now();
@@ -314,7 +354,9 @@ class LicenseController extends ChangeNotifier {
     final base = (currentEnd != null && currentEnd.isAfter(nowUtc))
         ? currentEnd
         : nowUtc;
-    final newExpiry = base.add(Duration(days: accepted.planDays));
+    final newExpiry = remoteClaim == null
+        ? base.add(Duration(days: accepted.planDays))
+        : DateTime.fromMillisecondsSinceEpoch(remoteClaim.expiresAtMs, isUtc: true);
 
     _receiptExpiry = newExpiry;
     _receiptRefHash = refHash;

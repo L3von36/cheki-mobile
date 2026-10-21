@@ -15,6 +15,7 @@ The client derives everything on-device; the Worker stores only digests and ciph
 | `identifierHash`             | SHA-256 of the normalized account identifier            |
 | `authKey`                    | PBKDF2-SHA256(password, "mahtem-cloud-auth-v1") — 120k  |
 | `blob`                       | AES-256-GCM ciphertext of the history vault             |
+| `receiptHash`                | SHA-256 fingerprint of a verified Telebirr invoice; raw receipt data is never stored |
 
 The vault key (`PBKDF2(password, "mahtem-cloud-vault-v1:<identifier>")`)
 NEVER leaves the phone. The raw password NEVER leaves the phone. Even a
@@ -49,6 +50,8 @@ passwords and no readable history.
 | `/v1/vault`               | PUT    | Bearer   | `{blob, revision[, baseRevision]}`; 409 conflict check     |
 | `/v1/vault`               | GET    | Bearer   | `{blob, revision, updatedAt}` / 404 empty                  |
 | `/v1/vault`               | DELETE | Bearer | Remove the cloud copy                              |
+| `/v1/pro/claim`           | POST   | Bearer | `{receiptHash, amountEtb:300, planDays:31}` → records one account-bound monthly claim; reuse by another account returns `409 receipt_used` |
+| `/v1/pro/status`           | GET    | Bearer | Returns the authenticated account's current Pro expiry |
 | `/v1/relay`               | POST   | —      | `{bank, url}` → fetches a geo-blocked Telebirr/M-Pesa receipt page (`bank` allowlisted; GET-only, never an open proxy) |
 
 Every request must carry `X-Mahtem-Client` header.

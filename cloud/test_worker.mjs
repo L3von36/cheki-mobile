@@ -135,6 +135,46 @@ async function run() {
   const vaultData = await getRes.json();
   if (getRes.status !== 200 || vaultData.blob !== BLOB) throw new Error('Vault GET failed');
   console.log('Vault PUT/GET round-trip: OK');
+
+  // 9. Monthly receipt ledger: one receipt is idempotent for its owner and
+  // rejected for a different authenticated account.
+  const receiptHash = 'c'.repeat(64);
+  const claim = await worker.fetch(req('/v1/pro/claim', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${s2.accessToken}` },
+    body: { receiptHash, amountEtb: 300, planDays: 31, paidAtMs: Date.now() },
+  }), env);
+  const claimData = await claim.json();
+  if (claim.status !== 200 || claimData.alreadyClaimed !== false) {
+    throw new Error(`Initial receipt claim failed: ${claim.status} ${JSON.stringify(claimData)}`);
+  }
+  const sameClaim = await worker.fetch(req('/v1/pro/claim', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${s2.accessToken}` },
+    body: { receiptHash, amountEtb: 300, planDays: 31 },
+  }), env);
+  const sameData = await sameClaim.json();
+  if (sameClaim.status !== 200 || sameData.alreadyClaimed !== true) {
+    throw new Error(`Idempotent receipt claim failed: ${sameClaim.status} ${JSON.stringify(sameData)}`);
+  }
+  const otherHash = 'd'.repeat(64);
+  const otherAuth = 'e'.repeat(64);
+  await worker.fetch(req('/v1/accounts', {
+    method: 'POST', body: { identifierHash: otherHash, authKey: otherAuth },
+  }), env);
+  const otherSession = await (await worker.fetch(req('/v1/session', {
+    method: 'POST', body: { identifierHash: otherHash, authKey: otherAuth },
+  }), env)).json();
+  const crossClaim = await worker.fetch(req('/v1/pro/claim', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${otherSession.accessToken}` },
+    body: { receiptHash, amountEtb: 300, planDays: 31 },
+  }), env);
+  if (crossClaim.status !== 409 || (await crossClaim.json()).error !== 'receipt_used') {
+    throw new Error(`Cross-account receipt reuse was not rejected: ${crossClaim.status}`);
+  }
+  console.log('Receipt ledger uniqueness: OK');
+
   // ── Geo-block relay (upstream fetch stubbed) ─────────────────────────────
   const realFetch = globalThis.fetch;
   const fetched = [];

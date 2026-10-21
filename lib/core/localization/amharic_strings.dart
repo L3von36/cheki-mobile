@@ -579,7 +579,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get stackingNote =>
-      'አንድ ደረሰኝ በዚህ መሣሪያ ላይ አንድ እቅድ ይከፍታል። ለመቀጠል '
+      'አንድ ደረሰኝ ለአንድ የMahtem መለያ ብቻ ይሰራል። ለመቀጠል '
       'እንደገና ክፍያ አድርገው አዲሱን የደረሰኝ ቁጥር ይለጥፉ — '
       'የተከፈሉ ቀናት ይደመራሉ።';
 
@@ -634,7 +634,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String step1Title(String monthly, String yearly) =>
-      'በተሌብር $monthly ብር (ወይም በዓመት $yearly ብር) ይክፈሉ';
+      'በየወሩ በተሌብር $monthly ብር ይክፈሉ';
 
   @override
   String get step1Body => 'ትክክለኛውን መጠን ለዚህ የተሌብር መለያ ይላኩ፦';
@@ -700,8 +700,8 @@ final class AmharicStrings extends AppStrings {
           'ይህ ደረሰኝ በጣም የቆየ ነው። እንደገና ክፍያ አድርገው '
               'ከአዲሱ ኤስኤምኤስ ያለውን ደረሰኝ ይጠቀሙ።',
         ActivationRejectReason.alreadyUsed =>
-          'ይህ ደረሰኝ ቀድሞ በዚህ መሣሪያ ላይ ተጠቅሟል። እቅዱ '
-              'ሲያልቅ እንደገና ክፍያ አድርገው አዲሱን ደረሰኝ '
+          'ይህ የክፍያ ደረሰኝ ቀድሞ በሌላ መለያ ተጠቅሟል። አንድ ደረሰኝ '
+              'ለአንድ መለያ ብቻ ይሰራል። እቅዱ ሲያልቅ አዲስ ክፍያ አድርገው '
               'ይለጥፉ።',
       };
 
