@@ -365,7 +365,7 @@ void main() {
     expect(_hasEthiopic(s.cloudBackupBetaNote), isTrue);
     expect(_hasEthiopic(s.cloudBackupEnable), isTrue);
     expect(_hasEthiopic(s.cloudBackupDone), isTrue);
-    expect(s.undo, 'መልስ');
+    expect(s.undo, 'ተመልስ');
     expect(s.locale, AppLocale.amharic);
   });
 

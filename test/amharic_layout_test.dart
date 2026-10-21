@@ -43,7 +43,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   // tappable — signing up swaps the gate into the shell. (Small screens
   // need a scroll first; the button sits below the fold.)
   final createLabel = switch (localeCode) {
-    'am' => 'መለያ ይክፈቱ',
+    'am' => 'መለያ ይፍጠሩ',
     'om' => 'Herrega uumaa',
     'ti' => 'ሕሳብ ክፉቱ',
     _ => 'CREATE ACCOUNT',
@@ -65,7 +65,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   expect(find.byType(SettingsSheet), findsOneWidget);
   if (localeCode == 'am') {
     expect(find.text('ስርዓት'), findsOneWidget);
-    expect(find.text('ብርሃናማ'), findsOneWidget);
+    expect(find.text('ብሩህ'), findsOneWidget);
     expect(find.text('ጨለማ'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('አማርኛ'), findsOneWidget);
@@ -92,7 +92,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   // Switch theme light → dark → light while the sheet is open: the
   // switcher must not overflow in either direction.
   final lightLabel = find.text(switch (localeCode) {
-    'am' => 'ብርሃናማ',
+    'am' => 'ብሩህ',
     'om' => 'Ifa',
     'ti' => 'ብርሃን',
     _ => 'Light',
@@ -112,7 +112,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
 
   // Sign out (localized dialog) → gate lands on sign-in.
   final signOutLabel = find.text(switch (localeCode) {
-    'am' => 'ይውጡ',
+    'am' => 'ከመለያ ውጣ',
     'om' => "Ba'aa",
     'ti' => 'ውጻኡ',
     _ => 'Sign out',
@@ -132,7 +132,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   await tester.enterText(signInFields.at(1), 'secret1');
   await tester.pump(const Duration(milliseconds: 100));
   final signInLabel = switch (localeCode) {
-    'am' => 'ግቡ',
+    'am' => 'በመለያ ግባ',
     'om' => "Galmaa'aa",
     'ti' => 'ኣቱዎ',
     _ => 'SIGN IN',
