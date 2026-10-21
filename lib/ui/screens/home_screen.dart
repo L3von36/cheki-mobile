@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/localization/app_strings.dart';
 import '../../core/receipt_verify/models.dart';
-import '../../state/cloud_controller.dart';
 import '../../state/license_controller.dart';
 import '../../state/locale_controller.dart';
 import '../../state/verify_controller.dart';

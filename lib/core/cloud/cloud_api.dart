@@ -245,7 +245,18 @@ class CloudApi {
   /// is optimistic: a newer stored revision raises
   /// [CloudApiError.conflict] (with `serverRevision`).
   ///
-  /// Uploads the encrypted vault with optimistic concurrency control.
+  Future<void> putVault({
+    required String sessionToken,
+    required String blob,
+    required int revision,
+    int? baseRevision,
+  }) =>
+      _send('PUT', '/v1/vault', bearer: sessionToken, body: {
+        'blob': blob,
+        'revision': revision,
+        if (baseRevision != null) 'baseRevision': baseRevision,
+      });
+
   /// Returns null when the server holds no vault yet (404 `empty`).
   Future<CloudVaultRemote?> getVault(
     String sessionToken, {
