@@ -48,9 +48,10 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
     'ti' => 'ሕሳብ ክፉቱ',
     _ => 'CREATE ACCOUNT',
   };
-  await tester.ensureVisible(find.text(createLabel));
+  final createButton = find.widgetWithText(FilledButton, createLabel);
+  await tester.ensureVisible(createButton);
   await tester.pump(const Duration(milliseconds: 100));
-  await tester.tap(find.text(createLabel));
+  await tester.tap(createButton);
   await tester.pump(const Duration(milliseconds: 400));
   await tester.pump(const Duration(milliseconds: 400));
   expect(find.byType(SettingsSheet), findsNothing); // sanity: sheet closed
