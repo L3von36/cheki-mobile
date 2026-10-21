@@ -48,7 +48,7 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
     'ti' => 'ሕሳብ ክፉቱ',
     _ => 'CREATE ACCOUNT',
   };
-  final createButton = find.widgetWithText(FilledButton, createLabel);
+  final createButton = find.text(createLabel).last;
   await tester.ensureVisible(createButton);
   await tester.pump(const Duration(milliseconds: 100));
   await tester.tap(createButton);
