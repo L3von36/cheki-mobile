@@ -24,27 +24,27 @@ final class AmharicStrings extends AppStrings {
   String get referenceLabel => 'የደረሰኝ ቁጥር ወይም ሊንክ';
 
   @override
-  String get referenceHint => 'የደረሰኙን ሊንክ ይለጥፉ ወይም ቁጥሩን ይጻፉ';
+  String get referenceHint => 'የደረሰኝ ሊንኩን እዚህ ይለጥፉ ወይም ቁጥሩን ይጻፉ';
 
   @override
   String get pickBankHint =>
-      'ደረሰኙ የወጣበትን ባንክ ወይም ዋሌት ይምረጡ — '
+      'ደረሰኙ የተላከበትን ባንክ ወይም ዋሌት ይምረጡ — '
       'በሊንክና በQR ስካን ባንኩ በራስ-ሰር ይታወቃል።';
 
   @override
   String get phoneOnWallet => 'የዋሌቱ ስልክ ቁጥር';
 
   @override
-  String lastDigitsOnly(int digits) => 'የመጨረሻ $digits አሃዞች ብቻ';
+  String lastDigitsOnly(int digits) => 'የመጨረሻዎቹን $digits አሃዞች ብቻ';
 
   @override
-  String get clipboardEmpty => 'ኮፒ የተደረገ ነገር የለም።';
+  String get clipboardEmpty => 'በክሊፕቦርዱ ላይ ምንም የለም።';
 
   @override
-  String get verifyReceiptButton => 'ደረሰኙን አረጋግጡ';
+  String get verifyReceiptButton => 'ደረሰኙን ያረጋግጡ';
 
   @override
-  String get stopVerifying => 'ማረጋገጡን ያቁሙ';
+  String get stopVerifying => 'ማረጋገጫውን አቁም';
 
   @override
   String get autoDetectBank => 'ባንክ በራስ-ሰር ይታወቃል';
@@ -59,10 +59,10 @@ final class AmharicStrings extends AppStrings {
   String get scanQrInstead => 'የQR ኮዱን ይስካኑ';
 
   @override
-  String freeChecksLeft(int count) => '$count ነጻ ቀርተዋል';
+  String freeChecksLeft(int count) => '$count ነፃ ማረጋገጫ ቀርቷል';
 
   @override
-  String get upgrade => 'አባል ይሁኑ';
+  String get upgrade => 'ወደ Pro ያሻሽሉ';
 
   @override
   String proDaysLeft(int days) => 'PRO · $days ቀን';
@@ -73,13 +73,13 @@ final class AmharicStrings extends AppStrings {
   String get welcomeBack => 'እንኳን ደህና መጡ';
 
   @override
-  String get signInSubtitle => 'ደረሰኞችዎን ማረጋገጥን ለመቀጠል ይግቡ';
+  String get signInSubtitle => 'ደረሰኞችዎን ማረጋገጥ ለመቀጠል ይግቡ';
 
   @override
-  String get createAccountTitle => 'መለያዎን ይክፈቱ';
+  String get createAccountTitle => 'መለያ ይፍጠሩ';
 
   @override
-  String get createAccountSubtitle => 'በሁለት ደቂቃ ውስጥ ይፈጠራል — ለዚህ መሣሪያ ብቻ።';
+  String get createAccountSubtitle => 'በሁለት ደቂቃ ውስጥ ይፍጠሩ — ለዚህ መሣሪያ ብቻ።';
 
   @override
   String get fullName => 'ሙሉ ስም';
@@ -109,10 +109,10 @@ final class AmharicStrings extends AppStrings {
   String get signInLink => 'ግቡ';
 
   @override
-  String get createAccountButton => 'መለያ ይክፈቱ';
+  String get createAccountButton => 'መለያ ይፍጠሩ';
 
   @override
-  String get createAccountLink => 'መለያ ይክፈቱ';
+  String get createAccountLink => 'መለያ ይፍጠሩ';
 
   @override
   String get noAccountPrompt => 'መለያ የለዎትም?';
@@ -159,7 +159,7 @@ final class AmharicStrings extends AppStrings {
   String get authPrivacyNote =>
       'መለያዎ ተመስጥሮ በዚህ መሣሪያ ላይ ይቀመጣል — የይለፍ ቃልዎ ግን ወደ ውጭ አይላክም። '
       'በአዲስ መሣሪያ ላይ ሲገቡ ከይለፍ ቃልዎ የተሰራ አንድ-አቅጣጫ ቁልፍ ብቻ ይላካል፤ '
-      'የማረጋገጫ ታሪክ መጠባበቂያዎችም ተመስጥረው ብቻ ይላካሉ።';
+      'የማረጋገጫ ታሪክ ምትኬዎችም ተመስጥረው ብቻ ይላካሉ።';
 
   @override
   String errorAuth(AuthError error) => switch (error) {
@@ -171,7 +171,7 @@ final class AmharicStrings extends AppStrings {
     AuthError.passwordMismatch => 'የይለፍ ቃሎቹ አይመሳሰሉም።',
     AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል መለያ ቀድሞ አለ — እባክዎ ይግቡ።',
     AuthError.accountNotFound =>
-      'በዚህ ስልክ/ኢሜይል መለያ አልተገኘም — መጀመሪያ መለያ ይክፈቱ።',
+      'በዚህ ስልክ/ኢሜይል የተመዘገበ መለያ የለም — መጀመሪያ መለያ ይፍጠሩ።',
     AuthError.wrongPassword => 'የይለፍ ቃሉ ተሳስቷል። እንደገና ይሞክሩ።',
     AuthError.network =>
       'የመለያ አገልግሎቱን ማግኘት አልተቻለም። የበይነመረብ ግንኙነትዎን ያረጋግጡ።',
@@ -199,7 +199,7 @@ final class AmharicStrings extends AppStrings {
   String get themeSystem => 'ስርዓት';
 
   @override
-  String get themeLight => 'ብርሃናማ';
+  String get themeLight => 'ብሩህ';
 
   @override
   String get themeDark => 'ጨለማ';
@@ -235,14 +235,14 @@ final class AmharicStrings extends AppStrings {
   // ---------------------------------------------------------------- scan
 
   @override
-  String get scanTitle => 'ክፍያ ይስካኑ';
+  String get scanTitle => 'ደረሰኝ ይስካኑ';
 
   @override
-  String get scanPositionHint => 'QR ኮዱን በፍሬሙ ውስጥ ያስቀምጡ';
+  String get scanPositionHint => 'QR ኮዱን በሳጥኑ ውስጥ ያስገቡ';
 
   @override
   String get scanUsageHint =>
-      'በደረሰኙ ላይ የታተመውን QR ተጠቀሙ — '
+      'በደረሰኙ ላይ ያለውን QR ይጠቀሙ — '
       'የክፍያ መላኪያ ወይም የመቀበያ QR አይደለም';
 
   @override
@@ -263,21 +263,21 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String scanCameraError(String code) =>
-      'ካሜራው አልተከፈተም ($code)። ይዝጉትና እንደገና ይሞክሩ።';
+      'ካሜራውን ማስነሳት አልተቻለም ($code)። ይዝጉትና እንደገና ይሞክሩ።';
 
   @override
   String get scanRetry => 'እንደገና ይሞክሩ';
 
   @override
   String get scanCameraPermissionNeeded =>
-      'የደረሰኝ QR ለመስካን የካሜራ ፈቃድ ያስፈልጋል።';
+      'የደረሰኝ QR ኮድ ለመስካን የካሜራ ፈቃድ ያስፈልጋል።';
 
   @override
   String get scanGrantPermission => 'ፈቃድ ይስጡ';
 
   @override
   String get scanCameraOff =>
-      'ለማህተም የካሜራ መዳረሻ ጠፍቷል። ከስርዓቱ ቅንብሮች ይክፈቱት፣ '
+      'ለማህተም የካሜራ መዳረሻ ተዘግቷል። በስልኩ ቅንብሮች ውስጥ ያብሩት፣ '
       'ወይም የደረሰኙን ሊንክ ይለጥፉ።';
 
   @override
@@ -287,7 +287,7 @@ final class AmharicStrings extends AppStrings {
   String get scanCameraUnavailable => 'ካሜራ አይገኝም';
 
   @override
-  String get typeSheetTitle => 'የግብይት ወይም የማጣቀሻ ቁጥር ይጻፉ';
+  String get typeSheetTitle => 'የግብይት ወይም የማጣቀሻ ቁጥር ያስገቡ';
 
   @override
   String get typeSheetHint =>
@@ -306,14 +306,14 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get refScanHint =>
-      'ካሜራውን በደረሰኙ ላይ ያለው የግብይት ወይም የማጣቀሻ ቁጥር ላይ ያነጣጥሉ '
+      'ካሜራውን በደረሰኙ ላይ ያለው የግብይት ወይም የማጣቀሻ ቁጥር ላይ ያቅኑ '
       '— በፍሬሙ ውስጥ ያሉ ቁጥሮች ብቻ ይነበባሉ';
 
   @override
   String get refScanLooking => 'ቁጥሩን በመፈለግ ላይ…';
 
   @override
-  String get refScanFoundTitle => 'የተገኙ ቁጥሮች — ለማረጋገጥ ይንኩ';
+  String get refScanFoundTitle => 'የተገኙ ቁጥሮች — አንዱን ለማረጋገጥ ይንኩ';
 
   @override
   String get refScanTypeInstead => 'በእጅ ይጻፉ';
@@ -338,7 +338,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get resultVerifiedBody =>
-      'ክፍያው እውነተኛ ነው — በባንኩ ተረጋግጧል።';
+      'ክፍያው ትክክለኛ መሆኑ በባንኩ ተረጋግጧል።';
 
   @override
   String get resultFailedBody => 'ይህ ደረሰኝ ማረጋገጥ አልተቻለም።';
@@ -467,10 +467,10 @@ final class AmharicStrings extends AppStrings {
   String get historyTitle => 'ታሪክ';
 
   @override
-  String get clearHistoryTooltip => 'ታሪክ አጥፋ';
+  String get clearHistoryTooltip => 'ታሪክ አጽዳ';
 
   @override
-  String get clearHistoryTitle => 'ታሪክ ይጥፋ?';
+  String get clearHistoryTitle => 'ሁሉንም ታሪክ ያጽዱ?';
 
   @override
   String get clearHistoryBody =>
@@ -483,7 +483,7 @@ final class AmharicStrings extends AppStrings {
   String get noChecksTitle => 'እስካሁን ማረጋገጫ የለም';
 
   @override
-  String get noChecksBody => 'የተረጋገጡ ደረሰኞች እዚህ ይታያሉ።';
+  String get noChecksBody => 'የሚያረጋግጧቸው ደረሰኞች እዚህ ይታያሉ።';
 
   @override
   String get verifiedPaymentLabel => 'ክፍያ ተረጋግጧል';
@@ -492,7 +492,7 @@ final class AmharicStrings extends AppStrings {
   String get notVerifiedLabel => 'አልተረጋገጠም';
 
   @override
-  String get checkedLabel => 'ተፈትሿል';
+  String get checkedLabel => 'የተፈተሸ';
 
   @override
   String get noteLabel => 'ማስታወሻ';
@@ -501,7 +501,7 @@ final class AmharicStrings extends AppStrings {
   String get historySearchTooltip => 'ታሪክ ይፈልጉ';
 
   @override
-  String get historySearchHint => 'በቁጥር፣ በስም ወይም በባንክ ይፈልጉ';
+  String get historySearchHint => 'የደረሰኝ ቁጥር፣ ስም ወይም ባንክ ይፈልጉ';
 
   @override
   String get filterAll => 'ሁሉም';
@@ -517,7 +517,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get noMatchesBody =>
-      'ከፍለጋው ወይም ከማጣሪያው ጋር የሚስማማ ፍተሻ የለም።';
+      'ከፍለጋዎ ወይም ከማጣሪያዎ ጋር የሚስማማ ፍተሻ የለም።';
 
   @override
   String get verifyAgain => 'እንደገና ይረጋግጡ';
@@ -537,11 +537,11 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get pasteActivationCode =>
-      'የተላከልዎትን አክቲቬሽን ኮድ ይለጥፉ።';
+      'የተላከልዎትን የማንቃት ኮድ ይለጥፉ።';
 
   @override
   String get codeBadFormat =>
-      'ይህ የማህተም አክቲቬሽን ኮድ አይመስልም።';
+      'ይህ የማህተም ማንቃት ኮድ አይመስልም።';
 
   @override
   String get codeBadSignature =>
@@ -582,10 +582,10 @@ final class AmharicStrings extends AppStrings {
       'የተከፈሉ ቀናት ይተራረፋሉ።';
 
   @override
-  String get hideActivationCode => 'አክቲቬሽን ኮዱን ደብቅ';
+  String get hideActivationCode => 'የማንቃት ኮዱን ደብቅ';
 
   @override
-  String get haveActivationCode => 'የአክቲቬሽን ኮድ አለዎት?';
+  String get haveActivationCode => 'የማንቃት ኮድ አለዎት?';
 
   @override
   String get deviceCodeCopied => 'የመሣሪያ ኮድ ኮፒ ተደርጓል።';
@@ -604,7 +604,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get trialsLeftBody =>
-      'ካለቀ በኋላ ከታች Mahtem Pro ይክፈቱ — ታሪክዎና '
+      'ካለቀ በኋላ ከታች Mahtem Pro ያንቁ — ታሪክዎና '
       'ቅንብሮችዎ ሳይነኩ ይቆያሉ።';
 
   @override
@@ -612,7 +612,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get trialsGoneBody =>
-      'ደረሰኞችዎን ማረጋገጥን ለመቀጠል ከታች ይክፈቱ — '
+      'ደረሰኞችዎን ማረጋገጥ ለመቀጠል ከታች ያንቁ — '
       'በአንድ ደቂቃ ይጨርሳሉ።';
 
   @override
@@ -660,10 +660,10 @@ final class AmharicStrings extends AppStrings {
   String get checkingWithTelebirr => 'ተሌብር እያረጋገጠ ነው…';
 
   @override
-  String get verifyAndActivate => 'ያረጋግጡና ይክፈቱ';
+  String get verifyAndActivate => 'ያረጋግጡና ያንቁ';
 
   @override
-  String get activationCodeTitle => 'አክቲቬሽን ኮድ';
+  String get activationCodeTitle => 'የማንቃት ኮድ';
 
   @override
   String get codeBoundNote =>
@@ -672,7 +672,7 @@ final class AmharicStrings extends AppStrings {
       'ተዘጋጅቶ ይላክልዎታል።';
 
   @override
-  String get activate => 'ይክፈቱ';
+  String get activate => 'ያንቁ';
 
   @override
   String activationRejection(
@@ -736,14 +736,14 @@ final class AmharicStrings extends AppStrings {
   // --------------------------------------------- cloud backup (v1.13.0)
 
   @override
-  String get cloudBackupSection => 'የደመና መጠባበቂያ';
+  String get cloudBackupSection => 'የደመና ምትኬ';
 
   @override
-  String get cloudBackupTileOff => 'የደመና መጠባበቂያ — ዝግጁ አይደለም';
+  String get cloudBackupTileOff => 'የደመና ምትኬ — ገና አልበራም';
 
   @override
   String get cloudBackupBetaNote =>
-      'የፍተሻ ታሪክዎን ወደ የራስዎ መለያ ያስቀምጡ — ስልክዎ ቢጠፋ እንዳይጠፋ። ሁሉም ነገር '
+      'የማረጋገጫ ታሪክዎን በራስዎ መለያ ላይ ያስቀምጡ — ስልክዎ ቢጠፋም እንዳይጠፋ። ሁሉም ነገር '
       'በዚህ መሣሪያ ላይ መጀመሪያ ይመሰጠራል — ሰርቨሩ ሊያነበብ የማይችል መረጃ ብቻ ይይዛል፣ '
       'የመግቢያ ቃልዎም መሣሪያዎን አይተውድልም።';
 
@@ -751,22 +751,22 @@ final class AmharicStrings extends AppStrings {
   String get cloudBackupPasswordFieldHint => 'የመለያ መግቢያ ቃልዎ';
 
   @override
-  String get cloudBackupEnable => 'መጠባበቂያውን ያንቁ';
+  String get cloudBackupEnable => 'ምትኬን ያብሩ';
 
   @override
   String get cloudBackupWrongPassword => 'የተሳሳተ መግቢያ ቃል።';
 
   @override
   String get cloudBackupNetworkError =>
-      'የመጠባበቂያ አገልግሎቱን ማግኘት አልተቻለም። የኢንተርኔት ግንኙነትዎን ያረጋግጡ።';
+      'የምትኬ አገልግሎቱን ማግኘት አልተቻለም። የኢንተርኔት ግንኙነትዎን ያረጋግጡ።';
 
   @override
   String get cloudBackupServerError =>
-      'የመጠባበቂያ አገልግሎቱ ችግር አለበት። እባክዎ ቆይተው ይሞክሩ።';
+      'የምትኬ አገልግሎቱ ችግር አለበት። እባክዎ ቆይተው ይሞክሩ።';
 
   @override
   String get cloudBackupSessionExpired =>
-      'የመጠባበቂያ ክፍለ-ጊዜዎ አብቅቷል። ለመቀጠል መጠባበቂያውን እንደገና ያንቁ።';
+      'የምትኬ ክፍለ-ጊዜዎ አብቅቷል። ለመቀጠል ምትኬን እንደገና ያብሩ።';
 
   @override
   String get cloudBackupDecryptError =>
@@ -776,38 +776,38 @@ final class AmharicStrings extends AppStrings {
   String get cloudBackupLastNever => 'ገና አልተጠበቀም';
 
   @override
-  String get cloudBackupLastAt => 'የመጨረሻ መጠባበቂያ:';
+  String get cloudBackupLastAt => 'የመጨረሻ ምትኬ፦';
 
   @override
   String get cloudBackupNow => 'አሁን አስቀምጥ';
 
   @override
-  String get cloudBackupDone => 'መጠባበቂያው ተጠናቋል።';
+  String get cloudBackupDone => 'ምትኬ ተጠናቋል።';
 
   @override
   String get cloudBackupRestore => 'ከደመናው መልስ';
 
   @override
   String cloudBackupRestored(int n) =>
-      'ከደመናው $n አዲስ ፍተሻ${n == 1 ? '' : 'ዎች'} ተመልሰዋል።';
+      '$n አዲስ ፍተሻ${n == 1 ? '' : 'ዎች'} ከደመናው ተመልሰዋል።';
 
   @override
   String get cloudBackupNothingToRestore =>
-      'የደመና መጠባበቂያው ባዶ ነው — የሚመለስ ነገር የለም።';
+      'የደመና ምትኬው ባዶ ነው — የሚመለስ ነገር የለም።';
 
   @override
   String get cloudBackupTurnOff => 'አጥፋ';
 
   @override
   String get cloudBackupTurnedOff =>
-      'መጠባበቂያው ተዝግቷል። የደመና ቅጂዎ ተሰርዟል።';
+      'ምትኬ ጠፍቷል። በደመና ላይ የነበረው ቅጂዎ ተሰርዟል።';
 
   @override
   String cloudBackupEntryCount(int n) =>
       '$n ፍተሻ${n == 1 ? '' : 'ዎች'} ተጠብቀዋል';
 
   @override
-  String get cloudAutoBackupTitle => 'በራስ-ሰር መጠባበቂያ';
+  String get cloudAutoBackupTitle => 'ራስ-ሰር ምትኬ';
 
   @override
   String get cloudAutoBackupSubtitle =>
@@ -883,11 +883,11 @@ final class AmharicStrings extends AppStrings {
   String get pasteExtractedToast => 'የደረሰኝ ቁጥር ከጽሑፉ ውስጥ ተገኝቷል።';
 
   @override
-  String get batchTitle => 'በብዛት ማረጋገጫ';
+  String get batchTitle => 'ብዙ ደረሰኞችን ማረጋገጥ';
 
   @override
   String get batchIntro =>
-      'ብዙ የደረሰኝ ሊንኮችን ወይም ቁጥሮችን ይለጥፉ — አንድ በአንድ መስመር ላይ — አንድላይ '
+      'ብዙ የደረሰኝ ሊንኮችን ወይም ቁጥሮችን ይለጥፉ — በእያንዳንዱ መስመር አንድ — ሁሉንም '
       'ይረጋግጡ። ለዕለታዊ የገበያ ሂሳብ ማስተካከያ የተዘጋጀ ነው።';
 
   @override
@@ -898,7 +898,7 @@ final class AmharicStrings extends AppStrings {
       'FT26140P01YB';
 
   @override
-  String get batchBankLabel => 'የተለመዱ ቁጥሮች ባንክ';
+  String get batchBankLabel => 'ለቀጥተኛ ቁጥሮች ባንክ';
 
   @override
   String batchStart(int count) => count == 1
@@ -907,12 +907,12 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String batchNeedMore(int have, int need) =>
-      'ይህ ቡድን $need ማረጋገጫዎችን ይፈልጋል — $have ብቻ ቀርተዋል። '
-      'ለመቀጠል ደረጃ ያሳልፉ።';
+      'ይህን ቡድን ለማጠናቀቅ $need ማረጋገጫዎች ያስፈልጋሉ — $have ብቻ ቀርተዋል። '
+      'ለመቀጠል ወደ Pro ያሻሽሉ።';
 
   @override
   String batchNeedsPhone(String bank) =>
-      'በብዛት $bank ማረጋገጥ አይቻልም፦ እያንዳንዱ ደረሰኝ የራሱ የመላኪያ ስልክ ቁጥር '
+      'ብዙ ደረሰኞችን የ$bank ማረጋገጥ አይቻልም፦ እያንዳንዱ ደረሰኝ የራሱ የመላኪያ ስልክ ቁጥር '
       'ይፈልጋል።';
 
   @override
@@ -922,7 +922,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String batchDuplicates(int count) =>
-      count == 1 ? '1 ተደጋጋሚ ተዝሏል' : '$count ተደጋጋሚዎች ተዝለዋል';
+      count == 1 ? '1 ተደጋጋሚ ተዘልሏል' : '$count ተደጋጋሚዎች ተዘልለዋል';
 
   @override
   String batchProgress(int done, int total) =>
