@@ -47,7 +47,7 @@ final class AmharicStrings extends AppStrings {
   String get stopVerifying => 'ማረጋገጫውን አቁም';
 
   @override
-  String get autoDetectBank => 'ባንክ በራስ-ሰር ይታወቃል';
+  String get autoDetectBank => 'ባንኩን በራሱ ይወቅ';
 
   @override
   String detected(String bankName) => 'ተገኝቷል፦ $bankName';
@@ -56,7 +56,7 @@ final class AmharicStrings extends AppStrings {
   String get pasteTooltip => 'ለጥፍ';
 
   @override
-  String get scanQrInstead => 'የQR ኮዱን ይስካኑ';
+  String get scanQrInstead => 'የQR ኮዱን ስካን ያድርጉ';
 
   @override
   String freeChecksLeft(int count) => count == 1
@@ -301,7 +301,7 @@ final class AmharicStrings extends AppStrings {
   // ------------------------------------- reference number scanner (v1.10.0)
 
   @override
-  String get scanNumberAction => 'ቁጥር ይስካኑ';
+  String get scanNumberAction => 'ቁጥሩን ስካን ያድርጉ';
 
   @override
   String get refScanTitle => 'የደረሰኝ ቁጥር ይስካኑ';
