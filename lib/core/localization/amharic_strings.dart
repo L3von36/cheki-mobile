@@ -59,7 +59,9 @@ final class AmharicStrings extends AppStrings {
   String get scanQrInstead => 'የQR ኮዱን ይስካኑ';
 
   @override
-  String freeChecksLeft(int count) => '$count ነፃ ማረጋገጫ ቀርቷል';
+  String freeChecksLeft(int count) => count == 1
+      ? 'አንድ ነፃ ማረጋገጫ ቀርቷል'
+      : '$count ነፃ ማረጋገጫዎች ቀርተዋል';
 
   @override
   String get upgrade => 'ወደ Pro ያሻሽሉ';
@@ -79,7 +81,7 @@ final class AmharicStrings extends AppStrings {
   String get createAccountTitle => 'መለያ ይፍጠሩ';
 
   @override
-  String get createAccountSubtitle => 'በሁለት ደቂቃ ውስጥ ይፍጠሩ — ለዚህ መሣሪያ ብቻ።';
+  String get createAccountSubtitle => 'ለዚህ መሣሪያ ብቻ የሚሆን መለያ በጥቂት ሰከንዶች ውስጥ ይፍጠሩ።';
 
   @override
   String get fullName => 'ሙሉ ስም';
@@ -150,7 +152,7 @@ final class AmharicStrings extends AppStrings {
   String get signingIn => 'በመግባት ላይ…';
 
   @override
-  String get creatingAccount => 'መለያ በመክፈት ላይ…';
+  String get creatingAccount => 'መለያ በመፍጠር ላይ…';
 
   @override
   String get accountCreatedSuccess => 'መለያዎ በተሳካ ሁኔታ ተፈጥሯል!';
@@ -163,13 +165,13 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String errorAuth(AuthError error) => switch (error) {
-    AuthError.invalidName => 'ሙሉ ስምዎን ያስገቡ (ቢያንስ 2 ፊደላት)።',
+    AuthError.invalidName => 'ሙሉ ስምዎን ያስገቡ (ቢያንስ 2 ቁምፊዎች)።',
     AuthError.invalidIdentifier =>
       'ትክክለኛ የኢትዮጵያ ስልክ ቁጥር (09xxxxxxxx) ወይም ኢሜይል ያስገቡ።',
     AuthError.invalidEmail => 'ኢሜይሉ ትክክል አይመስልም።',
     AuthError.invalidPassword => 'የይለፍ ቃል ቢያንስ 6 ቁምፊዎች መሆን አለበት።',
-    AuthError.passwordMismatch => 'የይለፍ ቃሎቹ አይመሳሰሉም።',
-    AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል መለያ ቀድሞ አለ — እባክዎ ይግቡ።',
+    AuthError.passwordMismatch => 'የይለፍ ቃሎቹ አይዛመዱም።',
+    AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል የተመዘገበ መለያ አስቀድሞ አለ፤ እባክዎ ይግቡ።',
     AuthError.accountNotFound =>
       'በዚህ ስልክ/ኢሜይል የተመዘገበ መለያ የለም — መጀመሪያ መለያ ይፍጠሩ።',
     AuthError.wrongPassword => 'የይለፍ ቃሉ ተሳስቷል። እንደገና ይሞክሩ።',
@@ -246,7 +248,7 @@ final class AmharicStrings extends AppStrings {
       'የክፍያ መላኪያ ወይም የመቀበያ QR አይደለም';
 
   @override
-  String get scanFlash => 'ብርሃን';
+  String get scanFlash => 'ፍላሽ';
 
   @override
   String get scanGallery => 'ጋለሪ';
@@ -263,7 +265,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String scanCameraError(String code) =>
-      'ካሜራውን ማስነሳት አልተቻለም ($code)። ይዝጉትና እንደገና ይሞክሩ።';
+      'ካሜራውን ማስነሳት አልተቻለም ($code)። ይህን ገጽ ይዝጉና እንደገና ይሞክሩ።';
 
   @override
   String get scanRetry => 'እንደገና ይሞክሩ';
@@ -338,7 +340,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get resultVerifiedBody =>
-      'ክፍያው ትክክለኛ መሆኑ በባንኩ ተረጋግጧል።';
+      'ይህ ክፍያ እውነተኛ መሆኑ በባንኩ ተረጋግጧል።';
 
   @override
   String get resultFailedBody => 'ይህ ደረሰኝ ማረጋገጥ አልተቻለም።';
@@ -374,7 +376,7 @@ final class AmharicStrings extends AppStrings {
   String get reasonLabel => 'ምክንያት';
 
   @override
-  String get statusLabel => 'ኹኔታ';
+  String get statusLabel => 'ሁኔታ';
 
   @override
   String get bankShortLabel => 'ባንክ';
@@ -386,7 +388,7 @@ final class AmharicStrings extends AppStrings {
   String get editReasonAction => 'ምክንያት ያስተካክሉ';
 
   @override
-  String get reasonSheetTitle => 'ይህ ፍተሻ ለምን የተደረገ ነበር?';
+  String get reasonSheetTitle => 'ይህ ፍተሻ ለምን ተደረገ?';
 
   @override
   String get reasonSheetHint => 'ለምሳሌ፡ የቤት ኪራይ፣ ግዥ፣ ትእዛዝ #12';
@@ -441,11 +443,11 @@ final class AmharicStrings extends AppStrings {
   List<String> failureTips(VerifyErrorKind kind, List<String> fallback) =>
       switch (kind) {
         VerifyErrorKind.network => const [
-          'ሞባይል ዳታ ወይም Wi-Fi በርቷል ያረጋግጡ።',
+          'ሞባይል ዳታ ወይም Wi-Fi መብራቱን ያረጋግጡ።',
           'አገልግሎቱ ጊዜያዊ ሊሆን ይችላል — ጥቂት ቆይተው እንደገና ይሞክሩ።',
         ],
         VerifyErrorKind.notFound => const [
-          'ቁጥሩ ሳይሰረዝ እንዲገባ እንደገና ያረጋግጡ።',
+          'ቁጥሩን በትክክል እንዳስገቡ እንደገና ያረጋግጡ።',
           'ሊንክ ከለጠፉ ሙሉው እንደሆነ ያረጋግጡ።',
         ],
         VerifyErrorKind.badInput => const [
@@ -453,7 +455,7 @@ final class AmharicStrings extends AppStrings {
         ],
         VerifyErrorKind.unreadable => const [
           'ሙሉውን QR በብርሃን ውስጥ በፍሬሙ ውስጥ ያስቀምጡ።',
-          'ከኤስኤምኤሱ የደረሰኙን ቁጥር በእጅ ይለጥፉ።',
+          'ከኤስኤምኤሱ የደረሰኙን ቁጥር ይለጥፉ።',
         ],
         VerifyErrorKind.unsupported => const [
           'መተግበሪያው የሚደግፋቸውን ባንኮች በመጀመሪያው ገጽ ላይ ይመልከቱ።',
@@ -533,7 +535,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get pasteReceiptFromSms =>
-      'ከተሌብር ኤስኤምኤሱ የደረሰኙን ቁጥር ይለጥፉ።';
+      'ከተሌብር ኤስኤምኤስ የደረሰኙን ቁጥር ይለጥፉ።';
 
   @override
   String get pasteActivationCode =>
@@ -545,7 +547,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get codeBadSignature =>
-      'ኮዱ ትክክል አይደለም — እንዲላክልዎ ለላኪው ይንገሩ።';
+      'ኮዱ ትክክል አይደለም — ላኪው እንደገና እንዲልከው ይጠይቁ።';
 
   @override
   String get codeWrongDevice =>
@@ -554,7 +556,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String codeExpired(String date) =>
-      'ኮዱ በ$date አብቅቷል። ለመቀጠል አዲስ ይግዙ።';
+      'ኮዱ በ$date አብቅቷል። ለማደስ አዲስ ይግዙ።';
 
   @override
   String get codeNotAccepted => 'ኮዱን መቀበል አልተቻለም።';
@@ -579,7 +581,7 @@ final class AmharicStrings extends AppStrings {
   String get stackingNote =>
       'አንድ ደረሰኝ በዚህ መሣሪያ ላይ አንድ እቅድ ይከፍታል። ለመቀጠል '
       'እንደገና ክፍያ አድርገው አዲሱን የደረሰኝ ቁጥር ይለጥፉ — '
-      'የተከፈሉ ቀናት ይተራረፋሉ።';
+      'የተከፈሉ ቀናት ይደመራሉ።';
 
   @override
   String get hideActivationCode => 'የማንቃት ኮዱን ደብቅ';
@@ -613,7 +615,7 @@ final class AmharicStrings extends AppStrings {
   @override
   String get trialsGoneBody =>
       'ደረሰኞችዎን ማረጋገጥ ለመቀጠል ከታች ያንቁ — '
-      'በአንድ ደቂቃ ይጨርሳሉ።';
+      'በአንድ ደቂቃ ውስጥ ይጠናቀቃል።';
 
   @override
   String get pricePerMonth => 'ብር / ወር';
@@ -628,7 +630,7 @@ final class AmharicStrings extends AppStrings {
       'ወይም ለአንድ ዓመት በአንድ ጊዜ $price ብር ይክፈሉ።';
 
   @override
-  String get howToActivate => 'መመሪያ';
+  String get howToActivate => 'እንዴት ማንቃት ይቻላል?';
 
   @override
   String step1Title(String monthly, String yearly) =>
@@ -667,7 +669,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get codeBoundNote =>
-      'ኮዶች ለአንድ መሣሪያ ብቻ ይሰራሉ። የደረሰኝ ማረጋገጫ ከሳሳ፣ '
+      'ኮዶች ለአንድ መሣሪያ ብቻ ይሰራሉ። የደረሰኝ ማረጋገጫ ካልተሳካ፣ '
       'ከክፍያዎ ጋር ይህን የመሣሪያ ኮድ ይላኩ — ለዚህ ስልክ '
       'ተዘጋጅቶ ይላክልዎታል።';
 
@@ -682,20 +684,20 @@ final class AmharicStrings extends AppStrings {
   }) =>
       switch (reason) {
         ActivationRejectReason.emptyInput =>
-          'ከተሌብር ኤስኤምኤሱ የደረሰኙን ቁጥር ይለጥፉ።',
+          'ከተሌብር ኤስኤምኤስ የደረሰኙን ቁጥር ይለጥፉ።',
         ActivationRejectReason.notTelebirr =>
           'ለMahtem Pro የሚያነቃው የተሌብር ደረሰኝ ብቻ ነው።',
         ActivationRejectReason.transactionFailed =>
           'ያ የተሌብር ግብይት አልተጠናቀቀም — ማንቃት አልተቻለም።',
         ActivationRejectReason.wrongAmount =>
-          'ይህ ደረሰኝ የተላከው በተለየ መጠን ነው — ማንቃት የሚጠይቀው '
-              'ትክክለኛውን የእቅድ ዋጋ ነው (ከታች ይመልከቱ)።',
+          'ይህ ደረሰኝ የተላከው በተለየ መጠን ነው — ማንቃት '
+              'ትክክለኛውን የእቅዱን ዋጋ ይጠይቃል (ከታች ይመልከቱ)።',
         ActivationRejectReason.wrongReceiver =>
           'ክፍያው ለመመሪያው ውስጥ ካለው የተሌብር መለያ አልተላከም። '
               'የእቅዱን ዋጋ ለዚያ መለያ መላክና አዲሱን ደረሰኝ '
               'መለጠፍ ያስፈልጋል።',
         ActivationRejectReason.receiptTooOld =>
-          'ይህ ደረሰኝ በጣም ጥንታዊ ነው። እንደገና ክፍያ አድርገው '
+          'ይህ ደረሰኝ በጣም የቆየ ነው። እንደገና ክፍያ አድርገው '
               'ከአዲሱ ኤስኤምኤስ ያለውን ደረሰኝ ይጠቀሙ።',
         ActivationRejectReason.alreadyUsed =>
           'ይህ ደረሰኝ ቀድሞ በዚህ መሣሪያ ላይ ተጠቅሟል። እቅዱ '
@@ -705,33 +707,33 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get crashReportsNote =>
-      'መተግበሪያው ሲበላሽ ችግሩን የሚገልጽ መረጃ ያለ ስምዎ '
-      'ይላካል — ደረሰኝም ሆነ የመለያ መረጃዎ አያካትቱም።';
+      'መተግበሪያው ሲበላሽ ችግሩን የሚገልጽ ስም-አልባ ሪፖርት '
+      'ይላካል — ደረሰኝም ሆነ የመለያ መረጃ አያካትትም።';
 
   // ------------------------------------------------ error safety net (v1.12.1)
 
   @override
   String get somethingWentWrongScreen =>
-      'ይህንን ክፍል በማሳየት ላይ ችግር በገጠመ። ተመልሰው እንደገና ይሞክሩ።';
+      'ይህንን ክፍል ለማሳየት ችግር ተፈጥሯል። ተመልሰው ይሞክሩ።';
 
   @override
-  String get reportProblemTile => 'ችግር ይመዝግቡ';
+  String get reportProblemTile => 'ችግር ያሳውቁ';
 
   @override
   String get reportProblemTitle => 'በዚህ መሣሪያ ላይ የተመዘገቡ ችግሮች';
 
   @override
   String get reportProblemEmpty =>
-      'እስካሁን ምንም ችግር አልተመዘገበም። መተግበሪያው ችግር ከፈጠረ ዝርዝሮቹ '
-      'እዚህ ይታያሉ — ችግሩን ስያዘው እንዲጋሩዎት ይቻላል።';
+      'እስካሁን ምንም ችግር አልተመዘገበም። መተግበሪያው ችግር ካስከተለ፣ ዝርዝሮቹ '
+      'እዚህ ይታያሉ፤ እንዲያጋሯቸውም ይችላሉ።';
 
   @override
   String get reportProblemHint =>
-      'እነዚህ ዝርዝሮች በመሣሪያዎ ውስጥ ብቻ ይቆያሉ። ችግር ስያስቡ ቅጂያቸውን '
-      'አውጥተው አብረው ይላኩ።';
+      'እነዚህ ዝርዝሮች በመሣሪያዎ ውስጥ ብቻ ይቆያሉ። ችግር ሲያሳውቁ፣ ኮፒ አድርገው '
+      'አብረው ይላኩ።';
 
   @override
-  String get reportProblemCopy => 'ዝርዝሮቹን ቅጂ';
+  String get reportProblemCopy => 'ዝርዝሮቹን ኮፒ ያድርጉ';
 
   // --------------------------------------------- cloud backup (v1.13.0)
 
@@ -745,16 +747,16 @@ final class AmharicStrings extends AppStrings {
   String get cloudBackupBetaNote =>
       'የማረጋገጫ ታሪክዎን በራስዎ መለያ ላይ ያስቀምጡ — ስልክዎ ቢጠፋም እንዳይጠፋ። ሁሉም ነገር '
       'በዚህ መሣሪያ ላይ መጀመሪያ ይመሰጠራል — ሰርቨሩ ሊያነበብ የማይችል መረጃ ብቻ ይይዛል፣ '
-      'የመግቢያ ቃልዎም መሣሪያዎን አይተውድልም።';
+      'የይለፍ ቃልዎም መሣሪያዎን አይለቅም።';
 
   @override
-  String get cloudBackupPasswordFieldHint => 'የመለያ መግቢያ ቃልዎ';
+  String get cloudBackupPasswordFieldHint => 'የመለያዎ የይለፍ ቃል';
 
   @override
   String get cloudBackupEnable => 'ምትኬን ያብሩ';
 
   @override
-  String get cloudBackupWrongPassword => 'የተሳሳተ መግቢያ ቃል።';
+  String get cloudBackupWrongPassword => 'የተሳሳተ የይለፍ ቃል።';
 
   @override
   String get cloudBackupNetworkError =>
@@ -770,7 +772,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String get cloudBackupDecryptError =>
-      'የደመና ቅጂው በዚህ መግቢያ ቃል መከፈት አልተቻለም።';
+      'የደመና ቅጂው በዚህ የይለፍ ቃል መከፈት አልተቻለም።';
 
   @override
   String get cloudBackupLastNever => 'ገና አልተጠበቀም';
@@ -779,32 +781,34 @@ final class AmharicStrings extends AppStrings {
   String get cloudBackupLastAt => 'የመጨረሻ ምትኬ፦';
 
   @override
-  String get cloudBackupNow => 'አሁን አስቀምጥ';
+  String get cloudBackupNow => 'አሁን ምትኬ ያድርጉ';
 
   @override
   String get cloudBackupDone => 'ምትኬ ተጠናቋል።';
 
   @override
-  String get cloudBackupRestore => 'ከደመና መልስ';
+  String get cloudBackupRestore => 'ከደመና ይመልሱ';
 
   @override
-  String cloudBackupRestored(int n) =>
-      '$n አዲስ ፍተሻ${n == 1 ? '' : 'ዎች'} ከደመናው ተመልሰዋል።';
+  String cloudBackupRestored(int n) => n == 1
+      ? '1 አዲስ ፍተሻ ከደመናው ተመልሷል።'
+      : '$n አዲስ ፍተሻዎች ከደመናው ተመልሰዋል።';
 
   @override
   String get cloudBackupNothingToRestore =>
       'የደመና ምትኬው ባዶ ነው — የሚመለስ ነገር የለም።';
 
   @override
-  String get cloudBackupTurnOff => 'አጥፋ';
+  String get cloudBackupTurnOff => 'ምትኬን ያጥፉ';
 
   @override
   String get cloudBackupTurnedOff =>
       'ምትኬ ጠፍቷል። በደመና ላይ የነበረው ቅጂዎ ተሰርዟል።';
 
   @override
-  String cloudBackupEntryCount(int n) =>
-      '$n ፍተሻ${n == 1 ? '' : 'ዎች'} ተጠብቀዋል';
+  String cloudBackupEntryCount(int n) => n == 1
+      ? '1 ፍተሻ ተጠብቋል'
+      : '$n ፍተሻዎች ተጠብቀዋል';
 
   @override
   String get cloudAutoBackupTitle => 'ራስ-ሰር ምትኬ';
@@ -843,7 +847,7 @@ final class AmharicStrings extends AppStrings {
   String get undo => 'ተመልስ';
 
   @override
-  String get emptyCta => 'የመጀመሪያውን ደረሰኝዎን ያረጋግጡ';
+  String get emptyCta => 'የመጀመሪያዎን ደረሰኝ ያረጋግጡ';
 
   @override
   String get exportTooltip => 'ታሪክ አጋራ';
@@ -859,7 +863,7 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String failureBlockedMessage() =>
-      'የሲንቄ ባንክ ደረሰኝ አገልግሎት ለወዲሁን ከዚህ ኔትወርክ ራሱን እየከላከለ ነው።';
+      'የሲንቄ ባንክ ደረሰኝ አገልግሎት ከዚህ ኔትወርክ የሚመጡ አውቶማቲክ ፍተሻዎችን ለጊዜው እየከለከለ ነው።';
 
   @override
   List<String> failureBlockedTips() => const [
@@ -898,7 +902,7 @@ final class AmharicStrings extends AppStrings {
       'FT26140P01YB';
 
   @override
-  String get batchBankLabel => 'ለቀጥተኛ ቁጥሮች ባንክ';
+  String get batchBankLabel => 'ለሊንክ ያልሆኑ የማጣቀሻ ቁጥሮች ባንክ';
 
   @override
   String batchStart(int count) => count == 1
@@ -917,20 +921,22 @@ final class AmharicStrings extends AppStrings {
 
   @override
   String batchNeedsBank(int count) => count == 1
-      ? 'መጀመሪያ ለመሰረታዊው ቁጥር ባንክ ይምረጡ'
-      : 'መጀመሪያ ለ$count መሰረታዊ ቁጥሮች ባንክ ይምረጡ';
+      ? 'መጀመሪያ ለሊንክ ላልሆነው የማጣቀሻ ቁጥር ባንኩን ይምረጡ'
+      : 'መጀመሪያ ለ$count ሊንክ ላልሆኑ የማጣቀሻ ቁጥሮች ባንኩን ይምረጡ';
 
   @override
   String batchDuplicates(int count) =>
-      count == 1 ? '1 ተደጋጋሚ ተዘልሏል' : '$count ተደጋጋሚዎች ተዘልለዋል';
+      count == 1
+          ? '1 ተደጋጋሚ መስመር ተዘልሏል'
+          : '$count ተደጋጋሚ መስመሮች ተዘለሉ';
 
   @override
   String batchProgress(int done, int total) =>
-      'በመረጋገጥ ላይ… $done ከ$total';
+      'በማረጋገጥ ላይ… $done ከ$total';
 
   @override
   String batchDoneCounts(int verified, int failed) =>
-      '✓ $verified ተረጋግጠዋል · ✗ $failed አልተረጋገጠም';
+      '✓ $verified ተረጋግጠዋል · ✗ $failed አልተረጋገጡም';
 
   @override
   String batchRemaining(int count) => count == 1
@@ -945,7 +951,7 @@ final class AmharicStrings extends AppStrings {
       'እስካሁን ምንም የሚረጋገጥ የለም — ከላይ ቁጥሮችን ይለጥፉ ወይም ይጻፉ።';
 
   @override
-  String get batchSkipDuplicate => 'በዚህ ቡድን ውስጥ ተደጋጋሚ';
+  String get batchSkipDuplicate => 'በዚህ ቡድን ውስጥ የተደገመ';
 
   @override
   String get batchSkipCbe => 'የሲቢኤ የታተመ ቁጥር — የደረሰኝ ኮድ ያስፈልገዋል';
@@ -954,5 +960,5 @@ final class AmharicStrings extends AppStrings {
   String get batchSkipUnknown => 'ሊንኩ አልታወቀም';
 
   @override
-  String get batchSkipOverLimit => 'ከ50 መስመር በላይ ነው';
+  String get batchSkipOverLimit => 'የ50 መስመር ገደብን አልፏል።';
 }
