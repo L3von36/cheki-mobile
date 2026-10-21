@@ -103,10 +103,10 @@ final class AmharicStrings extends AppStrings {
   String get confirmPasswordLabel => 'የይለፍ ቃል ያረጋግጡ';
 
   @override
-  String get signInButton => 'ግቡ';
+  String get signInButton => 'በመለያ ግባ';
 
   @override
-  String get signInLink => 'ግቡ';
+  String get signInLink => 'በመለያ ግባ';
 
   @override
   String get createAccountButton => 'መለያ ይፍጠሩ';
@@ -135,7 +135,7 @@ final class AmharicStrings extends AppStrings {
   String get resetAccountsConfirm => 'አጥፋ';
 
   @override
-  String get cancel => 'ሰርዝ';
+  String get cancel => 'ተመለስ';
 
   @override
   String get ok => 'እሺ';
@@ -208,10 +208,10 @@ final class AmharicStrings extends AppStrings {
   String get languageSection => 'ቋንቋ';
 
   @override
-  String get signOut => 'ይውጡ';
+  String get signOut => 'ከመለያ ውጣ';
 
   @override
-  String get signOutConfirmTitle => 'ይውጡ?';
+  String get signOutConfirmTitle => 'ከመለያ ይውጡ?';
 
   @override
   String get signOutConfirmBody =>
@@ -273,7 +273,7 @@ final class AmharicStrings extends AppStrings {
       'የደረሰኝ QR ኮድ ለመስካን የካሜራ ፈቃድ ያስፈልጋል።';
 
   @override
-  String get scanGrantPermission => 'ፈቃድ ይስጡ';
+  String get scanGrantPermission => 'ፈቃድ ስጥ';
 
   @override
   String get scanCameraOff =>
@@ -281,7 +281,7 @@ final class AmharicStrings extends AppStrings {
       'ወይም የደረሰኙን ሊንክ ይለጥፉ።';
 
   @override
-  String get scanOpenSettings => 'ቅንብሮችን ይክፈቱ';
+  String get scanOpenSettings => 'ቅንብሮችን ክፈት';
 
   @override
   String get scanCameraUnavailable => 'ካሜራ አይገኝም';
@@ -347,7 +347,7 @@ final class AmharicStrings extends AppStrings {
   String get resultDone => 'ተጠናቋል';
 
   @override
-  String get resultShare => 'ያጋሩ';
+  String get resultShare => 'አጋራ';
 
   @override
   String get resultTryAgain => 'እንደገና ይሞክሩ';
@@ -477,7 +477,7 @@ final class AmharicStrings extends AppStrings {
       'የተቀመጡ ማረጋገጫዎች ሁሉ ከዚህ መሣሪያ ይሰረዛሉ።';
 
   @override
-  String get clearButton => 'አጥፋ';
+  String get clearButton => 'አጽዳ';
 
   @override
   String get noChecksTitle => 'እስካሁን ማረጋገጫ የለም';
@@ -498,7 +498,7 @@ final class AmharicStrings extends AppStrings {
   String get noteLabel => 'ማስታወሻ';
 
   @override
-  String get historySearchTooltip => 'ታሪክ ይፈልጉ';
+  String get historySearchTooltip => 'በታሪክ ውስጥ ፈልግ';
 
   @override
   String get historySearchHint => 'የደረሰኝ ቁጥር፣ ስም ወይም ባንክ ይፈልጉ';
@@ -785,7 +785,7 @@ final class AmharicStrings extends AppStrings {
   String get cloudBackupDone => 'ምትኬ ተጠናቋል።';
 
   @override
-  String get cloudBackupRestore => 'ከደመናው መልስ';
+  String get cloudBackupRestore => 'ከደመና መልስ';
 
   @override
   String cloudBackupRestored(int n) =>
@@ -840,13 +840,13 @@ final class AmharicStrings extends AppStrings {
   String get removedToast => 'ከታሪክ ተወግዷል።';
 
   @override
-  String get undo => 'መልስ';
+  String get undo => 'ተመልስ';
 
   @override
   String get emptyCta => 'የመጀመሪያውን ደረሰኝዎን ያረጋግጡ';
 
   @override
-  String get exportTooltip => 'ታሪክ ያጋሩ';
+  String get exportTooltip => 'ታሪክ አጋራ';
 
   @override
   String get cbeNeedsCodeTitle => 'ሲቢኤ የደረሰኝ ኮድ ያስፈልገዋል';
@@ -938,7 +938,7 @@ final class AmharicStrings extends AppStrings {
       : 'ቀሪዎቹን $count ደረሰኞች ይረጋግጡ';
 
   @override
-  String get batchShareTooltip => 'ውጤቶችን ያጋሩ';
+  String get batchShareTooltip => 'ውጤቶችን አጋራ';
 
   @override
   String get batchEmpty =>
