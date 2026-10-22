@@ -321,7 +321,7 @@ class LicenseController extends ChangeNotifier {
     if (_receiptClaim != null) {
       try {
         final paidAt = parseTelebirrReceiptDate(receipt.date);
-        remoteClaim = await _receiptClaim!(
+        remoteClaim = await _receiptClaim(
           receiptHash: refHash,
           amountEtb: accepted.amountEtb,
           planDays: accepted.planDays,
