@@ -133,8 +133,8 @@ void main() {
       expect(s.trialsLeftTitle(1), isNotEmpty);
       expect(s.trialsLeftTitle(3), isNotEmpty);
       expect(s.priceYearlyOnce('900'), contains('900'));
-      expect(s.step1Title('99', '900'), contains('900'));
-      expect(s.step2Body('99'), contains('99'));
+      expect(s.step1Title('300', '900'), contains('300'));
+      expect(s.step2Body('300'), contains('300'));
       expect(s.verifyAndActivate, isNotEmpty);
       for (final reason in ActivationRejectReason.values) {
         expect(

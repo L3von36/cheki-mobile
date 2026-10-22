@@ -5,7 +5,7 @@ import 'package:mahtem/core/receipt_verify/models.dart';
 
 ReceiptData _receipt({
   String bankCode = 'telebirr',
-  double? amount = 10,
+  double? amount = 300,
   String? receiverAccount = '989680816',
   String? receiverName = 'NOVEL WOLDE MICHAEL',
   String? date = '20-09-2026 12:00:00',
