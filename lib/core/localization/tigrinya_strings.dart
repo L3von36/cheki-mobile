@@ -665,8 +665,7 @@ final class TigrinyaStrings extends AppStrings {
 
   @override
   String step1Title(String monthly, String yearly) =>
-      'ብTelebirr ወርሓዊ $monthly ብር ክፈሉ '
-      'ክፈሉ';
+      'ብTelebirr ወርሓዊ $monthly ብር ክፈሉ';
 
   @override
   String get step1Body =>

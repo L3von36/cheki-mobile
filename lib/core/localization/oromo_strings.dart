@@ -664,7 +664,7 @@ final class OromoStrings extends AppStrings {
 
   @override
   String step1Title(String monthly, String yearly) =>
-      'Ji'a hunda $monthly ETB Telebirr tiin kaffalaa';
+      "Ji'a hunda $monthly ETB Telebirr tiin kaffalaa";
 
   @override
   String get step1Body =>
