@@ -194,6 +194,40 @@ void main() {
       expect(decryptBoaQr(base64Encode(utf8.encode('not a boa qr'))), isNull);
     });
 
+    test('decrypt tolerates whitespace, url-safe alphabet and lost padding',
+        () {
+      // 72 chars of CSV → 80-byte ciphertext → base64 that carries one '='.
+      final csv = '1000****2211,ABEBE KEbede,1500,FT26140P01YB,'
+          '18-09-2026,1000****8348,SAMI';
+      var b64 = base64Encode(encryptBoaQr(csv));
+      expect(b64.endsWith('='), isTrue);
+      // URL-safe alphabet + interior newline + a stripped padding char —
+      // every transport variant strict base64Decode used to reject.
+      b64 = b64.replaceAll('+', '-').replaceAll('/', '_');
+      b64 = '${b64.substring(0, 40)}\n'
+          '${b64.substring(40, b64.length - 1)}';
+      final p = decryptBoaQr(b64);
+      expect(p, isNotNull);
+      expect(p!.reference, 'FT26140P01YB');
+      expect(p.amount, 1500);
+    });
+
+    test('looksLikeBoaQrPayload gates on ciphertext shape', () {
+      final qr = base64Encode(encryptBoaQr(
+          '1000****2211,ABEBE KEbede,1500,FT26140P01YB,18-09-2026 10:11,'
+          '1000****8348,SAMI CLOTHING'));
+      expect(looksLikeBoaQrPayload(qr), isTrue);
+      // Right alphabet, wrong shape: too short / not block-aligned.
+      expect(looksLikeBoaQrPayload(base64Encode(utf8.encode('short'))),
+          isFalse);
+      expect(looksLikeBoaQrPayload('not base64 at all!!'), isFalse);
+      // Shape survives the transport variants the decryptor tolerates.
+      expect(
+          looksLikeBoaQrPayload(
+              '${qr.substring(0, 50)} ${qr.substring(50)}'),
+          isTrue);
+    });
+
     test('verifier resolves a BOA QR fully offline', () async {
       final qr = base64Encode(encryptBoaQr(
           '1000****2211,ABEBE KEbede,1500,FT26140P01YB,18-09-2026 10:11,'
@@ -204,6 +238,20 @@ void main() {
       expect(result.receipt!.bankCode, 'boa');
       expect(result.receipt!.fromQr, isTrue);
       expect(result.receipt!.amount, 1500);
+    });
+
+    test('undecryptable BOA-shaped QR → friendly failure, not a dead end',
+        () async {
+      // 128 A's = base64 of 96 zero bytes: the right shape for applyScan to
+      // detect BOA, but no decryptor can open it. The verifier must pop its
+      // honest unreadable-QR explanation with recovery tips.
+      final result = await ReceiptVerifier.I.verify(
+          VerifyInput(bankId: 'boa', reference: '', qrData: 'A' * 128));
+      expect(result.ok, isFalse);
+      expect(result.failure!.kind, VerifyErrorKind.unreadable);
+      expect(result.failure!.message,
+          contains('Bank of Abyssinia'));
+      expect(result.failure!.tips, isNotEmpty);
     });
   });
 
@@ -225,8 +273,57 @@ void main() {
     });
   });
 
-  group('M-Pesa JSON', () {
-    test('parses a successful receipt', () {
+  group('M-Pesa', () {
+    test('parses the base64-PDF envelope the endpoint really returns',
+        () async {
+      final doc = pw.Document();
+      doc.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => pw.Paragraph(
+            text: 'M-PESA RECEIPT NO UCK0SYNTH1 PAYMENT DATE 2026-09-14 '
+                '12:34:56 SETTLED AMOUNT ETB 320.50 PAYER NAME HALLELUJAH '
+                'TADESSE PAYER PHONE NUMBER 0911234567 RECEIVER NAME SAMI '
+                'CLOTHING RECEIVER NUMBER 0912765432 TRANSACTION ID '
+                'SJ72HK3YZ9 TRANSACTION TYPE Pay Merchant SERVICE FEE 0.00 '
+                'TOTAL ETB 320.50 SCAN TO VERIFY'),
+      ));
+      final pdfB64 = base64Encode(await doc.save());
+      final envelope = '{"responseCode":"0","responseDescription":"Success",'
+          '"base64Data":"$pdfB64"}';
+
+      final p = parseMpesaJson(envelope);
+      expect(p.verified, isTrue);
+      expect(p.reference, 'SJ72HK3YZ9');
+      expect(p.amount, 320.50);
+      expect(p.senderName, 'HALLELUJAH TADESSE');
+      expect(p.receiverName, 'SAMI CLOTHING');
+      expect(p.date, contains('2026-09-14'));
+      expect(p.invoiceNumber, 'UCK0SYNTH1');
+    });
+
+    test('error envelope → not found', () {
+      expect(
+          parseMpesaJson(
+                  '{"responseCode":"1","responseDescription":"not found"}')
+              .verified,
+          isFalse);
+    });
+
+    test('field-less success envelope → not found (no hollow receipt)', () {
+      // The old parser answered verified:true with every field null for
+      // this body — the empty "Verified" screen bug.
+      expect(parseMpesaJson('{"responseCode":"0"}').verified, isFalse);
+    });
+
+    test('envelope with non-PDF base64 → not found', () {
+      final b64 = base64Encode(utf8.encode('definitely not a pdf'));
+      expect(parseMpesaJson(
+              '{"responseCode":"0","base64Data":"$b64"}')
+          .verified,
+          isFalse);
+    });
+
+    test('legacy flat JSON still parses', () {
       final p = parseMpesaJson(
           '{"responseCode":"0","senderName":"HALLELUJAH","receiverName":"SAMI",'
           '"amount":"320.50","currency":"ETB","transactionDate":"2026-09-18",'
@@ -236,8 +333,32 @@ void main() {
       expect(p.reference, 'SJ72HK3YZ9');
     });
 
-    test('error code → not found', () {
-      expect(parseMpesaJson('{"responseCode":"1"}').verified, isFalse);
+    test('PDF label slicing: header row + parties in any order', () {
+      const text = 'TRANSACTION ID QGH9KLM2P4 RECEIVER BUSINESS NAME SAMI '
+          'STORES RECEIVER NUMBER 0912765432 PAYER NAME JOHN KAMAU TOTAL '
+          '1,250.00 SERVICE FEE 10.00 SETTLED AMOUNT 1,250.00 PAYMENT DATE '
+          '2026-10-01 09:15:00';
+      final p = parseMpesaPdfText(text);
+      expect(p.verified, isTrue);
+      expect(p.reference, 'QGH9KLM2P4');
+      expect(p.amount, 1250.00);
+      expect(p.senderName, 'JOHN KAMAU');
+      expect(p.receiverName, 'SAMI STORES');
+      expect(p.receiverAccount, '0912765432');
+      expect(p.date, '2026-10-01 09:15:00');
+    });
+
+    test('PDF label slicing: TOTAL AMOUNT IN WORDS wins over TOTAL', () {
+      const text = 'PAYER NAME JANE DOE TRANSACTION ID SJ72HK3YZ9 TOTAL '
+          '320.50 TOTAL AMOUNT IN WORDS THREE HUNDRED TWENTY BIRR 50 ONLY';
+      final p = parseMpesaPdfText(text);
+      expect(p.verified, isTrue);
+      expect(p.amount, 320.50);
+    });
+
+    test('unrelated PDF text → not found', () {
+      expect(parseMpesaPdfText('Hello world, nothing here').verified, isFalse);
+      expect(parseMpesaPdfText('').verified, isFalse);
     });
   });
 

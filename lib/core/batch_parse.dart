@@ -171,9 +171,13 @@ BatchLine _parseLine(String line, BankInfo? bank, String? sharedAccount) {
   }
 
   // 3) BOA encrypted slip QR — verifies offline inside the verifier,
-  //    no account suffix needed.
+  //    no account suffix needed. Detection rides the payload shape, not
+  //    the decryption outcome: a QR the decryptor cannot open still rows
+  //    as BOA so the runner surfaces the verifier's friendly unreadable-QR
+  //    reason instead of checking a giant base64 blob as a reference.
   final boa = decryptBoaQr(line);
-  if (boa != null && (boa.reference?.isNotEmpty ?? false)) {
+  if (looksLikeBoaQrPayload(line) &&
+      (boa == null || (boa.reference?.isNotEmpty ?? false))) {
     return BatchLine(
       input: line,
       bankId: 'boa',

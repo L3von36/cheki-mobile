@@ -233,9 +233,16 @@ class VerifyController extends ChangeNotifier {
       return;
     }
 
-    // BOA encrypted slip QR — the verifier decrypts it offline.
+    // BOA encrypted slip QR — the verifier decrypts it offline. Detection
+    // rides the payload SHAPE (`looksLikeBoaQrPayload`), not the decryption
+    // outcome: when the camera read a dense BOA QR imperfectly and the
+    // decryptor cannot open it, the bank is still detected and the
+    // verifier pops its friendly unreadable-QR explanation — the payload
+    // used to fall through as an anonymous reference blob instead, which
+    // looked exactly like "the scanner does not detect BOA QRs".
     final boa = decryptBoaQr(raw);
-    if (boa != null && (boa.reference?.isNotEmpty ?? false)) {
+    if (looksLikeBoaQrPayload(raw) &&
+        (boa == null || (boa.reference?.isNotEmpty ?? false))) {
       detectedBank = bankById('boa');
       reference = '';
       accountNumber = '';

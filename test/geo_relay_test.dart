@@ -7,6 +7,8 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:mahtem/core/receipt_verify/geo_relay.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/receipt_verify/verifier.dart';
@@ -201,6 +203,38 @@ void main() {
       expect(r.amount, 320.50);
       expect(r.fromQr, isTrue);
       expect(r.note, 'Scanned from the QR on the receipt.');
+    });
+
+    test('M-Pesa: the base64-PDF envelope the endpoint returns parses '
+        'through the relay too', () async {
+      final doc = pw.Document();
+      doc.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => pw.Paragraph(
+            text: 'M-PESA RECEIPT NO UCK0SYNTH1 PAYMENT DATE 2026-09-14 '
+                '12:34:56 SETTLED AMOUNT ETB 320.50 PAYER NAME HALLELUJAH '
+                'TADESSE RECEIVER NAME SAMI CLOTHING TRANSACTION ID '
+                'SJ72HK3YZ9 TOTAL ETB 320.50'),
+      ));
+      final envelope = jsonEncode({
+        'responseCode': '0',
+        'responseDescription': 'Success',
+        'base64Data': base64Encode(await doc.save()),
+      });
+      final res = await verifyViaGeoRelay(
+        const VerifyInput(bankId: 'mpesa', reference: 'SJ72HK3YZ9'),
+        postFn: (uri, headers, body) async => RelayResponse(
+            200,
+            jsonEncode({'ok': true, 'status': 200, 'body': envelope})),
+      );
+      expect(res, isNotNull);
+      expect(res!.ok, isTrue);
+      final r = res.receipt!;
+      expect(r.bankCode, 'mpesa');
+      expect(r.reference, 'SJ72HK3YZ9');
+      expect(r.amount, 320.50);
+      expect(r.senderName, 'HALLELUJAH TADESSE');
+      expect(r.receiverName, 'SAMI CLOTHING');
     });
 
     test('bank 404 maps to the engine’s not-found message', () async {

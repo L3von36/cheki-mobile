@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
 
+import 'pdf_text.dart';
+
 /// Dart port of the 1RB/cheki parsers (MIT): per-bank receipt parsing plus
 /// URL detection and the BOA encrypted-QR decryption.
 ///
@@ -257,11 +259,45 @@ Uint8List pbkdf2Sha1(List<int> password, List<int> salt, int iterations, int key
   return derivator.process(Uint8List.fromList(password));
 }
 
+/// Normalizes a base64 payload for decoding: whitespace and newlines are
+/// stripped, the URL-safe alphabet folds onto the standard one and missing
+/// padding is repaired. QR encoders, SMS transport and copy-paste all
+/// produce variants that strict `base64Decode` rejects — a receipt QR must
+/// never fail on those.
+String _normalizeBase64(String input) {
+  var s = input.replaceAll(RegExp(r'\s'), '');
+  s = s.replaceAll('-', '+').replaceAll('_', '/');
+  final rem = s.length % 4;
+  if (rem != 0) s = s.padRight(s.length + (4 - rem), '=');
+  return s;
+}
+
+/// Whether [input] has the SHAPE of a BOA receipt QR payload: base64 of
+/// AES-CBC ciphertext — 80..4096 characters decoding to a whole number of
+/// 16-byte blocks, at least two blocks. Port of the stylepos/cheki
+/// `isBoaQrPayload` gate, hardened with [_normalizeBase64].
+///
+/// Shape only: a payload passing this gate can still fail decryption
+/// (corrupted reading, changed format). Callers use it to DETECT the bank
+/// and hand the payload to the verifier, whose friendly unreadable-QR
+/// failure replaces the old silent dead end.
+bool looksLikeBoaQrPayload(String input) {
+  final t = _normalizeBase64(input);
+  if (t.length < 80 || t.length > 4096) return false;
+  if (!RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(t)) return false;
+  try {
+    final decoded = base64Decode(t);
+    return decoded.length % 16 == 0 && decoded.length >= 32;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Decrypt + parse a BOA QR payload
 /// (CSV: senderAccount,senderName,amount,reference,date,receiverAccount,receiverName).
 Parsed? decryptBoaQr(String qrData) {
   try {
-    final cipherText = base64Decode(qrData.trim());
+    final cipherText = base64Decode(_normalizeBase64(qrData));
     final key = pbkdf2Sha1(
         utf8.encode(_boaQrPassword), utf8.encode(_boaQrSalt), 10000, 32);
     final cbc = CBCBlockCipher(AESEngine());
@@ -620,29 +656,305 @@ String? extractTelebirrInvoiceFromQr(String qrData) {
 // M-Pesa — JSON.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// M-Pesa — the getReceipt endpoint answers a JSON envelope carrying the
+/// receipt as a base64-encoded PDF:
+///
+///     { "responseCode": "0", "responseDescription": "…", "base64Data": "JVBERi0…" }
+///
+/// Every open-source verifier of this endpoint reads that envelope and parses
+/// the PDF (see the stylepos/cheki mpesa parser notes); no source shows the
+/// old flat-JSON shape (senderName/amount at the top level) existing. The
+/// flat reader is kept only as a defensive fallback and now refuses to call
+/// a field-less JSON a receipt — the old fallback returned `verified: true`
+/// with every field null for exactly this envelope, which is how the result
+/// screen ended up showing an empty "Verified" page.
 Parsed parseMpesaJson(String body) {
   try {
     final payload = jsonDecode(body) as Map<String, Object?>;
-    final code = payload['responseCode'];
-    if (code != null && code.toString() != '0') return Parsed.notFound;
 
+    final code = payload['responseCode']?.toString();
+    if (code != null && code != '0') return Parsed.notFound;
+
+    // ── envelope path — the shape the endpoint really returns ──────────
+    final b64Raw = payload['base64Data'];
+    if (b64Raw is String && b64Raw.isNotEmpty) {
+      try {
+        final bytes = base64Decode(_normalizeBase64(b64Raw));
+        final isPdf = bytes.length > 4 &&
+            bytes[0] == 0x25 && bytes[1] == 0x50 && // %P
+            bytes[2] == 0x44 && bytes[3] == 0x46; // DF
+        if (!isPdf) return Parsed.notFound;
+        return parseMpesaPdfText(extractPdfText(bytes));
+      } catch (_) {
+        return Parsed.notFound;
+      }
+    }
+
+    // ── flat-JSON fallback — only when it carries real receipt data ────
     double? amount;
     final amountRaw = payload['amount']?.toString();
     if (amountRaw != null) amount = double.tryParse(amountRaw);
+    final senderName = (payload['senderName'] ?? payload['payerName']) as String?;
+    final receiverName =
+        (payload['receiverName'] ?? payload['creditPartyName']) as String?;
+    final reference = (payload['transactionId'] ?? payload['trxNo']) as String?;
+    if ((reference == null || reference.isEmpty) &&
+        amount == null &&
+        senderName == null &&
+        receiverName == null) {
+      return Parsed.notFound;
+    }
 
     return Parsed(
       verified: true,
-      senderName: (payload['senderName'] ?? payload['payerName']) as String?,
-      receiverName:
-          (payload['receiverName'] ?? payload['creditPartyName']) as String?,
+      senderName: senderName,
+      receiverName: receiverName,
       amount: amount,
       currency: (payload['currency'] as String?) ?? 'ETB',
       date: (payload['transactionDate'] ?? payload['date']) as String?,
-      reference: (payload['transactionId'] ?? payload['trxNo']) as String?,
+      reference: reference,
     );
   } catch (_) {
     return Parsed.notFound;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M-Pesa receipt PDF — the envelope's base64Data decodes to the receipt PDF
+// the M-Pesa app prints ("SCAN TO VERIFY" footer included). Labels come from
+// the receipt layouts other open-source verifiers observe; each appears in
+// English next to its Amharic twin, and values are read by splitting the text
+// at every label, so row-ordered layout text and one long run of flowed text
+// both parse.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MpesaLabel {
+  final String text;
+  final String field;
+  const _MpesaLabel(this.text, this.field);
+}
+
+/// Longest first, so "TOTAL AMOUNT IN WORDS" wins over "TOTAL" at the same
+/// position and "RECEIVER ACCOUNT NUMBER" over "RECEIVER NUMBER"-style
+/// prefixes.
+const List<_MpesaLabel> _mpesaLabels = [
+  _MpesaLabel('TOTAL AMOUNT IN WORDS', 'words'),
+  _MpesaLabel('RECEIVER BUSINESS NAME', 'receiverBusinessName'),
+  _MpesaLabel('RECEIVER ACCOUNT NUMBER', 'receiverAccount'),
+  _MpesaLabel('RECEIVER BUSINESS NUMBER', 'receiverAccount'),
+  _MpesaLabel('TRANSACTION STATUS', 'status'),
+  _MpesaLabel('TRANSACTION TYPE', 'transactionType'),
+  _MpesaLabel('PAYER PHONE NUMBER', 'senderAccount'),
+  _MpesaLabel('BUYER PHONE NUMBER', 'senderAccount'),
+  _MpesaLabel('PAYMENT CHANNEL', 'channel'),
+  _MpesaLabel('TRANSACTION ID', 'reference'),
+  _MpesaLabel('RECEIVER NUMBER', 'receiverAccount'),
+  _MpesaLabel('PAYMENT METHOD', 'paymentMethod'),
+  _MpesaLabel('PAYMENT REASON', 'reason'),
+  _MpesaLabel('SENDER NUMBER', 'senderAccount'),
+  _MpesaLabel('RECEIVER NAME', 'receiverName'),
+  _MpesaLabel('SERVICE FEE', 'serviceFee'),
+  _MpesaLabel('SENDER NAME', 'senderName'),
+  _MpesaLabel('BUYER NAME', 'senderName'),
+  _MpesaLabel('PAYER NAME', 'senderName'),
+  _MpesaLabel('SETTLED AMOUNT', 'settled'),
+  _MpesaLabel('PAYMENT DATE', 'date'),
+  _MpesaLabel('DISCOUNT', 'discount'),
+  _MpesaLabel('RECEIPT NO', 'receiptNo'),
+  _MpesaLabel('TOTAL', 'total'),
+  _MpesaLabel('+ 15% VAT', 'vat'),
+];
+
+class _MpesaHit {
+  final int start;
+  final int end;
+  final String field;
+  const _MpesaHit(this.start, this.end, this.field);
+}
+
+bool _mpesaWordChar(String c) =>
+    c.isNotEmpty && RegExp(r'[A-Za-z0-9]').hasMatch(c);
+
+/// Locates every label occurrence in [uppercased] text with word-boundary
+/// guards ("TOTAL" must not claim "SUBTOTAL" or "TOTALS"), sorts the hits by
+/// position (longer label first at the same start) and drops hits that fall
+/// inside an already-chosen longer label.
+List<_MpesaHit> _mpesaLabelHits(String upper) {
+  final hits = <_MpesaHit>[];
+  for (final label in _mpesaLabels) {
+    var from = 0;
+    while (true) {
+      final at = upper.indexOf(label.text, from);
+      if (at == -1) break;
+      final end = at + label.text.length;
+      from = at + 1;
+      final before = at == 0 ? '' : upper[at - 1];
+      final after = end == upper.length ? '' : upper[end];
+      if (_mpesaWordChar(before) || _mpesaWordChar(after)) continue;
+      hits.add(_MpesaHit(at, end, label.field));
+    }
+  }
+  hits.sort((a, b) =>
+      a.start != b.start ? a.start - b.start : b.end - a.end);
+  final chosen = <_MpesaHit>[];
+  var lastEnd = -1;
+  for (final h in hits) {
+    if (h.start < lastEnd) continue;
+    chosen.add(h);
+    lastEnd = h.end;
+  }
+  return chosen;
+}
+
+/// Splits receipt text at every known label: each field's value is the text
+/// from its label's end to the next label's start, whitespace collapsed and
+/// separator (: / | -) edges trimmed. First occurrence of a field wins.
+Map<String, String> _sliceMpesaLabels(String text) {
+  final upper = text.toUpperCase();
+  final chosen = _mpesaLabelHits(upper);
+  final values = <String, String>{};
+  for (var i = 0; i < chosen.length; i++) {
+    final nextStart =
+        i + 1 < chosen.length ? chosen[i + 1].start : text.length;
+    if (nextStart <= chosen[i].end) continue;
+    var raw = text.substring(chosen[i].end, nextStart);
+    raw = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    raw = raw.replaceAll(RegExp(r'^[\s:/|.\-]+|[\s:/|.\-]+$'), '');
+    if (raw.isNotEmpty && !values.containsKey(chosen[i].field)) {
+      values[chosen[i].field] = raw;
+    }
+  }
+  return values;
+}
+
+String? _mpesaName(String? raw) {
+  if (raw == null) return null;
+  // Drop the Ethiopic twin label and anything that is not a name character;
+  // cut at the first digit (an account run or address glued to the name).
+  final cut = raw.indexOf(RegExp(r'\d'));
+  final base = (cut == -1 ? raw : raw.substring(0, cut))
+      .replaceAll(RegExp("[^A-Za-z .'-]"), ' ')
+      .replaceAll(RegExp(r' {2,}'), ' ')
+      .trim();
+  return base.contains(RegExp(r'[A-Za-z]')) ? base : null;
+}
+
+String? _mpesaAccount(String? raw) {
+  if (raw == null) return null;
+  final m = RegExp(r'^\+?[0-9*][0-9* ]{2,24}').firstMatch(raw.trim());
+  return m?.group(0)?.replaceAll(' ', '');
+}
+
+double? _mpesaMoney(String? raw) {
+  if (raw == null) return null;
+  final cleaned = raw.replaceAll(RegExp(r'[^0-9.]'), '');
+  if (cleaned.isEmpty) return null;
+  final v = double.tryParse(cleaned);
+  return v != null && v >= 0 ? v : null;
+}
+
+String? _mpesaId(String? raw) {
+  if (raw == null) return null;
+  final token = raw.trim().split(' ').first.toUpperCase();
+  return RegExp(r'^[A-Z0-9]{6,20}$').hasMatch(token) ? token : null;
+}
+
+String? _mpesaDate(String? raw) {
+  if (raw == null) return null;
+  final m = RegExp(r'(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)')
+      .firstMatch(raw);
+  if (m != null) return '${m.group(1)} ${m.group(2)}';
+  final trimmed = raw.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+/// Parses the text of an M-Pesa receipt PDF (extracted on-device from the
+/// envelope's base64Data). A receipt counts as verified when it carries a
+/// reference, a positive amount (settled amount, else total) and at least
+/// one party field — the same gate the stylepos verifier applies.
+Parsed parseMpesaPdfText(String text) {
+  // Line wrapping must never split a label ("RECEIVER\nNAME") — match on
+  // one whitespace-flattened run of text.
+  final flat = text.replaceAll(RegExp(r'\s+'), ' ');
+  if (flat.trim().isEmpty) return Parsed.notFound;
+  final upper = flat.toUpperCase();
+  // Must look like an M-Pesa receipt at all — a stray PDF from another
+  // service must not verify.
+  if (!upper.contains('RECEIPT') &&
+      !upper.contains('PAYER') &&
+      !upper.contains('TRANSACTION')) {
+    return Parsed.notFound;
+  }
+
+  final v = _sliceMpesaLabels(flat);
+
+  // The header row reads "RECEIPT NO {no} PAYMENT DATE {date} SETTLED
+  // AMOUNT {amount}"; in flowed text the receipt number can glue to the
+  // date ("UCK0SYNTH12026-09-14 …") — split it at the timestamp.
+  String? receiptNo = _mpesaId(v['receiptNo']);
+  if (receiptNo == null && v['receiptNo'] != null) {
+    final glued = v['receiptNo']!.replaceAll(' ', '').toUpperCase();
+    final dm =
+        RegExp(r'(\d{4}-\d{2}-\d{2})').firstMatch(glued);
+    if (dm != null && dm.start > 0) {
+      final candidate = glued.substring(0, dm.start);
+      if (RegExp(r'^[A-Z0-9]{6,20}$').hasMatch(candidate)) {
+        receiptNo = candidate;
+      }
+    }
+  }
+
+  final settled = _mpesaMoney(v['settled']);
+  final total = _mpesaMoney(v['total']);
+  final amount = (settled != null && settled > 0) ? settled : total;
+
+  final reference = _mpesaId(v['reference']) ?? receiptNo;
+  final senderName = _mpesaName(v['senderName']);
+  final receiverName =
+      _mpesaName(v['receiverName']) ?? _mpesaName(v['receiverBusinessName']);
+  final senderAccount = _mpesaAccount(v['senderAccount']);
+  final receiverAccount = _mpesaAccount(v['receiverAccount']);
+
+  if (reference == null ||
+      amount == null ||
+      amount <= 0 ||
+      (senderName == null &&
+          receiverName == null &&
+          senderAccount == null &&
+          receiverAccount == null)) {
+    return Parsed.notFound;
+  }
+
+  var date = _mpesaDate(v['date']);
+  date ??= RegExp(r'(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)')
+          .firstMatch(flat)
+          ?.group(0);
+
+  return Parsed(
+    verified: true,
+    senderName: senderName,
+    senderAccount: senderAccount,
+    receiverName: receiverName,
+    receiverAccount: receiverAccount,
+    amount: amount,
+    currency: 'ETB',
+    date: date,
+    reference: reference,
+    invoiceNumber: receiptNo,
+    transactionType:
+        _cleanMpesaText(v['transactionType'] ?? v['paymentMethod']),
+    transactionStatus: _cleanMpesaText(v['status']),
+    reason: _cleanMpesaText(v['reason']),
+  );
+}
+
+String? _cleanMpesaText(String? raw) {
+  if (raw == null) return null;
+  final t = raw.trim();
+  if (t.isEmpty || t == '-' || t.toLowerCase() == 'null' || t.toLowerCase() == 'n/a') {
+    return null;
+  }
+  return t.length > 120 ? t.substring(0, 120) : t;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

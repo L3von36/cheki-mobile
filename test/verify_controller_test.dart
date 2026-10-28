@@ -137,6 +137,26 @@ void main() {
       expect(captured.account, '60536171');
       expect(captured.qrData, isNull);
     });
+
+    test('BOA-shaped QR the decryptor cannot open still detects BOA', () {
+      final c = VerifyController();
+      // 128 A's = base64 of 96 zero bytes: perfect ciphertext shape, but
+      // content no decryptor can open (invalid PKCS7 padding). Detection
+      // must ride the shape — the old decrypt-or-nothing gate dropped the
+      // bank and left an anonymous blob in the reference field.
+      c.applyScan('A' * 128);
+      expect(c.detectedBank?.id, 'boa');
+      expect(c.scannedQr, 'A' * 128);
+      expect(c.reference, isEmpty);
+      expect(c.canVerify, isTrue); // QR path needs no account suffix
+    });
+
+    test('a 44-character base64 blob is NOT mistaken for a BOA QR', () {
+      final c = VerifyController();
+      c.applyScan(base64Encode(List<int>.filled(32, 7)));
+      expect(c.detectedBank, isNull);
+      expect(c.scannedQr, isNull);
+    });
   });
 
   group('canVerify rules (stylepos catalog)', () {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -105,7 +106,8 @@ class _ScanScreenState extends State<ScanScreen>
   bool _onDetect(BarcodeCapture capture) {
     if (_handled) return true;
     for (final barcode in capture.barcodes) {
-      final raw = barcode.rawValue;
+      final raw =
+          barcode.rawValue ?? _payloadFromBytes(barcode.rawDecodedBytes);
       if (raw == null || raw.trim().isEmpty) continue;
       // Only trust the reading once the camera stream stabilizes on it.
       final stable = _stabilizer.feed(raw);
@@ -114,6 +116,20 @@ class _ScanScreenState extends State<ScanScreen>
       return _handled;
     }
     return _handled;
+  }
+
+  /// Byte-mode QR payloads (raw bytes instead of text) surface as a null
+  /// `rawValue` on some decoder stacks — recover the bytes' latin-1 reading
+  /// so a payload that is really in the frame is never silently skipped.
+  String? _payloadFromBytes(BarcodeBytes? raw) {
+    final bytes = switch (raw) {
+      DecodedBarcodeBytes(:final bytes) => bytes,
+      DecodedVisionBarcodeBytes(:final bytes, :final rawBytes) =>
+        bytes ?? rawBytes,
+      _ => null,
+    };
+    if (bytes == null || bytes.isEmpty) return null;
+    return latin1.decode(bytes, allowInvalid: true);
   }
 
   /// Pops with the untouched payload — the receipt verifier decides what it
@@ -138,7 +154,8 @@ class _ScanScreenState extends State<ScanScreen>
       // the camera stream's stability rule.
       if (capture != null) {
         for (final barcode in capture.barcodes) {
-          final raw = barcode.rawValue;
+          final raw =
+              barcode.rawValue ?? _payloadFromBytes(barcode.rawDecodedBytes);
           if (raw == null || raw.trim().isEmpty) continue;
           _tryAccept(raw);
           return;

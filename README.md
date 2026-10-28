@@ -140,6 +140,26 @@ the URL, fetches with retries, and parses the response:
 | Amhara | `transaction.amharabank.com.et/{trxRef}` | JSON |
 
 Notes:
+- **M-Pesa receipts carry their details again** (`v1.18.7`): M-Pesa's
+  `getReceipt` endpoint answers a JSON envelope holding the receipt as a
+  base64 PDF — the old flat-JSON reader matched nothing inside it and still
+  declared the receipt verified, so the result screen showed an empty
+  "Verified" page with no amount, no parties, no reference. The envelope is
+  now decoded on-device: the PDF is unpacked, its text extracted and the
+  receipt fields (payer, receiver, transaction ID, settled amount, payment
+  date) are read from the receipt's own labels. The request also sends the
+  `Referer` header the endpoint expects.
+- **BOA receipt QRs scan through** (`v1.18.7`): a BOA slip QR the offline
+  decryptor could not open (an imperfect camera read of the dense code,
+  or a transport-mangled payload) used to fall through as an anonymous
+  base64 blob in the reference field with no bank selected — it looked
+  exactly like "the scanner does not detect BOA". Detection now rides the
+  payload's ciphertext shape: the bank is detected, and if the payload
+  still cannot be opened the verifier explains it honestly with recovery
+  tips instead of dead-ending. Decryption also tolerates the variants
+  strict base64 rejects (whitespace, URL-safe alphabet, lost padding), and
+  byte-mode QR payloads with no text reading are recovered from their raw
+  bytes on the scanner side.
 - **Sign in from anywhere — accounts follow you across devices**
   (`v1.14.4`): fixes the reported dead end where clearing app data (or
   using a second phone) made sign-in answer "No account found for this

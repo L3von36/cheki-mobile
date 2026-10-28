@@ -40,6 +40,14 @@ class ReceiptVerifier {
     'Accept': 'application/json',
   };
 
+  /// M-Pesa's getReceipt endpoint gates on the Referer (observed by other
+  /// open-source verifiers) and answers a JSON envelope holding a base64
+  /// PDF — ask for JSON explicitly.
+  static const _mpesaHeaders = {
+    'Accept': 'application/json, text/plain, */*',
+    'Referer': 'https://m-pesabusiness.safaricom.et/',
+  };
+
   // ── public entry ──────────────────────────────────────────────────────────
 
   Future<VerifyResult> verify(VerifyInput input) async {
@@ -311,6 +319,7 @@ class ReceiptVerifier {
           ? 'application/pdf,*/*'
           : 'text/html,application/json,*/*',
       if (bank.id == 'cbe') ..._cbeHeaders,
+      if (bank.id == 'mpesa') ..._mpesaHeaders,
     };
     final client = createVerifyClient(allowBadCert: bank.allowBadCertificate);
 
