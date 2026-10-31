@@ -1,8 +1,12 @@
-# Mahtem Cloud API (Cloudflare Worker)
+# Mahtem Cloud API (Cloudflare Worker — legacy, kept for first-sign-in migration)
 
 Zero-knowledge account + history-backup backend with **OAuth 2.1 / JWT Architecture** for Mahtem.
 
-- **Live URL:** https://mahtem-api.mahtem.workers.dev
+- **Legacy URL:** https://mahtem-api.mahtem.workers.dev — production has moved to
+  **https://mahtem.com.et** (Node.js port on Plesk, see [`node-api/`](./node-api/)).
+  The Worker stays online so existing users' vaults and Pro status import
+  automatically on their first sign-in against the new API; retire it once every
+  user has signed in (then set `MIGRATE_FROM_URL=''` on the Node API).
 - **Runtime:** Cloudflare Workers + KV namespace `mahtem-api`
 - **Source:** [`worker.js`](./worker.js) — single module, pure Web Crypto API, zero external dependencies
 

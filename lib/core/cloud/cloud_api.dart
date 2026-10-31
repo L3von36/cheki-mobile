@@ -13,7 +13,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-const String kCloudApiBaseUrl = 'https://mahtem-api.mahtem.workers.dev';
+const String kCloudApiBaseUrl = 'https://mahtem.com.et';
 
 /// Errors surfaced to the controller layer.
 enum CloudApiError {
