@@ -9,6 +9,13 @@
  * statement through positional `?` placeholders; the only dialect
  * difference is INSERT IGNORE vs INSERT OR IGNORE.
  *
+ * NOTE: the MySQL driver uses client-side escaping (pool.query, not
+ * pool.execute). Server-side prepared statements hit protocol quirks on
+ * some Plesk MariaDB builds (e.g. INSERT … ON DUPLICATE KEY UPDATE with
+ * several string params failing while the same statement runs via the
+ * text protocol); client-side escaping is immune and plenty safe —
+ * mysql2 escapes every bound value itself.
+ *
  * All timestamps are epoch MILLISECONDS (BIGINT), exactly like the
  * Cloudflare Worker's KV records.
  */
@@ -60,7 +67,7 @@ function getPool() {
 async function query(sql, params) {
   const p = getPool();
   if (config.driver === 'mysql') {
-    const [rows] = await p.execute(sql, params || []);
+    const [rows] = await p.query(sql, params || []);
     return Array.isArray(rows) ? rows : [];
   }
   return p.__sqlite.prepare(sql).all(...(params || []));
@@ -70,7 +77,7 @@ async function query(sql, params) {
 async function run(sql, params) {
   const p = getPool();
   if (config.driver === 'mysql') {
-    const [result] = await p.execute(sql, params || []);
+    const [result] = await p.query(sql, params || []);
     return { affectedRows: (result && result.affectedRows) || 0 };
   }
   const info = p.__sqlite.prepare(sql).run(...(params || []));
