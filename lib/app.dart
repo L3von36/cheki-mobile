@@ -55,8 +55,14 @@ class MahtemApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => VerifyController()),
         // Batch checker owns its state — rows from the last paste, run
-        // results. Fresh instance per app boot (nothing persists).
-        ChangeNotifierProvider(create: (_) => BatchController()),
+        // results. Fresh instance per app boot (nothing persists). The
+        // receipt sink mirrors every recorded row into the server-side
+        // receipt ledger for signed-in users (no-op when signed out).
+        ChangeNotifierProvider(
+          create: (context) => BatchController(
+            receiptSink: context.read<CloudController>().queueReceipt,
+          ),
+        ),
         ChangeNotifierProvider(
           create: (_) => VerifyHistory()..ensureLoaded(),
         ),

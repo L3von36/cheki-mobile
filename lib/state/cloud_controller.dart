@@ -214,6 +214,118 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // ---------------------------------------------------------------- receipt ledger
+  // v1.19.0 — every verification runs through VerifyHistory.record; the
+  // UI hooks call [queueReceipt] right after, and the record is mirrored
+  // to the server-side receipt ledger (POST /v1/receipts) under the
+  // signed-in account. Offline / failed uploads stay in a small pending
+  // queue (persisted) and flush on the next trigger, so a flaky network
+  // delays a row, it never loses one. Not signed in → local-only, as
+  // before (the queue intentionally stays empty).
+
+  static const String _kPendingReceipts = 'cloud.pendingReceipts';
+  static const int _maxPendingReceipts = 200;
+  static const Duration _receiptFlushDelay = Duration(seconds: 2);
+
+  final List<CloudReceiptRecord> _pendingReceipts = [];
+  Timer? _receiptTimer;
+  bool _flushingReceipts = false;
+
+  /// Queues one finished verification for the server-side receipt ledger.
+  /// Re-queueing the same history entry (e.g. a later reason note) replaces
+  /// the queued copy; the server dedupes by entry id anyway.
+  void queueReceipt(HistoryEntry entry) {
+    if (!_enabled || entry.id.isEmpty) return;
+    final record = CloudReceiptRecord(
+      entryId: entry.id,
+      bankId: entry.bankId,
+      bankName: entry.bankName,
+      reference: entry.reference,
+      senderName: entry.senderName,
+      receiverName: entry.receiverName,
+      amount: entry.amount,
+      currency: entry.currency,
+      receiptDate: entry.receiptDate,
+      status: entry.status,
+      message: entry.message,
+      reason: entry.reason,
+      verifiedAtMs: entry.verifiedAt,
+    );
+    _pendingReceipts.removeWhere((r) => r.entryId == record.entryId);
+    _pendingReceipts.add(record);
+    while (_pendingReceipts.length > _maxPendingReceipts) {
+      _pendingReceipts.removeAt(0);
+    }
+    _persistPendingReceipts();
+    _scheduleReceiptFlush(_receiptFlushDelay);
+  }
+
+  void _scheduleReceiptFlush(Duration delay) {
+    if (!_enabled) return;
+    _receiptTimer?.cancel();
+    _receiptTimer = Timer(delay, _flushReceipts);
+  }
+
+  Future<void> _flushReceipts() async {
+    if (_flushingReceipts || !_enabled || _pendingReceipts.isEmpty) return;
+    if (isWorking) {
+      _scheduleReceiptFlush(autoSyncRetry);
+      return;
+    }
+    if (!await _ensureFreshSession()) return; // retried on the next trigger
+    _flushingReceipts = true;
+    try {
+      while (_pendingReceipts.isNotEmpty) {
+        final record = _pendingReceipts.first;
+        await _api.putReceipt(sessionToken: _sessionToken!, receipt: record);
+        _pendingReceipts.removeAt(0);
+        _persistPendingReceipts();
+      }
+    } on CloudApiException catch (e) {
+      if (e.error == CloudApiError.unauthorized) _handleApiFailure(e);
+      // Network / server trouble — the queue stays, the next trigger
+      // (sync success, app boot, next verification) retries.
+    } catch (_) {
+      // Same — never surface ledger errors to the user.
+    } finally {
+      _flushingReceipts = false;
+    }
+  }
+
+  void _persistPendingReceipts() {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    try {
+      prefs.setString(
+        _kPendingReceipts,
+        jsonEncode(_pendingReceipts.map((r) => r.toJson()).toList()),
+      );
+    } catch (_) {
+      // Storage failure keeps the in-memory queue for this run.
+    }
+  }
+
+  void _loadPendingReceipts(SharedPreferences prefs) {
+    final raw = prefs.getString(_kPendingReceipts);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final list = jsonDecode(raw);
+      if (list is! List) return;
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final record = CloudReceiptRecord.fromJson(item);
+        if (record.entryId.isEmpty) continue;
+        _pendingReceipts.removeWhere((r) => r.entryId == record.entryId);
+        _pendingReceipts.add(record);
+      }
+      while (_pendingReceipts.length > _maxPendingReceipts) {
+        _pendingReceipts.removeAt(0);
+      }
+    } catch (_) {
+      // Corrupt queue — start empty rather than crash.
+    }
+  }
+
   // ---------------------------------------------------------------- wiring
   /// Hooks the history store so every local change can auto-sync while a
   /// backup session is live. Idempotent for the same instance (the proxy
@@ -304,6 +416,11 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _autoFailures = 0;
       _nextAutoAttemptAt = null;
       _persistState();
+      // Piggyback: a healthy sync moment is also a good moment to drain
+      // any receipt rows waiting for the ledger.
+      if (_pendingReceipts.isNotEmpty) {
+        _scheduleReceiptFlush(const Duration(milliseconds: 500));
+      }
     } on CloudApiException catch (e) {
       if (e.error == CloudApiError.unauthorized) {
         // Session died server-side — _handleApiFailure disables us, so
@@ -623,6 +740,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     _lastSyncAt = prefs.getInt(_kLastSync);
     _autoSync = prefs.getBool(_kAutoSync) ?? true;
     _dirty = prefs.getBool(_kDirty) ?? false;
+    _loadPendingReceipts(prefs);
     _profile = _profileFromPrefs(prefs);
     // Boot catch-up pushes pending changes and pulls changes from other
     // devices. It is consumed once a history store is attached.
@@ -644,6 +762,11 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     // Every app boot checks for entries written by another device, even
     // when this device's last upload was recent.
     _catchUpPending = _enabled;
+    // Receipt rows that never made it up (offline verifications) flush
+    // shortly after boot, once the session is usable.
+    if (_enabled && _pendingReceipts.isNotEmpty) {
+      _scheduleReceiptFlush(bootCatchUpDelay);
+    }
     notifyListeners();
   }
 
@@ -701,6 +824,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _catchUpPending = false;
       _persistState();
       _startRealtimePolling();
+      if (_pendingReceipts.isNotEmpty) {
+        _scheduleReceiptFlush(const Duration(seconds: 1));
+      }
       return true;
     } on CloudApiException catch (e) {
       _enabled = false;
@@ -784,6 +910,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
           await _api.deleteVault(token);
         } catch (_) {/* best effort — local disconnect proceeds */}
         try {
+          await _api.deleteReceipts(token);
+        } catch (_) {/* best effort — same privacy path */}
+        try {
           await _api.deleteSession(token);
         } catch (_) {/* best effort */}
       }
@@ -791,6 +920,10 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _stopRealtimePolling();
       _dropArmCredentials();
       _autoTimer?.cancel();
+      _receiptTimer?.cancel();
+      _receiptTimer = null;
+      _pendingReceipts.clear();
+      _persistPendingReceipts();
       _enabled = false;
       _sessionToken = null;
       _refreshToken = null;
@@ -993,6 +1126,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _dropArmCredentials();
     _autoTimer?.cancel();
+    _receiptTimer?.cancel();
     _history?.removeListener(_onHistoryChanged);
     super.dispose();
   }

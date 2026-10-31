@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/fraud_advisories.dart';
 import '../core/receipt_verify/models.dart';
 import '../core/verify_history.dart';
+import '../state/cloud_controller.dart';
 import '../state/license_controller.dart';
 import '../state/locale_controller.dart';
 import '../state/verify_controller.dart';
@@ -150,6 +151,9 @@ Future<void> runVerificationFlow(BuildContext context) async {
           referenceFallback: controller.reference.trim(),
         );
     recordedId = recorded.id;
+    // Mirror to the server-side receipt ledger when the user is signed
+    // in (fire-and-forget queue — never blocks the result screen).
+    context.read<CloudController>().queueReceipt(recorded);
   } catch (_) {
     // History must never block verification.
   }

@@ -52,6 +52,83 @@ class CloudReceiptClaim {
   });
 }
 
+/// One verification mirrored to the server-side receipt ledger
+/// (POST /v1/receipts). Built from a local [HistoryEntry] by the cloud
+/// controller; the server dedupes per (account, entryId).
+class CloudReceiptRecord {
+  final String entryId;
+  final String bankId;
+  final String bankName;
+  final String reference;
+
+  /// The untouched scan input the check ran with — QR payload, receipt
+  /// link or the OCR'd reference (what the receipt was verified BY).
+  final String? rawPayload;
+  final String? senderName;
+  final String? receiverName;
+  final double? amount;
+  final String? currency;
+  final String? receiptDate;
+
+  /// 'verified' | 'failed'
+  final String status;
+  final String? message;
+  final String? reason;
+  final int verifiedAtMs;
+
+  const CloudReceiptRecord({
+    required this.entryId,
+    required this.bankId,
+    required this.bankName,
+    required this.reference,
+    this.rawPayload,
+    this.senderName,
+    this.receiverName,
+    this.amount,
+    this.currency,
+    this.receiptDate,
+    required this.status,
+    this.message,
+    this.reason,
+    required this.verifiedAtMs,
+  });
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'entryId': entryId,
+        'bankId': bankId,
+        'bankName': bankName,
+        'reference': reference,
+        if (rawPayload != null) 'rawPayload': rawPayload,
+        if (senderName != null) 'senderName': senderName,
+        if (receiverName != null) 'receiverName': receiverName,
+        if (amount != null) 'amount': amount,
+        if (currency != null) 'currency': currency,
+        if (receiptDate != null) 'receiptDate': receiptDate,
+        'status': status,
+        if (message != null) 'message': message,
+        if (reason != null) 'reason': reason,
+        'verifiedAt': verifiedAtMs,
+      };
+
+  factory CloudReceiptRecord.fromJson(Map<String, dynamic> json) =>
+      CloudReceiptRecord(
+        entryId: json['entryId'] as String? ?? '',
+        bankId: json['bankId'] as String? ?? '',
+        bankName: json['bankName'] as String? ?? '',
+        reference: json['reference'] as String? ?? '',
+        rawPayload: json['rawPayload'] as String?,
+        senderName: json['senderName'] as String?,
+        receiverName: json['receiverName'] as String?,
+        amount: (json['amount'] as num?)?.toDouble(),
+        currency: json['currency'] as String?,
+        receiptDate: json['receiptDate'] as String?,
+        status: json['status'] as String? ?? 'failed',
+        message: json['message'] as String?,
+        reason: json['reason'] as String?,
+        verifiedAtMs: json['verifiedAt'] as int? ?? 0,
+      );
+}
+
 class CloudSession {
   /// The access token (JWT or legacy session token).
   final String sessionToken;
@@ -332,4 +409,19 @@ class CloudApi {
         ? null
         : DateTime.fromMillisecondsSinceEpoch(expiresAt, isUtc: true);
   }
+
+  /// Records one verification in the server-side receipt ledger. The
+  /// server dedupes per (account, entryId), so retries are idempotent —
+  /// a later retry with a reason note only moves the note.
+  Future<void> putReceipt({
+    required String sessionToken,
+    required CloudReceiptRecord receipt,
+  }) =>
+      _send('POST', '/v1/receipts', bearer: sessionToken, body: receipt.toJson());
+
+  /// Erases the account's whole server-side receipt ledger. Privacy twin
+  /// of [deleteVault]: disconnecting the cloud account also removes the
+  /// readable receipt history.
+  Future<void> deleteReceipts(String sessionToken) =>
+      _send('DELETE', '/v1/receipts', bearer: sessionToken);
 }

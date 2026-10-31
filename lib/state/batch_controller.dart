@@ -71,13 +71,20 @@ class BatchController extends ChangeNotifier {
     Future<VerifyResult> Function(VerifyInput)? verifyFn,
     Future<VerifyResult> Function(VerifyInput)? extraVerifyFn,
     DateTime Function()? now,
+    void Function(HistoryEntry entry)? receiptSink,
   })  : _verifyFn = verifyFn ?? ReceiptVerifier.I.verify,
         _extraVerifyFn = extraVerifyFn ?? verifyExtraBank,
-        _now = now ?? (() => DateTime.now());
+        _now = now ?? (() => DateTime.now()),
+        _receiptSink = receiptSink;
 
   final Future<VerifyResult> Function(VerifyInput input) _verifyFn;
   final Future<VerifyResult> Function(VerifyInput input) _extraVerifyFn;
   final DateTime Function() _now;
+
+  /// Called with every entry recorded in local history — wired to
+  /// CloudController.queueReceipt so signed-in users mirror their batch
+  /// checks into the server-side receipt ledger. Optional (tests).
+  final void Function(HistoryEntry entry)? _receiptSink;
 
   List<BatchRow> _rows = const [];
   bool _running = false;
@@ -283,12 +290,16 @@ class BatchController extends ChangeNotifier {
       // Record in local history — verified AND failed, like the single
       // flow. History must never block a batch.
       try {
-        await history.record(
+        final entry = await history.record(
           res,
           bankId: bankId,
           bankName: res.receipt?.bankName ?? row.bankName,
           referenceFallback: row.reference,
         );
+        // Mirror to the server-side receipt ledger (signed-in users).
+        // queueReceipt only appends to an in-memory queue — it cannot
+        // slow the run down.
+        _receiptSink?.call(entry);
       } catch (_) {}
 
       notifyListeners();

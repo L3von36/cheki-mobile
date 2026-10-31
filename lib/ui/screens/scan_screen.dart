@@ -89,6 +89,12 @@ class _ScanScreenState extends State<ScanScreen>
       detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
       torchEnabled: false,
+      // Cap capture at 720p. The default lets the camera run at its full
+      // (often 1080p/4K) resolution, and the decoder spends most of that
+      // frame budget on pixels it then throws away — the cap is what
+      // removes the detect-time stutter on low-end phones. QR codes are
+      // resolved long before 720p.
+      cameraResolution: const Size(1280, 720),
     );
     setState(() => _cameraState = _CameraState.granted);
   }
@@ -136,16 +142,49 @@ class _ScanScreenState extends State<ScanScreen>
   /// is (receipt link, BOA slip QR, Telebirr blob, plain reference).
   void _tryAccept(String payload) {
     _handled = true;
+    // Halt the camera BEFORE popping. Route transition + live frame
+    // analysis running side by side is exactly what froze the screen for
+    // a beat when a code was detected.
+    try {
+      unawaited(_controller?.stop());
+    } catch (_) {
+      // Camera already stopping — pop proceeds either way.
+    }
     HapticFeedback.heavyImpact();
     if (mounted) Navigator.of(context).pop(payload.trim());
+  }
+
+  /// Brings the camera back after a gallery attempt found nothing (or the
+  /// picker was cancelled). No-op once a payload was accepted.
+  Future<void> _resumeCamera() async {
+    if (_handled || !mounted) return;
+    try {
+      await _controller?.start();
+    } catch (_) {
+      // Restart failures are surfaced by the error builder.
+    }
   }
 
   Future<void> _pickFromGallery() async {
     if (_handled) return;
     try {
-      final XFile? image =
-          await _picker.pickImage(source: ImageSource.gallery);
+      // Downscale on pick: a 12–48 MP photo takes seconds to decode, and
+      // both the QR pass and the OCR pass work fine on a 1800 px copy —
+      // this single change is what made gallery picks feel instant.
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1800,
+        maxHeight: 1800,
+        imageQuality: 85,
+      );
       if (image == null || !mounted) return;
+      // Halt the camera during the still-image decode — live frame
+      // analysis racing the decode is what made the pick feel stuck.
+      try {
+        await _controller?.stop();
+      } catch (_) {
+        // Camera already stopping.
+      }
       final controller = _controller;
       if (controller == null) return;
       final capture = await controller.analyzeImage(image.path);
@@ -196,6 +235,7 @@ class _ScanScreenState extends State<ScanScreen>
           content: Text(s.scanNoReceiptFound),
         ),
       );
+      await _resumeCamera();
     } catch (_) {
       if (mounted) {
         final s = context.read<LocaleController>().strings;
@@ -206,6 +246,7 @@ class _ScanScreenState extends State<ScanScreen>
           ),
         );
       }
+      await _resumeCamera();
     }
   }
 
