@@ -60,3 +60,7 @@ android/app/upload-keystore.jks
 
 # Licensing — signing seed (NEVER commit; back it up offline)
 tool/license_secret.key
+
+# Local API test artifacts
+cloud/plesk/test/*.sqlite
+cloud/plesk/test/*.sqlite-*

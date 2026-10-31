@@ -1,0 +1,21 @@
+# Mahtem Cloud API — Apache config for the /api directory.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Pass the Authorization header through to PHP (required for Bearer
+    # tokens under CGI/FastCGI, which would otherwise strip it).
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Front controller: everything that is not a real file goes to index.php.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Never serve local data, docs or archives.
+<FilesMatch "\.(sqlite|sqlite3|md|zip|bak|log|ini)$">
+    Require all denied
+</FilesMatch>
+
+Options -Indexes

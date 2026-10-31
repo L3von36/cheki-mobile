@@ -1,0 +1,23 @@
+# Mahtem — mahtem.com.et (web root).
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Force HTTPS (install the free Let's Encrypt certificate in Plesk first:
+    # Hosting & DNS → SSL/TLS Certificates → Let's Encrypt).
+    RewriteCond %{HTTPS} !=on
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Never serve development/test artefacts.
+<FilesMatch "\.(md|mjs|zip|bak|log|lock)$">
+    Require all denied
+</FilesMatch>

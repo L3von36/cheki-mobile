@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Mahtem ማህተም</title>
+<meta name="description" content="How the Mahtem app and its optional cloud service handle your data: zero-knowledge design, on-device storage, and what is (and is never) sent to the server.">
+<style>
+  :root {
+    --green: #22A45D;
+    --green-deep: #168A4C;
+    --green-soft: #E1F5EA;
+    --navy: #1C2B5E;
+    --ink: #1d2433;
+    --muted: #5b6474;
+    --line: #e5e9f0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Ethiopic", Ubuntu, sans-serif;
+    color: var(--ink); line-height: 1.7; background: #fff;
+  }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+  header { background: linear-gradient(160deg, var(--navy), #16224a); color: #fff; padding: 52px 0 46px; }
+  header h1 { font-size: 2rem; letter-spacing: -.01em; }
+  header p { color: #c7d2ea; margin-top: 10px; }
+  .back { color: #6fe3a1; text-decoration: none; font-size: .92rem; }
+  main { padding: 42px 0 70px; }
+  h2 { color: var(--navy); font-size: 1.3rem; margin: 38px 0 12px; }
+  h2:first-child { margin-top: 0; }
+  p, li { color: #37404f; font-size: .98rem; }
+  ul { padding-left: 22px; margin: 10px 0; }
+  li { margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 8px; font-size: .92rem; }
+  th, td { text-align: left; padding: 10px 12px; border: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--green-soft); color: var(--green-deep); }
+  td code, p code { background: #f1f4f9; padding: 1px 6px; border-radius: 5px; font-size: .86em; }
+  .note { background: var(--green-soft); border-left: 4px solid var(--green); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; font-size: .95rem; }
+  .updated { color: var(--muted); font-size: .88rem; margin-top: 44px; }
+  footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .9rem; }
+  footer a { color: var(--navy); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="back" href="index.html">← mahtem.com.et</a>
+    <h1>Privacy Policy</h1>
+    <p>Mahtem ማህተም — free Ethiopian bank receipt verification</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h2>The short version</h2>
+  <p>
+    Mahtem checks payment receipts <strong>on your device</strong>. The app has no
+    advertising and no analytics. If you never create a cloud account, nothing
+    about you ever leaves your phone except the receipt-check requests themselves,
+    which go directly from your phone to your bank's official endpoint.
+  </p>
+  <div class="note">
+    <strong>Zero-knowledge cloud:</strong> even a full compromise of Mahtem's server
+    would leak no identifiers, no passwords and no readable history — by design,
+    the server only ever stores cryptographic digests and encrypted ciphertext.
+  </div>
+
+  <h2>What stays on your device</h2>
+  <ul>
+    <li>Your account (identifier such as phone or email, and your password) is created and stored locally. Passwords are PBKDF2-hashed, and the account is kept in Android-Keystore-encrypted secure storage.</li>
+    <li>Your verification history lives in a local database on the phone.</li>
+    <li>The vault encryption key is derived from your password on the device and <strong>never leaves it</strong>.</li>
+  </ul>
+
+  <h2>What the receipt check sends — and to whom</h2>
+  <p>
+    When you verify a receipt, the app contacts the official public endpoint of the
+    bank or wallet that issued it (for example CBE, EthioTelecom/Telebirr, Bank of
+    Abyssinia or Safaricom M-Pesa) to read the record for that reference number.
+    Mahtem's servers are not in that path. Only for Telebirr and M-Pesa, whose
+    endpoints refuse some client IPs, may the app ask Mahtem's relay server to fetch
+    the same official page on its behalf — the relay accepts only those two banks'
+    receipt hosts, and nothing else.
+  </p>
+
+  <h2>The optional cloud account &amp; backup</h2>
+  <p>
+    Creating a cloud account (for sign-in across devices and encrypted history
+    backup) is entirely optional. If you do, this is <em>all</em> the server can
+    ever see:
+  </p>
+  <table>
+    <tr><th>Data stored</th><th>What it is</th></tr>
+    <tr><td><code>identifierHash</code></td><td>SHA-256 digest of your normalized identifier. Your phone number or email is never sent or stored.</td></tr>
+    <tr><td><code>authKey</code></td><td>A PBKDF2-SHA256 key derived from your password on the device (120,000 iterations). Your raw password never reaches the server, and the stored key is not usable as a password anywhere else.</td></tr>
+    <tr><td><code>blob</code></td><td>Your history backup, AES-256-GCM encrypted on the device. The server stores ciphertext it cannot decrypt.</td></tr>
+    <tr><td><code>receiptHash</code></td><td>A SHA-256 fingerprint of a verified Telebirr invoice, used only to record that this month's Pro payment belongs to your account. Raw receipt data is never stored.</td></tr>
+  </table>
+
+  <h2>Mahtem Pro</h2>
+  <p>
+    Pro is an optional monthly subscription paid with a Telebirr transfer. To
+    activate it, the app first verifies the payment receipt against EthioTelecom's
+    official endpoint and then submits only the receipt's fingerprint. The server
+    binds that fingerprint to your account, so one payment cannot be reused by
+    another account. The verified receipts themselves are not stored by Mahtem.
+  </p>
+
+  <h2>Crash reports</h2>
+  <p>
+    Mahtem can collect crash reports so bugs can be fixed quickly. When enabled,
+    crash reports contain technical diagnostics (such as device model, OS version
+    and the error's stack trace). Crash reports never include your receipts,
+    account data or history content.
+  </p>
+
+  <h2>What Mahtem never does</h2>
+  <ul>
+    <li>No advertising SDKs and no third-party analytics trackers.</li>
+    <li>No selling, renting or sharing of user data — there is no user data to sell.</li>
+    <li>No reading of your contacts, messages, photos or files beyond what you explicitly pick (a receipt screenshot you choose to scan).</li>
+    <li>No requirement to create an account in order to verify receipts.</li>
+  </ul>
+
+  <h2>Permissions the app requests</h2>
+  <ul>
+    <li><strong>Camera</strong> — to scan receipt QR codes.</li>
+    <li><strong>Photos/media (optional)</strong> — when you pick a saved receipt screenshot or PDF to verify.</li>
+    <li><strong>Network</strong> — to reach the banks' official endpoints and, if you use it, the optional cloud service.</li>
+  </ul>
+
+  <h2>Changes and contact</h2>
+  <p>
+    If this policy changes, the updated version will be published on this page.
+    Questions, requests or reports are welcome on the project's issue tracker:
+    <a href="https://github.com/L3von36/cheki-mobile/issues">github.com/L3von36/cheki-mobile/issues</a>.
+  </p>
+
+  <p class="updated">Mahtem is an independent tool and is not affiliated with, endorsed by, or connected to any bank or wallet provider.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    © 2026 Mahtem · <a href="index.html">mahtem.com.et</a> · <a href="https://github.com/L3von36/cheki-mobile">Source code (MIT)</a>
+  </div>
+</footer>
+
+</body>
+</html>
