@@ -5,61 +5,142 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — Mahtem ማህተም</title>
 <meta name="description" content="How the Mahtem app and its optional cloud service handle your data: zero-knowledge design, on-device storage, and what is (and is never) sent to the server.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mahtem.com.et/privacy.html">
+<meta property="og:title" content="Privacy Policy — Mahtem ማህተም">
+<meta property="og:description" content="Zero-knowledge design: what Mahtem stores on your device, what reaches our server, and what never leaves your phone.">
+<meta name="theme-color" content="#1C2B5E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2322A45D'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23fff' stroke-width='3.5' stroke-dasharray='6 4'/%3E%3Ctext x='32' y='40' font-size='21' font-weight='700' text-anchor='middle' fill='%23fff' font-family='Noto Sans Ethiopic,sans-serif'%3E%E1%88%9B%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --green: #22A45D;
     --green-deep: #168A4C;
     --green-soft: #E1F5EA;
     --navy: #1C2B5E;
-    --ink: #1d2433;
+    --navy-2: #16224A;
+    --navy-ink: #101A3D;
+    --ink: #16224D;
     --muted: #5b6474;
-    --line: #e5e9f0;
+    --dim: #8a93a8;
+    --line: #E4EAF3;
+    --bg-soft: #F3F6FC;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Ethiopic", Ubuntu, sans-serif;
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Ethiopic", sans-serif;
     color: var(--ink); line-height: 1.7; background: #fff;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 800px; margin: 0 auto; padding: 0 20px; }
-  header { background: linear-gradient(160deg, var(--navy), #16224a); color: #fff; padding: 52px 0 46px; }
-  header h1 { font-size: 2rem; letter-spacing: -.01em; }
-  header p { color: #c7d2ea; margin-top: 10px; }
-  .back { color: #6fe3a1; text-decoration: none; font-size: .92rem; }
-  main { padding: 42px 0 70px; }
-  h2 { color: var(--navy); font-size: 1.3rem; margin: 38px 0 12px; }
+  .am { font-family: "Noto Sans Ethiopic", "Plus Jakarta Sans", sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 800; color: var(--navy); font-size: 1.18rem; letter-spacing: -.01em; }
+  .brand:hover { text-decoration: none; }
+  .seal {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; font-weight: 700; box-shadow: 0 4px 12px rgba(34,164,93,.35);
+  }
+  .brand .am { color: var(--dim); font-weight: 500; font-size: .95rem; }
+  .backlink {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--green-deep); font-weight: 700; font-size: .9rem;
+    padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  .backlink:hover { border-color: var(--green); text-decoration: none; }
+
+  .pagehead { background: linear-gradient(158deg, var(--navy) 0%, var(--navy-2) 55%, var(--navy-ink) 100%); color: #fff; padding: 58px 0 54px; }
+  .pagehead h1 { font-size: 2.2rem; letter-spacing: -.02em; font-weight: 800; }
+  .pagehead p { color: #C4D0EA; margin-top: 10px; font-size: 1.02rem; }
+  .pagehead .pill {
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
+    background: rgba(111,227,161,.1); border: 1px solid rgba(111,227,161,.35);
+    color: #6fe3a1; font-size: .78rem; font-weight: 700; letter-spacing: .06em;
+    padding: 5px 13px; border-radius: 999px;
+  }
+
+  main { padding: 48px 0 72px; }
+  h2 {
+    color: var(--navy); font-size: 1.34rem; margin: 42px 0 12px;
+    letter-spacing: -.01em; font-weight: 800; display: flex; align-items: center; gap: 10px;
+  }
+  h2::before { content: ""; width: 4px; height: 20px; background: var(--green); border-radius: 3px; flex-shrink: 0; }
   h2:first-child { margin-top: 0; }
   p, li { color: #37404f; font-size: .98rem; }
+  strong { color: var(--ink); }
   ul { padding-left: 22px; margin: 10px 0; }
-  li { margin: 6px 0; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0 8px; font-size: .92rem; }
-  th, td { text-align: left; padding: 10px 12px; border: 1px solid var(--line); vertical-align: top; }
-  th { background: var(--green-soft); color: var(--green-deep); }
-  td code, p code { background: #f1f4f9; padding: 1px 6px; border-radius: 5px; font-size: .86em; }
-  .note { background: var(--green-soft); border-left: 4px solid var(--green); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; font-size: .95rem; }
-  .updated { color: var(--muted); font-size: .88rem; margin-top: 44px; }
-  footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .9rem; }
-  footer a { color: var(--navy); }
+  li { margin: 7px 0; }
+  li::marker { color: var(--green-deep); }
+  a { color: var(--green-deep); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 8px; font-size: .92rem; border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 14px; border: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--green-soft); color: var(--green-deep); font-weight: 700; }
+  tbody tr:nth-child(odd) td { background: #FBFDFE; }
+  td code, p code { background: #F1F4F9; padding: 1px 7px; border-radius: 5px; font-size: .86em; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--navy); }
+  .note {
+    background: var(--green-soft); border-left: 4px solid var(--green);
+    padding: 16px 20px; border-radius: 0 12px 12px 0; margin: 20px 0; font-size: .96rem; color: #14532D;
+  }
+  .shortver {
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 16px;
+    padding: 24px 26px; margin: 0 0 8px;
+  }
+  .shortver p { margin: 0; }
+  .updated { color: var(--muted); font-size: .88rem; margin-top: 48px; padding-top: 20px; border-top: 1px dashed var(--line); }
+
+  footer { border-top: 1px solid var(--line); background: var(--bg-soft); padding: 30px 0 40px; color: var(--muted); font-size: .9rem; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  footer a { font-weight: 600; }
+  @media (max-width: 640px) {
+    .pagehead h1 { font-size: 1.7rem; }
+    table { font-size: .86rem; }
+    th, td { padding: 9px 10px; }
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="wrap">
-    <a class="back" href="index.html">← mahtem.com.et</a>
-    <h1>Privacy Policy</h1>
-    <p>Mahtem ማህተም — free Ethiopian bank receipt verification</p>
+  <div class="wrap nav">
+    <a class="brand" href="index.html"><span class="seal am">ማ</span> Mahtem <span class="am">ማህተም</span></a>
+    <a class="backlink" href="index.html">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      Back to mahtem.com.et
+    </a>
   </div>
 </header>
+
+<div class="pagehead">
+  <div class="wrap">
+    <span class="pill">ZERO-KNOWLEDGE BY DESIGN</span>
+    <h1>Privacy Policy</h1>
+    <p>Mahtem <span class="am">ማህተም</span> — free Ethiopian bank receipt verification</p>
+  </div>
+</div>
 
 <main class="wrap">
 
   <h2>The short version</h2>
-  <p>
-    Mahtem checks payment receipts <strong>on your device</strong>. The app has no
-    advertising and no analytics. If you never create a cloud account, nothing
-    about you ever leaves your phone except the receipt-check requests themselves,
-    which go directly from your phone to your bank's official endpoint.
-  </p>
+  <div class="shortver">
+    <p>
+      Mahtem checks payment receipts <strong>on your device</strong>. The app has no
+      advertising and no analytics. If you never create a cloud account, nothing
+      about you ever leaves your phone except the receipt-check requests themselves,
+      which go directly from your phone to your bank's official endpoint.
+    </p>
+  </div>
   <div class="note">
     <strong>Zero-knowledge cloud:</strong> even a full compromise of Mahtem's server
     would leak no identifiers, no passwords and no readable history — by design,
@@ -142,7 +223,8 @@
 
 <footer>
   <div class="wrap">
-    © 2026 Mahtem · <a href="index.html">mahtem.com.et</a> · <a href="https://github.com/L3von36/cheki-mobile">Source code (MIT)</a>
+    <span>© 2026 Mahtem · mahtem.com.et</span>
+    <span><a href="index.html">Home</a> · <a href="https://github.com/L3von36/cheki-mobile">Source code (MIT)</a></span>
   </div>
 </footer>
 
