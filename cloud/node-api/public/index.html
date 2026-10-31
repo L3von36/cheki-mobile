@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mahtem ማህተም — Check Ethiopian payment receipts in seconds</title>
+<meta name="description" content="Free Ethiopian bank receipt verification. Scan a receipt QR code or paste a reference number — Mahtem checks it directly against the bank's official endpoint. CBE, Telebirr, BOA, M-Pesa and more.">
+<style>
+  :root {
+    --green: #22A45D;
+    --green-deep: #168A4C;
+    --green-soft: #E1F5EA;
+    --navy: #1C2B5E;
+    --blue: #2E6BE6;
+    --ink: #1d2433;
+    --muted: #5b6474;
+    --line: #e5e9f0;
+    --bg: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Ethiopic", Ubuntu, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+  }
+  a { color: var(--green-deep); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--navy); font-size: 1.15rem; }
+  .seal {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--green), var(--green-deep));
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; font-weight: 800;
+  }
+  .nav nav { display: flex; gap: 22px; font-size: .95rem; }
+  .nav nav a { color: var(--muted); }
+  .nav nav a:hover { color: var(--navy); text-decoration: none; }
+
+  .hero { background: linear-gradient(160deg, var(--navy) 0%, #16224a 60%, #101a3d 100%); color: #fff; padding: 84px 0 76px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.25fr .75fr; gap: 48px; align-items: center; }
+  .hero h1 { font-size: 2.6rem; line-height: 1.15; letter-spacing: -.02em; }
+  .hero h1 .am { color: #6fe3a1; }
+  .hero p.sub { margin-top: 18px; font-size: 1.15rem; color: #c7d2ea; max-width: 34rem; }
+  .cta-row { margin-top: 30px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 22px; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: 1px solid transparent; transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary { background: var(--green); color: #fff; box-shadow: 0 8px 22px rgba(34,164,93,.35); }
+  .btn-primary:hover { background: var(--green-deep); }
+  .btn-ghost { border-color: #3d4c85; color: #dfe6f7; }
+  .btn-ghost:hover { border-color: #6fe3a1; color: #6fe3a1; }
+  .hero-note { margin-top: 16px; font-size: .88rem; color: #93a3c8; }
+
+  .phone {
+    background: #0e1731; border: 1px solid #2c3a6b; border-radius: 26px;
+    padding: 18px; box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  .phone .screen { background: #fff; border-radius: 16px; padding: 22px 18px; color: var(--ink); }
+  .stamp {
+    width: 84px; height: 84px; margin: 6px auto 14px; border-radius: 50%;
+    border: 3px dashed var(--green); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: var(--green-deep); font-weight: 800;
+  }
+  .stamp .am { font-size: 1.5rem; line-height: 1; }
+  .stamp small { font-size: .6rem; letter-spacing: .12em; margin-top: 4px; }
+  .row { display: flex; justify-content: space-between; padding: 7px 2px; border-bottom: 1px dashed var(--line); font-size: .85rem; }
+  .row span:first-child { color: var(--muted); }
+  .row b { color: var(--green-deep); }
+  .badge { display: inline-block; background: var(--green-soft); color: var(--green-deep); font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-top: 12px; }
+
+  section { padding: 68px 0; }
+  section.alt { background: #f7f9fc; }
+  .kicker { color: var(--green-deep); font-weight: 700; font-size: .82rem; letter-spacing: .14em; text-transform: uppercase; }
+  h2 { font-size: 1.9rem; color: var(--navy); margin-top: 8px; letter-spacing: -.01em; }
+  .lead { color: var(--muted); max-width: 44rem; margin-top: 12px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 38px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+  .card .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--green-soft); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+  .card h3 { margin-top: 14px; font-size: 1.08rem; color: var(--navy); }
+  .card p { margin-top: 8px; color: var(--muted); font-size: .93rem; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 38px; counter-reset: step; }
+  .step { position: relative; padding: 26px 24px; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; top: -16px; left: 22px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--navy); color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: .95rem;
+  }
+  .step h3 { color: var(--navy); font-size: 1.05rem; margin-top: 6px; }
+  .step p { color: var(--muted); font-size: .93rem; margin-top: 8px; }
+
+  .banks { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+  .bank {
+    background: #fff; border: 1px solid var(--line); color: var(--navy);
+    padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: .9rem;
+  }
+
+  .privacy-strip { background: linear-gradient(135deg, var(--navy), #23356f); color: #fff; border-radius: 20px; padding: 38px; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .privacy-strip h2 { color: #fff; font-size: 1.5rem; }
+  .privacy-strip p { color: #c7d2ea; margin-top: 8px; max-width: 36rem; }
+  .privacy-strip .btn-primary { flex-shrink: 0; }
+
+  footer { border-top: 1px solid var(--line); padding: 34px 0 44px; color: var(--muted); font-size: .9rem; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  footer a { color: var(--navy); }
+
+  @media (max-width: 860px) {
+    .hero .wrap { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2.1rem; }
+    .grid, .steps { grid-template-columns: 1fr; }
+    .nav nav { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand"><span class="seal">ማ</span> Mahtem <span style="color:#8a93a8;font-weight:500;">ማህተም</span></div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#banks">Supported banks</a>
+      <a href="privacy.html">Privacy</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Check Ethiopian payment receipts in seconds — with <span class="am">ማህተም</span></h1>
+      <p class="sub">
+        Mahtem (Amharic for <em>“stamp / seal”</em>) scans a payment receipt's QR code
+        — or takes a pasted reference number — and checks it directly against the
+        bank's official endpoint, right on your phone. If the payment is genuine,
+        it gets the stamp.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/L3von36/cheki-mobile/releases/latest">⬇ Download the Android app</a>
+        <a class="btn btn-ghost" href="https://github.com/L3von36/cheki-mobile">View source on GitHub</a>
+      </div>
+      <p class="hero-note">Free to start · No account needed to verify · Open source (MIT)</p>
+    </div>
+    <div class="phone" aria-hidden="true">
+      <div class="screen">
+        <div class="stamp"><span class="am">ማህተም</span><small>VERIFIED</small></div>
+        <div class="row"><span>Bank</span><b>Telebirr</b></div>
+        <div class="row"><span>Reference</span><b>FT262507XG9T</b></div>
+        <div class="row"><span>Amount</span><b>ETB 300.00</b></div>
+        <div class="row"><span>Status</span><b>Genuine ✓</b></div>
+        <div class="badge">Checked against the official record</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="kicker">Why Mahtem</div>
+    <h2>Trust, but verify — instantly</h2>
+    <p class="lead">
+      Fake payment screenshots are a real problem in Ethiopian marketplaces.
+      Mahtem closes that gap: it fetches the receipt straight from the bank's
+      public endpoint on your device and compares what you were shown with what
+      the bank actually recorded.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <div class="ico">📷</div>
+        <h3>Scan or paste</h3>
+        <p>Point your camera at a receipt QR code, or paste a reference number or link you were sent. Batch checking is built in.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🏦</div>
+        <h3>Direct from the bank</h3>
+        <p>No middleman re-typing your data — the app reads the official record on your device and tells you if the payment is genuine.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🔒</div>
+        <h3>Private by design</h3>
+        <p>Accounts and history stay on your phone, encrypted. The optional cloud backup stores only math — digests and ciphertext, never your raw data.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🌐</div>
+        <h3>In your language</h3>
+        <p>Fully localized in Amharic, Afaan Oromoo and Tigrinya, alongside English.</p>
+      </div>
+      <div class="card">
+        <div class="ico">🧾</div>
+        <h3>History &amp; export</h3>
+        <p>Every check is saved locally with its verdict, so you can look back, batch-audit and share results.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⚡</div>
+        <h3>Works where it matters</h3>
+        <p>Small, fast and offline-graceful — built for real Ethiopian network conditions, not a demo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="alt">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Three steps to a stamped receipt</h2>
+    <div class="steps">
+      <div class="step">
+        <h3>Scan</h3>
+        <p>Open Mahtem and scan the QR code on the payment receipt — or paste the reference number / link you received.</p>
+      </div>
+      <div class="step">
+        <h3>Verify</h3>
+        <p>Mahtem reads the official record from the bank and checks every detail: amount, parties, date and status.</p>
+      </div>
+      <div class="step">
+        <h3>Trust the stamp</h3>
+        <p>Genuine payments get the ማህተም stamp with the full receipt details. Anything odd gets a clear warning — before you hand over the goods.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="banks">
+  <div class="wrap">
+    <div class="kicker">Coverage</div>
+    <h2>Supported banks &amp; wallets</h2>
+    <p class="lead">Thirteen services today, with more on the way:</p>
+    <div class="banks">
+      <span class="bank">CBE</span>
+      <span class="bank">Telebirr</span>
+      <span class="bank">Bank of Abyssinia</span>
+      <span class="bank">M-Pesa</span>
+      <span class="bank">Dashen</span>
+      <span class="bank">Awash</span>
+      <span class="bank">Wegagen</span>
+      <span class="bank">Amhara Bank</span>
+      <span class="bank">Zemen Bank</span>
+      <span class="bank">CBE Birr</span>
+      <span class="bank">Siinqee Bank</span>
+      <span class="bank">Coopay</span>
+      <span class="bank">eBirr</span>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="privacy-strip">
+      <div>
+        <h2>Your receipts belong to you</h2>
+        <p>
+          Verification happens on your device. If you choose to create a cloud
+          account for backup, the server only ever stores cryptographic digests
+          and encrypted ciphertext — it mathematically cannot read your
+          identifiers, passwords or history.
+        </p>
+      </div>
+      <a class="btn btn-primary" href="privacy.html">Read the privacy policy</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <strong style="color:var(--navy);">Mahtem ማህተም</strong> — free Ethiopian bank receipt verification.<br>
+      Open source under the MIT license.
+    </div>
+    <div>
+      <a href="https://github.com/L3von36/cheki-mobile/releases/latest">Download</a> ·
+      <a href="https://github.com/L3von36/cheki-mobile">Source code</a> ·
+      <a href="https://github.com/L3von36/cheki-mobile/issues">Report an issue</a> ·
+      <a href="privacy.html">Privacy</a><br>
+      Mahtem is an independent tool and is not affiliated with, endorsed by, or
+      connected to any bank or wallet provider. © 2026 Mahtem · mahtem.com.et
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -70,3 +70,15 @@ Deploys are automatic: every push to `main` that touches `cloud/**` runs
 [`.github/workflows/deploy-cloud.yml`](../.github/workflows/deploy-cloud.yml),
 which uploads the module (with the KV binding re-asserted) and smoke-tests
 `/v1/health`.
+
+## Self-hosted ports (Plesk)
+
+The same API contract exists for the owner's Linux Bronze Plesk hosting
+(mahtem.com.et), with automatic one-time migration of existing users from
+this Worker:
+
+- [`plesk/`](./plesk) — PHP 8 + MySQL port (single front controller, zero deps)
+- [`node-api/`](./node-api) — Node.js 18+ (Express + mysql2) port, see
+  [`node-api/INSTALL-PLESK-NODE.md`](./node-api/INSTALL-PLESK-NODE.md)
+
+Both pass the same 57-check behaviour suite (`plesk/test_api.mjs`).
