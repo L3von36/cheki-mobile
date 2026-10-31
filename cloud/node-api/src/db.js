@@ -10,11 +10,8 @@
  * difference is INSERT IGNORE vs INSERT OR IGNORE.
  *
  * NOTE: the MySQL driver uses client-side escaping (pool.query, not
- * pool.execute). Server-side prepared statements hit protocol quirks on
- * some Plesk MariaDB builds (e.g. INSERT … ON DUPLICATE KEY UPDATE with
- * several string params failing while the same statement runs via the
- * text protocol); client-side escaping is immune and plenty safe —
- * mysql2 escapes every bound value itself.
+ * pool.execute) — same SQL, same safety, no prepared-statement protocol
+ * involvement. mysql2 escapes every bound value itself.
  *
  * All timestamps are epoch MILLISECONDS (BIGINT), exactly like the
  * Cloudflare Worker's KV records.
@@ -84,14 +81,23 @@ async function run(sql, params) {
   return { affectedRows: Number(info.changes) || 0 };
 }
 
+/** MySQL ODKU upsert statement (pure — asserted by the local test runner). */
+function buildUpsertSql(table, columns, updateColumns) {
+  // Backtick EVERYTHING: `blob` is a reserved word on MySQL — unquoted in
+  // the insert column list it is a syntax error (sqlite/PHP never caught it).
+  const cols = columns.map((c) => `\`${c}\``).join(', ');
+  const marks = columns.map(() => '?').join(', ');
+  const updates = updateColumns.map((c) => `\`${c}\` = VALUES(\`${c}\`)`).join(', ');
+  return `INSERT INTO \`${table}\` (${cols}) VALUES (${marks}) ON DUPLICATE KEY UPDATE ${updates}`;
+}
+
 /** Driver-neutral upsert (vault + pro_status). */
 function upsert(table, columns, updateColumns, params) {
-  const cols = columns.join(', ');
-  const marks = columns.map(() => '?').join(', ');
   if (config.driver === 'mysql') {
-    const updates = updateColumns.map((c) => `\`${c}\` = VALUES(\`${c}\`)`).join(', ');
-    return run(`INSERT INTO \`${table}\` (${cols}) VALUES (${marks}) ON DUPLICATE KEY UPDATE ${updates}`, params);
+    return run(buildUpsertSql(table, columns, updateColumns), params);
   }
+  const cols = columns.map((c) => `\`${c}\``).join(', ');
+  const marks = columns.map(() => '?').join(', ');
   const updates = updateColumns.map((c) => `\`${c}\` = excluded.\`${c}\``).join(', ');
   return run(`INSERT OR REPLACE INTO \`${table}\` (${cols}) VALUES (${marks})`, params);
 }
@@ -205,6 +211,7 @@ module.exports = {
   query,
   run,
   upsert,
+  buildUpsertSql,
   ensureReady,
   getJwtSecret,
   healthCheck,

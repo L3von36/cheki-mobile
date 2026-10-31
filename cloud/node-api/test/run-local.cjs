@@ -28,6 +28,24 @@ const server = spawn(process.execPath, ['server.js'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
+/* Static regression guard: every identifier in the MySQL upsert SQL must be
+   backticked. `blob` is a reserved word on MySQL — it once shipped as a bare
+   column name and only failed on real MySQL (sqlite/PHP never caught it). */
+{
+  const db = require('../src/db');
+  const sql = db.buildUpsertSql(
+    'vaults',
+    ['user_id', 'blob', 'revision', 'updated_at'],
+    ['blob', 'revision', 'updated_at']
+  );
+  const offenders = [...sql.matchAll(/[(,]\s*(?!`)([a-z_]+)/gi)].map((m) => m[1]);
+  if (offenders.length) {
+    console.error(`FAIL: unquoted identifiers in upsert SQL: ${offenders.join(', ')}\n  ${sql}`);
+    process.exit(1);
+  }
+  console.log(`static check: upsert SQL fully backticked ok\n  ${sql}`);
+}
+
 let serverLog = '';
 server.stdout.on('data', (d) => (serverLog += d));
 server.stderr.on('data', (d) => (serverLog += d));
