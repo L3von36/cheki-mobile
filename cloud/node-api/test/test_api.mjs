@@ -255,6 +255,86 @@ async function run() {
     ok(httpUrl.status === 400 && httpUrl.json?.error === 'bad_url', 'http:// (not https) → 400 bad_url');
   }
 
+  // ── verified receipt ledger ───────────────────────────────────────────
+  console.log('[receipts]');
+  {
+    const anon = await call('POST', '/v1/receipts', {
+      body: { entryId: 'v1', bankId: 'cbe', reference: 'FT123', status: 'verified' },
+    });
+    ok(anon.status === 401, 'POST /v1/receipts without bearer → 401');
+
+    const badBank = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: { entryId: 'v1', reference: 'FT123', status: 'verified' },
+    });
+    ok(badBank.status === 400 && badBank.json?.error === 'bad_input', 'missing bankId → 400 bad_input');
+
+    const badStatus = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: { entryId: 'v1', bankId: 'cbe', reference: 'FT123', status: 'maybe' },
+    });
+    ok(badStatus.status === 400 && badStatus.json?.error === 'bad_input', 'bad status → 400 bad_input');
+
+    const first = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: {
+        entryId: 'v1', bankId: 'cbe', bankName: 'Commercial Bank of Ethiopia',
+        reference: 'FT2508ABC', rawPayload: 'https://tx.cbeet.com/r/FT2508ABC',
+        senderName: 'ABEBE', receiverName: 'GROCERY', amount: 1250.5,
+        currency: 'ETB', receiptDate: '2026-10-31 09:14', status: 'verified',
+        verifiedAt: 1700000000000,
+      },
+    });
+    ok(first.status === 201 && first.json?.ok === true && first.json?.duplicate === false, 'record receipt → 201, not duplicate');
+
+    const retry = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: {
+        entryId: 'v1', bankId: 'cbe', bankName: 'Commercial Bank of Ethiopia',
+        reference: 'FT2508ABC', status: 'verified', verifiedAt: 1700000000000,
+        reason: 'rent',
+      },
+    });
+    ok(retry.status === 200 && retry.json?.duplicate === true, 'same entryId retry → duplicate:true (idempotent)');
+
+    const failed = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: {
+        entryId: 'v2', bankId: 'telebirr', bankName: 'Telebirr',
+        reference: 'WG2O9KZ1', status: 'failed', message: 'Receipt not found',
+        verifiedAt: 1700000001000,
+      },
+    });
+    ok(failed.status === 201 && failed.json?.ok === true, 'failed check also recorded → 201');
+
+    const list = await call('GET', '/v1/receipts', { bearer: accessToken });
+    ok(list.status === 200 && list.json?.count === 2, 'GET /v1/receipts → 2 rows');
+    const rows = list.json?.receipts || [];
+    ok(rows[0]?.entryId === 'v2' && rows[0]?.status === 'failed', 'newest first (v2 failed on top)');
+    ok(rows[1]?.bankId === 'cbe' && rows[1]?.senderName === 'ABEBE' && rows[1]?.amount === 1250.5,
+      'camelCase mapping + amount as number');
+    ok(rows[1]?.rawPayload === 'https://tx.cbeet.com/r/FT2508ABC', 'raw payload stored');
+    ok(rows[1]?.reason === 'rent', 'reason note moved onto the duplicate retry');
+
+    const limited = await call('GET', '/v1/receipts?limit=1', { bearer: accessToken });
+    ok(limited.status === 200 && limited.json?.count === 1, 'limit=1 → 1 row');
+
+    const longRef = 'X'.repeat(400);
+    const clipped = await call('POST', '/v1/receipts', {
+      bearer: accessToken,
+      body: { entryId: 'v3', bankId: 'boa', reference: longRef, status: 'verified' },
+    });
+    ok(clipped.status === 201, 'over-long reference accepted (clipped server-side)');
+    const list2 = await call('GET', '/v1/receipts', { bearer: accessToken });
+    const v3 = (list2.json?.receipts || []).find((r) => r.entryId === 'v3');
+    ok(v3 && v3.reference.length === 255, 'reference clipped to 255 chars');
+
+    const wipe = await call('DELETE', '/v1/receipts', { bearer: accessToken });
+    ok(wipe.status === 200 && wipe.json?.ok === true, 'DELETE /v1/receipts → ok (privacy path)');
+    const emptied = await call('GET', '/v1/receipts', { bearer: accessToken });
+    ok(emptied.status === 200 && emptied.json?.count === 0, 'ledger empty after wipe');
+  }
+
   // ── cleanup endpoints ─────────────────────────────────────────────────
   console.log('[delete + revoke]');
   {

@@ -111,6 +111,14 @@ function ensureSchema() {
   const uniq = mysql
     ? 'UNIQUE KEY `ux_accounts_user` (`user_id`)'
     : 'UNIQUE (`user_id`)';
+  // Composite-unique + auto-increment id columns differ per dialect
+  // (AUTO_INCREMENT vs AUTOINCREMENT, inline KEY syntax).
+  const receiptUniq = mysql
+    ? 'UNIQUE KEY `ux_receipts_entry` (`user_id`, `entry_id`)'
+    : 'UNIQUE (`user_id`, `entry_id`)';
+  const idCol = mysql
+    ? '`id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,'
+    : '`id` INTEGER PRIMARY KEY AUTOINCREMENT,';
 
   const tables = [
     `\`config\` (
@@ -122,6 +130,7 @@ function ensureSchema() {
         \`user_id\`         CHAR(36) NOT NULL,
         \`auth_hash\`       CHAR(64) NOT NULL,
         \`created_at\`      BIGINT NOT NULL,
+        \`last_seen_at\`    BIGINT NULL,
         ${uniq}
     )${suffix}`,
     `\`refresh_tokens\` (
@@ -150,11 +159,40 @@ function ensureSchema() {
         \`expires_at\` BIGINT NOT NULL,
         \`updated_at\` BIGINT NOT NULL
     )${suffix}`,
+    `\`verified_receipts\` (
+        ${idCol}
+        \`user_id\`       CHAR(36) NOT NULL,
+        \`entry_id\`      VARCHAR(64) NOT NULL,
+        \`bank_id\`       VARCHAR(32) NOT NULL,
+        \`bank_name\`     VARCHAR(64) NOT NULL,
+        \`reference\`     VARCHAR(255) NOT NULL,
+        \`raw_payload\`   TEXT NULL,
+        \`sender_name\`   VARCHAR(128) NULL,
+        \`receiver_name\` VARCHAR(128) NULL,
+        \`amount\`        DECIMAL(18, 2) NULL,
+        \`currency\`      VARCHAR(8) NULL,
+        \`receipt_date\`  VARCHAR(64) NULL,
+        \`status\`        VARCHAR(16) NOT NULL,
+        \`message\`       VARCHAR(512) NULL,
+        \`reason\`        VARCHAR(255) NULL,
+        \`verified_at\`   BIGINT NOT NULL,
+        \`created_at\`    BIGINT NOT NULL,
+        ${receiptUniq}
+    )${suffix}`,
   ];
 
   return (async () => {
     for (const ddl of tables) {
       await run(`CREATE TABLE IF NOT EXISTS ${ddl}`);
+    }
+    // Pre-ledger installs created `accounts` without last_seen_at — the
+    // CREATE above is a no-op for them. ALTER is best-effort: a database
+    // user without ALTER rights must not break every other request.
+    try {
+      await run('ALTER TABLE `accounts` ADD COLUMN `last_seen_at` BIGINT NULL');
+    } catch (_) {
+      // Duplicate column (or no permission) — the column is available or
+      // the UPDATE in createSession is skipped by its own try/catch.
     }
     await run(`${INSERT_IGNORE} \`config\` (\`k\`, \`v\`) VALUES ('schema', '1')`);
   })().catch((e) => {

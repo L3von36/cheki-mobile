@@ -8,12 +8,17 @@
  * shapes, error codes and status codes are identical to the Worker, so the
  * Flutter client (lib/core/cloud/cloud_api.dart) works without changes.
  *
- * PRIVACY CONTRACT (Zero-Knowledge, identical to the Worker):
+ * PRIVACY CONTRACT (Zero-Knowledge account + vault, readable receipt ledger):
  *   * Client derives `authKey = PBKDF2(password, "mahtem-cloud-auth-v1")`.
  *     The raw password never reaches this server.
  *   * Stored `identifierHash = SHA-256(identifier)` — never raw email/phone.
  *   * Vault (history backup) is AES-256-GCM encrypted on-device. This server
  *     cannot decrypt it.
+ *   * NEW (v1.16.0): each verification is recorded in `verified_receipts`
+ *     (bank, reference, scanned payload, parties, amount, outcome) under the
+ *     user's account id — a readable server-side receipt history. The user
+ *     asked for this ledger explicitly; the account/password/vault layers
+ *     remain fully zero-knowledge.
  *
  * TOKEN ARCHITECTURE (identical to the Worker):
  *   * Short-lived access token: JWT HS256, 15 minutes, stateless verification.
@@ -250,6 +255,16 @@ async function createSession(req, res) {
     return fail(res, err('bad_credentials', 401, 'Wrong identifier or password.'));
   }
 
+  // Sign-in tracker (best effort — a missing column must never block a login).
+  try {
+    await db.run('UPDATE `accounts` SET `last_seen_at` = ? WHERE `user_id` = ?', [
+      Date.now(),
+      String(record.user_id),
+    ]);
+  } catch (_) {
+    // Pre-migration table without last_seen_at — ignore.
+  }
+
   res.json(await issueSessionTokens(String(record.user_id)));
 }
 
@@ -439,6 +454,143 @@ api.get('/v1/pro/status', h(async (req, res) => {
   if (!rows.length) return res.json({ entitled: false, expiresAt: null });
   const expiresAt = Number(rows[0].expires_at) || 0;
   res.json({ entitled: expiresAt > Date.now(), expiresAt });
+}));
+
+/* ── verified receipt ledger ────────────────────────────────────────── */
+// Every verification the app runs while the user is signed in is mirrored
+// here (bank, reference, the payload it was checked with, parties, amount,
+// outcome) so the receipt history lives in the Plesk database per account,
+// not only in the encrypted vault. Writes are idempotent per history-entry
+// id, so client retries after a lost response never duplicate rows.
+
+function receiptRowView(r) {
+  return {
+    id: Number(r.id),
+    entryId: r.entry_id,
+    bankId: r.bank_id,
+    bankName: r.bank_name,
+    reference: r.reference,
+    rawPayload: r.raw_payload,
+    senderName: r.sender_name,
+    receiverName: r.receiver_name,
+    amount: r.amount == null ? null : Number(r.amount),
+    currency: r.currency,
+    receiptDate: r.receipt_date,
+    status: r.status,
+    message: r.message,
+    reason: r.reason,
+    verifiedAt: Number(r.verified_at),
+    createdAt: Number(r.created_at),
+  };
+}
+
+const RECEIPT_STR_MAX = {
+  bankId: 32,
+  bankName: 64,
+  reference: 255,
+  rawPayload: 4000,
+  senderName: 128,
+  receiverName: 128,
+  currency: 8,
+  receiptDate: 64,
+  message: 512,
+  reason: 255,
+};
+
+api.post('/v1/receipts', h(async (req, res) => {
+  const session = await requireSession(req);
+  if (!guard(res, session)) return;
+  await db.ensureReady();
+
+  const body = req.body || {};
+  const clip = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+  const entryId = clip(body.entryId, 64);
+  if (!entryId || typeof body.bankId !== 'string' || !body.bankId.trim()) {
+    return fail(res, err('bad_input', 400, 'entryId and bankId are required.'));
+  }
+  if (body.status !== 'verified' && body.status !== 'failed') {
+    return fail(res, err('bad_input', 400, "status must be 'verified' or 'failed'."));
+  }
+  const amount = Number(body.amount);
+
+  const row = {
+    user_id: session.userId,
+    entry_id: entryId,
+    bank_id: clip(body.bankId.trim(), RECEIPT_STR_MAX.bankId),
+    bank_name: clip(body.bankName, RECEIPT_STR_MAX.bankName) || '',
+    reference: clip(body.reference, RECEIPT_STR_MAX.reference) || '',
+    raw_payload: clip(body.rawPayload, RECEIPT_STR_MAX.rawPayload),
+    sender_name: clip(body.senderName, RECEIPT_STR_MAX.senderName),
+    receiver_name: clip(body.receiverName, RECEIPT_STR_MAX.receiverName),
+    amount: Number.isFinite(amount) ? amount : null,
+    currency: clip(body.currency, RECEIPT_STR_MAX.currency),
+    receipt_date: clip(body.receiptDate, RECEIPT_STR_MAX.receiptDate),
+    status: body.status,
+    message: clip(body.message, RECEIPT_STR_MAX.message),
+    reason: clip(body.reason, RECEIPT_STR_MAX.reason),
+    verified_at: Number(body.verifiedAt) || Date.now(),
+    created_at: Date.now(),
+  };
+
+  const existing = await db.query(
+    'SELECT `id` FROM `verified_receipts` WHERE `user_id` = ? AND `entry_id` = ?',
+    [row.user_id, row.entry_id],
+  );
+  if (existing.length) {
+    // Already recorded (lost-response retry). Only the user's reason note
+    // may move — the first verification answer stays authoritative.
+    if (row.reason) {
+      await db.run(
+        'UPDATE `verified_receipts` SET `reason` = ? WHERE `user_id` = ? AND `entry_id` = ?',
+        [row.reason, row.user_id, row.entry_id],
+      );
+    }
+    return res.json({ ok: true, duplicate: true, id: Number(existing[0].id) });
+  }
+
+  await db.run(
+    'INSERT INTO `verified_receipts` (`user_id`, `entry_id`, `bank_id`, `bank_name`, `reference`, `raw_payload`, `sender_name`, `receiver_name`, `amount`, `currency`, `receipt_date`, `status`, `message`, `reason`, `verified_at`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      row.user_id,
+      row.entry_id,
+      row.bank_id,
+      row.bank_name,
+      row.reference,
+      row.raw_payload,
+      row.sender_name,
+      row.receiver_name,
+      row.amount,
+      row.currency,
+      row.receipt_date,
+      row.status,
+      row.message,
+      row.reason,
+      row.verified_at,
+      row.created_at,
+    ],
+  );
+  res.status(201).json({ ok: true, duplicate: false });
+}));
+
+api.get('/v1/receipts', h(async (req, res) => {
+  const session = await requireSession(req);
+  if (!guard(res, session)) return;
+  await db.ensureReady();
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+  const rows = await db.query(
+    'SELECT * FROM `verified_receipts` WHERE `user_id` = ? ORDER BY `verified_at` DESC, `id` DESC LIMIT ' + limit,
+    [session.userId],
+  );
+  res.json({ ok: true, count: rows.length, receipts: rows.map(receiptRowView) });
+}));
+
+api.delete('/v1/receipts', h(async (req, res) => {
+  const session = await requireSession(req);
+  if (!guard(res, session)) return;
+  await db.ensureReady();
+  await db.run('DELETE FROM `verified_receipts` WHERE `user_id` = ?', [session.userId]);
+  res.json({ ok: true });
 }));
 
 /* ── geo-block relay (strict allowlist — never an open proxy) ───────── */

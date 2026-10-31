@@ -155,15 +155,20 @@
     </p>
   </div>
   <div class="note">
-    <strong>Zero-knowledge cloud:</strong> even a full compromise of Mahtem's server
-    would leak no identifiers, no passwords and no readable history — by design,
-    the server only ever stores cryptographic digests and encrypted ciphertext.
+    <strong>Zero-knowledge account &amp; backup:</strong> even a full compromise of
+    Mahtem's server would leak no identifiers, no passwords and no readable backup
+    — the account and the encrypted history vault store only cryptographic digests
+    and ciphertext. Separately, when you are signed in each check is recorded to
+    your account's receipt ledger (see <em>The receipt ledger</em> below) so your
+    verification history lives in our database too.
   </div>
 
   <h2>What stays on your device</h2>
   <ul>
     <li>Your account (identifier such as phone or email, and your password) is created and stored locally. Passwords are PBKDF2-hashed, and the account is kept in Android-Keystore-encrypted secure storage.</li>
-    <li>Your verification history lives in a local database on the phone.</li>
+    <li>Your verification history lives in a local database on the phone. When you
+    are signed in, every check is additionally recorded to your account's receipt
+    ledger on the server — described in <em>The receipt ledger</em> below.</li>
     <li>The vault encryption key is derived from your password on the device and <strong>never leaves it</strong>.</li>
   </ul>
 
@@ -182,7 +187,7 @@
   <p>
     Creating a cloud account (for sign-in across devices and encrypted history
     backup) is entirely optional. If you do, this is <em>all</em> the server can
-    ever see:
+    ever see about your identity and your backup:
   </p>
   <div class="table-scroll">
   <table>
@@ -191,8 +196,22 @@
     <tr><td><code>authKey</code></td><td>A PBKDF2-SHA256 key derived from your password on the device (120,000 iterations). Your raw password never reaches the server, and the stored key is not usable as a password anywhere else.</td></tr>
     <tr><td><code>blob</code></td><td>Your history backup, AES-256-GCM encrypted on the device. The server stores ciphertext it cannot decrypt.</td></tr>
     <tr><td><code>receiptHash</code></td><td>A SHA-256 fingerprint of a verified Telebirr invoice, used only to record that this month's Pro payment belongs to your account. Raw receipt data is never stored.</td></tr>
+    <tr><td><code>receipts</code></td><td>Your receipt ledger — see the next section.</td></tr>
   </table>
   </div>
+
+  <h2>The receipt ledger</h2>
+  <p>
+    For signed-in accounts, every receipt check the app runs is recorded to your
+    account's receipt ledger in our database: the bank, the reference number, the
+    exact payload it was checked with (QR content, receipt link or scanned
+    number), the sender and receiver names, the amount, and the result with its
+    time. This is a readable record — it is what makes your receipt history
+    survive across devices and lets support look up a specific check when you
+    ask. Verification without an account stays entirely on your phone, and
+    disconnecting your cloud account (Settings → turn backup off) erases the
+    ledger for your account.
+  </p>
 
   <h2>Mahtem Pro</h2>
   <p>
@@ -200,7 +219,9 @@
     activate it, the app first verifies the payment receipt against EthioTelecom's
     official endpoint and then submits only the receipt's fingerprint. The server
     binds that fingerprint to your account, so one payment cannot be reused by
-    another account. The verified receipts themselves are not stored by Mahtem.
+    another account. The payment receipt itself is stored only as that
+    fingerprint; the general check ledger above covers the verifications you
+    run.
   </p>
 
   <h2>Crash reports</h2>
@@ -214,7 +235,7 @@
   <h2>What Mahtem never does</h2>
   <ul>
     <li>No advertising SDKs and no third-party analytics trackers.</li>
-    <li>No selling, renting or sharing of user data — there is no user data to sell.</li>
+    <li>No selling, renting or sharing of your data with anyone — not for advertising, not for analytics, not for any other purpose.</li>
     <li>No reading of your contacts, messages, photos or files beyond what you explicitly pick (a receipt screenshot you choose to scan).</li>
     <li>No requirement to create an account in order to verify receipts.</li>
   </ul>

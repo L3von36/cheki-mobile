@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `accounts` (
     `user_id`         CHAR(36) NOT NULL,
     `auth_hash`       CHAR(64) NOT NULL,
     `created_at`      BIGINT NOT NULL,
+    `last_seen_at`    BIGINT NULL,
     UNIQUE KEY `ux_accounts_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -48,3 +49,24 @@ CREATE TABLE IF NOT EXISTS `pro_status` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO `config` (`k`, `v`) VALUES ('schema', '1');
+
+CREATE TABLE IF NOT EXISTS `verified_receipts` (
+    `id`            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `user_id`       CHAR(36) NOT NULL,
+    `entry_id`      VARCHAR(64) NOT NULL,
+    `bank_id`       VARCHAR(32) NOT NULL,
+    `bank_name`     VARCHAR(64) NOT NULL,
+    `reference`     VARCHAR(255) NOT NULL,
+    `raw_payload`   TEXT NULL,
+    `sender_name`   VARCHAR(128) NULL,
+    `receiver_name` VARCHAR(128) NULL,
+    `amount`        DECIMAL(18, 2) NULL,
+    `currency`      VARCHAR(8) NULL,
+    `receipt_date`  VARCHAR(64) NULL,
+    `status`        VARCHAR(16) NOT NULL,
+    `message`       VARCHAR(512) NULL,
+    `reason`        VARCHAR(255) NULL,
+    `verified_at`   BIGINT NOT NULL,
+    `created_at`    BIGINT NOT NULL,
+    UNIQUE KEY `ux_receipts_entry` (`user_id`, `entry_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

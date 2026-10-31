@@ -41,7 +41,7 @@ const driver = (process.env.DB_DRIVER || 'mysql').trim().toLowerCase();
 
 const config = {
   appRoot: APP_ROOT,
-  version: '1.15.2-node',
+  version: '1.16.0-node',
 
   /** 'mysql' in production. 'sqlite' exists only for local development tests. */
   driver: driver === 'sqlite' ? 'sqlite' : 'mysql',
