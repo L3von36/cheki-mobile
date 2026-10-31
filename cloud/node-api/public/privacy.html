@@ -29,6 +29,7 @@
     --bg-soft: #F3F6FC;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Ethiopic", sans-serif;
     color: var(--ink); line-height: 1.7; background: #fff;
@@ -78,13 +79,15 @@
   }
   h2::before { content: ""; width: 4px; height: 20px; background: var(--green); border-radius: 3px; flex-shrink: 0; }
   h2:first-child { margin-top: 0; }
-  p, li { color: #37404f; font-size: .98rem; }
+  p, li { color: #37404f; font-size: .98rem; overflow-wrap: break-word; }
   strong { color: var(--ink); }
   ul { padding-left: 22px; margin: 10px 0; }
   li { margin: 7px 0; }
   li::marker { color: var(--green-deep); }
   a { color: var(--green-deep); font-weight: 600; }
   table { width: 100%; border-collapse: collapse; margin: 18px 0 8px; font-size: .92rem; border-radius: 12px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  td:first-child { white-space: nowrap; }
   th, td { text-align: left; padding: 12px 14px; border: 1px solid var(--line); vertical-align: top; }
   th { background: var(--green-soft); color: var(--green-deep); font-weight: 700; }
   tbody tr:nth-child(odd) td { background: #FBFDFE; }
@@ -108,6 +111,16 @@
     table { font-size: .86rem; }
     th, td { padding: 9px 10px; }
   }
+  @media (max-width: 480px) {
+    .pagehead { padding: 44px 0 42px; }
+    .pagehead h1 { font-size: 1.5rem; }
+    main { padding: 36px 0 56px; }
+    .shortver { padding: 18px; }
+    .note { padding: 14px 16px; }
+    .backlink { padding: 8px 10px; gap: 0; }
+    .backlink .bl-text { display: none; }
+    .table-scroll table { min-width: 470px; }
+  }
 </style>
 </head>
 <body>
@@ -115,9 +128,9 @@
 <header>
   <div class="wrap nav">
     <a class="brand" href="index.html"><span class="seal am">ማ</span> Mahtem <span class="am">ማህተም</span></a>
-    <a class="backlink" href="index.html">
+    <a class="backlink" href="index.html" aria-label="Back to mahtem.com.et">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-      Back to mahtem.com.et
+      <span class="bl-text">Back to mahtem.com.et</span>
     </a>
   </div>
 </header>
@@ -171,6 +184,7 @@
     backup) is entirely optional. If you do, this is <em>all</em> the server can
     ever see:
   </p>
+  <div class="table-scroll">
   <table>
     <tr><th>Data stored</th><th>What it is</th></tr>
     <tr><td><code>identifierHash</code></td><td>SHA-256 digest of your normalized identifier. Your phone number or email is never sent or stored.</td></tr>
@@ -178,6 +192,7 @@
     <tr><td><code>blob</code></td><td>Your history backup, AES-256-GCM encrypted on the device. The server stores ciphertext it cannot decrypt.</td></tr>
     <tr><td><code>receiptHash</code></td><td>A SHA-256 fingerprint of a verified Telebirr invoice, used only to record that this month's Pro payment belongs to your account. Raw receipt data is never stored.</td></tr>
   </table>
+  </div>
 
   <h2>Mahtem Pro</h2>
   <p>

@@ -37,7 +37,7 @@
     --radius: 16px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body {
     font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Ethiopic", sans-serif;
     color: var(--ink);
@@ -90,7 +90,7 @@
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 9px;
     padding: 13px 24px; border-radius: 12px; font-weight: 700; font-size: .98rem;
-    font-family: inherit; border: 1px solid transparent; cursor: pointer;
+    font-family: inherit; border: 1px solid transparent; cursor: pointer; white-space: nowrap;
     transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease;
   }
   .btn:hover { text-decoration: none; transform: translateY(-1px); }
@@ -355,15 +355,21 @@
     .b-wide { grid-column: span 2; }
     .b-tall, .b-third { grid-column: span 1; }
     .stats .wrap { grid-template-columns: repeat(2, 1fr); gap: 26px; }
-    .foot { grid-template-columns: 1fr; gap: 30px; }
+    .foot { grid-template-columns: 1fr 1fr; gap: 32px; }
+    .foot .brandline { grid-column: 1 / -1; }
   }
-  @media (max-width: 640px) {
-    section { padding: 68px 0; }
+  @media (max-width: 860px) {
     .nav-links { display: none; }
-    .hero h1 { font-size: 2rem; }
-    .hero p.sub { font-size: 1.02rem; }
+  }
+  @media (max-width: 760px) {
     .steps { grid-template-columns: 1fr; gap: 40px; }
     .steps::before { display: none; }
+    .step { padding: 0; }
+  }
+  @media (max-width: 640px) {
+    section { padding: 64px 0; }
+    .hero h1 { font-size: 2rem; }
+    .hero p.sub { font-size: 1.02rem; }
     .bento { grid-template-columns: 1fr; }
     .b-wide, .b-tall, .b-third { grid-column: span 1; }
     .chip-1 { left: -4%; }
@@ -371,6 +377,37 @@
     .final .panel { padding: 48px 24px; border-radius: 22px; }
     .final h2 { font-size: 1.7rem; }
     .cta-row .btn { width: 100%; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 20px; }
+    .hero { padding: 54px 0 64px; }
+    section { padding: 56px 0; }
+    h2 { font-size: 1.68rem; }
+    .stats .wrap { grid-template-columns: 1fr; gap: 16px; padding-top: 26px; padding-bottom: 26px; }
+    .stat { display: flex; align-items: baseline; gap: 12px; text-align: left; }
+    .stat b { font-size: 1.5rem; flex-shrink: 0; min-width: 3.2ch; }
+    .stat span { font-size: .84rem; }
+    .foot { grid-template-columns: 1fr; gap: 28px; }
+  }
+  @media (max-width: 400px) {
+    .nav { height: 60px; }
+    .brand { font-size: 1.05rem; }
+    .brand .am { display: none; }
+    .btn-sm { padding: 9px 14px; font-size: .85rem; }
+    .hero h1 { font-size: 1.72rem; }
+    .hero p.sub { font-size: .97rem; }
+    .hero-note { gap: 12px; }
+    .phone { width: min(288px, calc(100vw - 48px)); }
+    .chip { padding: 8px 11px; font-size: .72rem; }
+    .chip-1 { left: -2%; }
+    .chip-2 { right: -2%; }
+    .flow .node { padding: 14px 10px; }
+    .flow .node small { font-size: .68rem; }
+    .final .panel { padding: 40px 18px; }
+    .final h2 { font-size: 1.5rem; }
+    summary { padding: 16px; font-size: .95rem; }
+    details .a { padding: 0 16px 16px; }
+    .card { padding: 22px; }
   }
 </style>
 </head>
