@@ -262,13 +262,24 @@ class CloudApi {
 
   /// Creates the cloud account. [identifierHash] and [authKey] are both
   /// 64-hex digests derived on-device.
+  ///
+  /// [identifier] (the readable phone/email the user typed, normalized) and
+  /// [displayName] ride along so the account is recognizable in the admin
+  /// database (v1.18.9). Both optional: older servers ignore them, and
+  /// omitting them keeps the legacy hash-only behavior. The password itself
+  /// is never sent — only the derived digests.
   Future<void> createAccount({
     required String identifierHash,
     required String authKey,
+    String? identifier,
+    String? displayName,
   }) =>
       _send('POST', '/v1/accounts', body: {
         'identifierHash': identifierHash,
         'authKey': authKey,
+        if (identifier != null && identifier.isNotEmpty) 'identifier': identifier,
+        if (displayName != null && displayName.isNotEmpty)
+          'displayName': displayName,
       });
 
   Future<bool> lookupAccount({required String identifierHash}) async {
@@ -280,10 +291,15 @@ class CloudApi {
   Future<CloudSession> createSession({
     required String identifierHash,
     required String authKey,
+    String? identifier,
+    String? displayName,
   }) async {
     final r = await _send('POST', '/v1/session', body: {
       'identifierHash': identifierHash,
       'authKey': authKey,
+      if (identifier != null && identifier.isNotEmpty) 'identifier': identifier,
+      if (displayName != null && displayName.isNotEmpty)
+        'displayName': displayName,
     });
     return CloudSession(
       sessionToken:

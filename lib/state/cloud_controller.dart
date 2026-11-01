@@ -799,13 +799,23 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _profile = RemoteAccountProfile.fromAccount(account);
 
       // Link: create when the cloud doesn't know this identifier yet.
+      // The readable identifier + display name ride along so the account
+      // is recognizable in the admin database; the password never leaves
+      // the device (only the derived digests travel).
       final exists = await _api.lookupAccount(identifierHash: identifierHash);
       if (!exists) {
-        await _api.createAccount(identifierHash: identifierHash, authKey: authKey);
+        await _api.createAccount(
+          identifierHash: identifierHash,
+          authKey: authKey,
+          identifier: account.identifier,
+          displayName: account.displayName,
+        );
       }
       final session = await _api.createSession(
         identifierHash: identifierHash,
         authKey: authKey,
+        identifier: account.identifier,
+        displayName: account.displayName,
       );
 
       _enabled = true;

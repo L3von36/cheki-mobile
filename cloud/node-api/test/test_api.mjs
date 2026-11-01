@@ -335,6 +335,54 @@ async function run() {
     ok(emptied.status === 200 && emptied.json?.count === 0, 'ledger empty after wipe');
   }
 
+  // ── professional account records (v1.17.0) ────────────────────────────
+  console.log('[account identity + audit]');
+  let secondToken = '';
+  {
+    const idHash2 = H64();
+    const authKey2 = H64();
+    const created = await call('POST', '/v1/accounts', {
+      body: { identifierHash: idHash2, authKey: authKey2, identifier: '+251911234567', displayName: 'Abebe Kebede' },
+    });
+    ok(created.status === 201, 'create account with identifier + name → 201');
+
+    const firstLogin = await call('POST', '/v1/session', { body: { identifierHash: idHash2, authKey: authKey2 } });
+    ok(firstLogin.status === 200, 'sign-in without identity fields → 200');
+    secondToken = firstLogin.json?.accessToken || '';
+
+    const again = await call('POST', '/v1/session', {
+      body: { identifierHash: idHash2, authKey: authKey2, identifier: '+251911234567', displayName: 'Abebe Kebede' },
+    });
+    ok(again.status === 200, 'second sign-in → 200');
+
+    const me = await call('GET', '/v1/account', { bearer: secondToken });
+    ok(me.status === 200 && me.json?.identifier === '+251911234567', 'GET /v1/account returns readable identifier');
+    ok(me.json?.identifierType === 'phone', 'identifier_type detected as phone');
+    ok(me.json?.displayName === 'Abebe Kebede', 'display name stored');
+    ok(me.json?.signInCount === 2, `sign_in_count = 2 (got ${me.json?.signInCount})`);
+    ok(typeof me.json?.createdAt === 'number' && me.json.createdAt > 0, 'createdAt epoch present');
+
+    // Legacy account (no identity at creation) backfills on first sign-in.
+    const legacyHash = H64();
+    const legacyKey = H64();
+    await call('POST', '/v1/accounts', { body: { identifierHash: legacyHash, authKey: legacyKey } });
+    const legacyLogin = await call('POST', '/v1/session', {
+      body: { identifierHash: legacyHash, authKey: legacyKey, identifier: 'abebe@example.com' },
+    });
+    ok(legacyLogin.status === 200, 'legacy account sign-in → 200');
+    const legacyMe = await call('GET', '/v1/account', { bearer: legacyLogin.json?.accessToken });
+    ok(legacyMe.json?.identifier === 'abebe@example.com' && legacyMe.json?.identifierType === 'email',
+      'identifier backfilled on sign-in (email type detected)');
+
+    const patched = await call('PATCH', '/v1/account', { bearer: secondToken, body: { displayName: 'Abebe K.' } });
+    ok(patched.status === 200 && patched.json?.ok === true, 'PATCH /v1/account → ok');
+    const renamed = await call('GET', '/v1/account', { bearer: secondToken });
+    ok(renamed.json?.displayName === 'Abebe K.', 'display name updated');
+
+    const anonPatch = await call('PATCH', '/v1/account', { body: { displayName: 'X' } });
+    ok(anonPatch.status === 401, 'PATCH /v1/account without bearer → 401');
+  }
+
   // ── cleanup endpoints ─────────────────────────────────────────────────
   console.log('[delete + revoke]');
   {

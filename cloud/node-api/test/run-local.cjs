@@ -76,6 +76,32 @@ async function waitForHealth(retries = 60) {
   });
   tester.on('exit', (code) => {
     server.kill('SIGTERM');
+    if (code === 0) {
+      // Direct-DB check: the admin views must exist and be queryable after
+      // the suite's traffic (schema migration ran on the first request).
+      try {
+        const { DatabaseSync } = require('node:sqlite');
+        const raw = new DatabaseSync(dbFile);
+        const users = raw.prepare('SELECT COUNT(*) AS n FROM `v_user_overview`').get();
+        const receipts = raw.prepare('SELECT COUNT(*) AS n FROM `v_receipt_overview`').get();
+        const signIns = raw.prepare('SELECT COUNT(*) AS n FROM `sign_ins`').get();
+        const named = raw
+          .prepare('SELECT identifier, name, signins FROM `v_user_overview` WHERE identifier IS NOT NULL LIMIT 1')
+          .get();
+        console.log(
+          `views: v_user_overview=${users.n} rows, v_receipt_overview=${receipts.n} rows, sign_ins=${signIns.n} rows`,
+        );
+        if (named && named.identifier) {
+          console.log(
+            `readable account check: identifier=${named.identifier} name=${named.name ?? '—'} signins=${named.signins}`,
+          );
+        }
+        raw.close();
+      } catch (e) {
+        console.error('FAIL: admin views query failed: ' + e.message);
+        process.exit(1);
+      }
+    }
     try {
       fs.rmSync(dbFile, { force: true });
       fs.rmSync(dbFile + '-wal', { force: true });

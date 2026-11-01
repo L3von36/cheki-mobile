@@ -103,6 +103,21 @@ function upsert(table, columns, updateColumns, params) {
 }
 
 /* ── schema (auto-created on first request, like the PHP port) ──────── */
+//
+// v1.17.0 — "professional database" pass. The owner reviews accounts in
+// phpMyAdmin, so every table now carries:
+//   * readable identity: `identifier` (phone/email as the user typed it,
+//     normalized on-device), `identifier_type`, `display_name` — the
+//     password stays zero-knowledge (auth_hash only, PBKDF2 client-side),
+//   * audit columns: epoch-ms timestamps for the API + `_dt` DATETIME
+//     mirrors so humans read dates without FROM_UNIXTIME gymnastics,
+//   * lifecycle columns: `status` ('active' | 'disabled') and
+//     `sign_in_count`,
+//   * a `sign_ins` audit trail (90-day retention) and two admin views
+//     (`v_user_overview`, `v_receipt_overview`) for one-glance reviews.
+// Existing installs migrate in place: best-effort ALTERs backfill the
+// new columns; readable identifiers backfill on the account's next
+// sign-in (the hash cannot be reversed).
 
 function ensureSchema() {
   const mysql = config.driver === 'mysql';
@@ -119,6 +134,12 @@ function ensureSchema() {
   const idCol = mysql
     ? '`id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,'
     : '`id` INTEGER PRIMARY KEY AUTOINCREMENT,';
+  // FROM_UNIXTIME (MySQL) vs datetime(x/1000,'unixepoch') (SQLite).
+  // [expr] is a pre-quoted SQL fragment: '`created_at`', 'p.`expires_at`'.
+  const fromMs = (expr) =>
+    mysql
+      ? `FROM_UNIXTIME(FLOOR(${expr} / 1000))`
+      : `datetime(${expr} / 1000, 'unixepoch')`;
 
   const tables = [
     `\`config\` (
@@ -129,8 +150,15 @@ function ensureSchema() {
         \`identifier_hash\` CHAR(64) NOT NULL PRIMARY KEY,
         \`user_id\`         CHAR(36) NOT NULL,
         \`auth_hash\`       CHAR(64) NOT NULL,
+        \`identifier\`      VARCHAR(255) NULL,
+        \`identifier_type\` VARCHAR(16) NULL,
+        \`display_name\`    VARCHAR(64) NULL,
+        \`status\`          VARCHAR(16) NOT NULL DEFAULT 'active',
+        \`sign_in_count\`   BIGINT NOT NULL DEFAULT 0,
         \`created_at\`      BIGINT NOT NULL,
+        \`created_dt\`      DATETIME NULL,
         \`last_seen_at\`    BIGINT NULL,
+        \`last_seen_dt\`    DATETIME NULL,
         ${uniq}
     )${suffix}`,
     `\`refresh_tokens\` (
@@ -138,6 +166,12 @@ function ensureSchema() {
         \`user_id\`    CHAR(64) NOT NULL,
         \`exp\`        BIGINT NOT NULL,
         \`created_at\` BIGINT NOT NULL
+    )${suffix}`,
+    `\`sign_ins\` (
+        ${idCol}
+        \`user_id\` CHAR(36) NOT NULL,
+        \`at\`      BIGINT NOT NULL,
+        \`at_dt\`   DATETIME NULL
     )${suffix}`,
     `\`vaults\` (
         \`user_id\`    CHAR(36) NOT NULL PRIMARY KEY,
@@ -176,25 +210,122 @@ function ensureSchema() {
         \`message\`       VARCHAR(512) NULL,
         \`reason\`        VARCHAR(255) NULL,
         \`verified_at\`   BIGINT NOT NULL,
+        \`verified_dt\`   DATETIME NULL,
         \`created_at\`    BIGINT NOT NULL,
+        \`created_dt\`    DATETIME NULL,
         ${receiptUniq}
     )${suffix}`,
+  ];
+
+  // Columns added after an install's first boot. Each ALTER is
+  // individually best-effort: "duplicate column" on the happy path, and a
+  // database user without ALTER rights must never break API requests.
+  const alterStatements = [
+    'ALTER TABLE `accounts` ADD COLUMN `last_seen_at` BIGINT NULL',
+    'ALTER TABLE `accounts` ADD COLUMN `identifier` VARCHAR(255) NULL',
+    'ALTER TABLE `accounts` ADD COLUMN `identifier_type` VARCHAR(16) NULL',
+    'ALTER TABLE `accounts` ADD COLUMN `display_name` VARCHAR(64) NULL',
+    "ALTER TABLE `accounts` ADD COLUMN `status` VARCHAR(16) NOT NULL DEFAULT 'active'",
+    'ALTER TABLE `accounts` ADD COLUMN `sign_in_count` BIGINT NOT NULL DEFAULT 0',
+    'ALTER TABLE `accounts` ADD COLUMN `created_dt` DATETIME NULL',
+    'ALTER TABLE `accounts` ADD COLUMN `last_seen_dt` DATETIME NULL',
+    'ALTER TABLE `verified_receipts` ADD COLUMN `verified_dt` DATETIME NULL',
+    'ALTER TABLE `verified_receipts` ADD COLUMN `created_dt` DATETIME NULL',
+  ];
+
+  // Admin-facing readability indexes. MySQL lacks CREATE INDEX IF NOT
+  // EXISTS (MariaDB has it — the try/catch covers both), SQLite supports
+  // the IF NOT EXISTS form.
+  const indexStatements = mysql
+    ? [
+        'CREATE INDEX `ix_accounts_identifier` ON `accounts` (`identifier`(191))',
+        'CREATE INDEX `ix_sign_ins_user_time` ON `sign_ins` (`user_id`, `at`)',
+        'CREATE INDEX `ix_receipts_user_time` ON `verified_receipts` (`user_id`, `verified_at`)',
+      ]
+    : [
+        'CREATE INDEX IF NOT EXISTS `ix_accounts_identifier` ON `accounts` (`identifier`)',
+        'CREATE INDEX IF NOT EXISTS `ix_sign_ins_user_time` ON `sign_ins` (`user_id`, `at`)',
+        'CREATE INDEX IF NOT EXISTS `ix_receipts_user_time` ON `verified_receipts` (`user_id`, `verified_at`)',
+      ];
+
+  // One-glance phpMyAdmin screens: identity + plan + activity per user,
+  // and the receipt ledger joined with who ran each check.
+  const viewStatements = [
+    `CREATE VIEW \`v_user_overview\` AS
+     SELECT a.\`user_id\`,
+            a.\`identifier\`,
+            a.\`identifier_type\` AS \`type\`,
+            a.\`display_name\`    AS \`name\`,
+            a.\`status\`,
+            a.\`sign_in_count\`   AS \`signins\`,
+            a.\`created_dt\`      AS \`member_since\`,
+            a.\`last_seen_dt\`    AS \`last_seen\`,
+            ${fromMs('p.`expires_at`')} AS \`pro_until\`,
+            (SELECT COUNT(*) FROM \`verified_receipts\` r
+              WHERE r.\`user_id\` = a.\`user_id\`) AS \`checks\`
+     FROM \`accounts\` a
+     LEFT JOIN \`pro_status\` p ON p.\`user_id\` = a.\`user_id\``,
+    `CREATE VIEW \`v_receipt_overview\` AS
+     SELECT r.\`verified_dt\`  AS \`when\`,
+            a.\`identifier\`,
+            a.\`display_name\` AS \`name\`,
+            r.\`bank_name\`    AS \`bank\`,
+            r.\`reference\`,
+            r.\`sender_name\`  AS \`sender\`,
+            r.\`receiver_name\` AS \`receiver\`,
+            r.\`amount\`,
+            r.\`currency\`,
+            r.\`status\`,
+            r.\`reason\`
+     FROM \`verified_receipts\` r
+     LEFT JOIN \`accounts\` a ON a.\`user_id\` = r.\`user_id\``,
   ];
 
   return (async () => {
     for (const ddl of tables) {
       await run(`CREATE TABLE IF NOT EXISTS ${ddl}`);
     }
-    // Pre-ledger installs created `accounts` without last_seen_at — the
-    // CREATE above is a no-op for them. ALTER is best-effort: a database
-    // user without ALTER rights must not break every other request.
-    try {
-      await run('ALTER TABLE `accounts` ADD COLUMN `last_seen_at` BIGINT NULL');
-    } catch (_) {
-      // Duplicate column (or no permission) — the column is available or
-      // the UPDATE in createSession is skipped by its own try/catch.
+    for (const ddl of alterStatements) {
+      try {
+        await run(ddl);
+      } catch (_) {
+        // Duplicate column (or no ALTER permission) — column exists or
+        // the code paths using it degrade gracefully.
+      }
     }
-    await run(`${INSERT_IGNORE} \`config\` (\`k\`, \`v\`) VALUES ('schema', '1')`);
+    // Backfill the DATETIME mirrors for rows created before the columns
+    // existed. Idempotent (only NULLs); skipped silently on failure.
+    try {
+      await run(
+        'UPDATE `accounts` SET `created_dt` = ' + fromMs('`created_at`') + ' WHERE `created_dt` IS NULL',
+      );
+      await run(
+        'UPDATE `accounts` SET `last_seen_dt` = ' + fromMs('`last_seen_at`') + ' WHERE `last_seen_dt` IS NULL AND `last_seen_at` IS NOT NULL',
+      );
+      await run(
+        'UPDATE `verified_receipts` SET `verified_dt` = ' + fromMs('`verified_at`') + ' WHERE `verified_dt` IS NULL',
+      );
+      await run(
+        'UPDATE `verified_receipts` SET `created_dt` = ' + fromMs('`created_at`') + ' WHERE `created_dt` IS NULL',
+      );
+    } catch (_) {
+      // Mirrors are cosmetic; API timestamps (epoch ms) stay authoritative.
+    }
+    for (const ddl of indexStatements) {
+      try {
+        await run(ddl);
+      } catch (_) {
+        // Duplicate index name on MySQL — already created.
+      }
+    }
+    for (const ddl of viewStatements) {
+      // DROP+CREATE keeps the view definitions in sync with this release
+      // on both dialects (MySQL has no CREATE VIEW IF NOT EXISTS).
+      const viewName = ddl.match(/CREATE VIEW `([^`]+)`/)[1];
+      await run(`DROP VIEW IF EXISTS \`${viewName}\``);
+      await run(ddl);
+    }
+    await run(`${INSERT_IGNORE} \`config\` (\`k\`, \`v\`) VALUES ('schema', '2')`);
   })().catch((e) => {
     readyPromise = null; // allow a retry on the next request
     throw e;

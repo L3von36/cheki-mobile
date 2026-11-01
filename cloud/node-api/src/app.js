@@ -8,17 +8,19 @@
  * shapes, error codes and status codes are identical to the Worker, so the
  * Flutter client (lib/core/cloud/cloud_api.dart) works without changes.
  *
- * PRIVACY CONTRACT (Zero-Knowledge account + vault, readable receipt ledger):
+ * PRIVACY CONTRACT (zero-knowledge credentials; readable account + receipt
+ * ledger for the owner):
  *   * Client derives `authKey = PBKDF2(password, "mahtem-cloud-auth-v1")`.
- *     The raw password never reaches this server.
- *   * Stored `identifierHash = SHA-256(identifier)` — never raw email/phone.
+ *     The raw password never reaches this server. `auth_hash` is the only
+ *     credential material stored.
+ *   * v1.17.0: the account row also carries the readable identifier
+ *     (phone/email as normalized on-device), optional display name, sign-in
+ *     count/times and a sign_ins audit trail — the owner reviews accounts
+ *     in phpMyAdmin (see v_user_overview / v_receipt_overview views).
  *   * Vault (history backup) is AES-256-GCM encrypted on-device. This server
  *     cannot decrypt it.
- *   * NEW (v1.16.0): each verification is recorded in `verified_receipts`
- *     (bank, reference, scanned payload, parties, amount, outcome) under the
- *     user's account id — a readable server-side receipt history. The user
- *     asked for this ledger explicitly; the account/password/vault layers
- *     remain fully zero-knowledge.
+ *   * Each verification is recorded in `verified_receipts` (bank, reference,
+ *     scanned payload, parties, amount, outcome) under the user's account.
  *
  * TOKEN ARCHITECTURE (identical to the Worker):
  *   * Short-lived access token: JWT HS256, 15 minutes, stateless verification.
@@ -184,6 +186,28 @@ api.get('/v1/health', h(async (req, res) => {
 
 /* ── account creation ───────────────────────────────────────────────── */
 
+/** Server-side DATETIME mirror of an epoch-ms instant (audit columns). */
+function dtOf(ms) {
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/** Reads the optional readable-identity fields the client sends along. */
+function readIdentity(body) {
+  const str = (v, max) =>
+    typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+  const identifier = str(body.identifier, 255);
+  const displayName = str(body.displayName, 64);
+  return {
+    identifier,
+    identifierType: identifier
+      ? identifier.includes('@')
+        ? 'email'
+        : 'phone'
+      : null,
+    displayName,
+  };
+}
+
 api.post('/v1/accounts', h(async (req, res) => {
   const body = req.body || {};
   const identifierHash = body.identifierHash;
@@ -200,14 +224,25 @@ api.post('/v1/accounts', h(async (req, res) => {
 
   const id = crypto.randomUUID();
   const authHash = hashAuthKey(authKey, id);
+  const now = Date.now();
+  const identity = readIdentity(body);
   try {
     await db.run(
-      'INSERT INTO `accounts` (`identifier_hash`, `user_id`, `auth_hash`, `created_at`) VALUES (?, ?, ?, ?)',
-      [identifierHash, id, authHash, Date.now()],
+      'INSERT INTO `accounts` (`identifier_hash`, `user_id`, `auth_hash`, `identifier`, `identifier_type`, `display_name`, `status`, `sign_in_count`, `created_at`, `created_dt`) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)',
+      [identifierHash, id, authHash, identity.identifier, identity.identifierType, identity.displayName, 'active', now, dtOf(now)],
     );
   } catch (e) {
-    // Lost a create race — it already exists.
-    return fail(res, err('exists', 409, 'An account with this identifier already exists.'));
+    // Degraded install (identity columns missing) → retry the minimal
+    // legacy insert so account creation never dead-ends on schema drift.
+    try {
+      await db.run(
+        'INSERT INTO `accounts` (`identifier_hash`, `user_id`, `auth_hash`, `created_at`) VALUES (?, ?, ?, ?)',
+        [identifierHash, id, authHash, now],
+      );
+    } catch (_) {
+      // Lost a create race — it already exists.
+      return fail(res, err('exists', 409, 'An account with this identifier already exists.'));
+    }
   }
   res.status(201).json({ userId: id });
 }));
@@ -224,6 +259,52 @@ api.post('/v1/accounts/lookup', h(async (req, res) => {
   res.json({ exists: true, createdAt: Number(rows[0].created_at) || null });
 }));
 
+/* ── account profile (display name) ─────────────────────────────────── */
+
+api.get('/v1/account', h(async (req, res) => {
+  const session = await requireSession(req);
+  if (!guard(res, session)) return;
+  await db.ensureReady();
+  const rows = await db.query(
+    'SELECT `user_id`, `identifier`, `identifier_type`, `display_name`, `status`, `sign_in_count`, `created_at`, `last_seen_at` FROM `accounts` WHERE `user_id` = ?',
+    [session.userId],
+  );
+  if (!rows.length) return fail(res, err('not_found', 404, 'Account not found.'));
+  const r = rows[0];
+  res.json({
+    ok: true,
+    userId: String(r.user_id),
+    identifier: r.identifier || null,
+    identifierType: r.identifier_type || null,
+    displayName: r.display_name || null,
+    status: String(r.status || 'active'),
+    signInCount: Number(r.sign_in_count) || 0,
+    createdAt: Number(r.created_at) || null,
+    lastSeenAt: r.last_seen_at == null ? null : Number(r.last_seen_at),
+  });
+}));
+
+api.patch('/v1/account', h(async (req, res) => {
+  const session = await requireSession(req);
+  if (!guard(res, session)) return;
+  await db.ensureReady();
+
+  const body = req.body || {};
+  if (typeof body.displayName !== 'string' || body.displayName.trim().length > 64) {
+    return fail(res, err('bad_input', 400, 'displayName string (≤ 64 chars) is required.'));
+  }
+  const now = Date.now();
+  try {
+    await db.run('UPDATE `accounts` SET `display_name` = ? WHERE `user_id` = ?', [
+      body.displayName.trim() || null,
+      session.userId,
+    ]);
+  } catch (_) {
+    return fail(res, err('server', 500, 'Profile storage unavailable.'));
+  }
+  res.json({ ok: true });
+}));
+
 /* ── login / session creation ───────────────────────────────────────── */
 
 async function createSession(req, res) {
@@ -235,12 +316,18 @@ async function createSession(req, res) {
   }
   await db.ensureReady();
 
-  let rows = await db.query('SELECT `user_id`, `auth_hash` FROM `accounts` WHERE `identifier_hash` = ?', [identifierHash]);
+  let rows = await db.query(
+    'SELECT `user_id`, `auth_hash`, `status`, `identifier`, `display_name`, `sign_in_count` FROM `accounts` WHERE `identifier_hash` = ?',
+    [identifierHash],
+  );
 
   // First sign-in after the hosting switch: import from the old Worker.
   if (!rows.length && config.migrateFromUrl) {
     await migrateImportFromWorker(config.migrateFromUrl, identifierHash, authKey);
-    rows = await db.query('SELECT `user_id`, `auth_hash` FROM `accounts` WHERE `identifier_hash` = ?', [identifierHash]);
+    rows = await db.query(
+      'SELECT `user_id`, `auth_hash`, `status`, `identifier`, `display_name`, `sign_in_count` FROM `accounts` WHERE `identifier_hash` = ?',
+      [identifierHash],
+    );
   }
   if (!rows.length) {
     return fail(res, err('no_account', 404, 'No account for this identifier.'));
@@ -255,14 +342,41 @@ async function createSession(req, res) {
     return fail(res, err('bad_credentials', 401, 'Wrong identifier or password.'));
   }
 
-  // Sign-in tracker (best effort — a missing column must never block a login).
+  // Owner-set lifecycle flag: a disabled account cannot open sessions.
+  if (String(record.status || 'active') === 'disabled') {
+    return fail(res, err('account_disabled', 403, 'This account has been disabled.'));
+  }
+
+  // ── activity + identity audit (all best-effort: a degraded schema —
+  // missing columns — must never block a login) ─────────────────────────
   try {
-    await db.run('UPDATE `accounts` SET `last_seen_at` = ? WHERE `user_id` = ?', [
-      Date.now(),
+    const now = Date.now();
+    const identity = readIdentity(body);
+    const sets = ['`last_seen_at` = ?', '`last_seen_dt` = ?', '`sign_in_count` = COALESCE(`sign_in_count`, 0) + 1'];
+    const params = [now, dtOf(now)];
+    // Backfill the readable identifier / display name the first time an
+    // updated client signs in. First source wins — never overwrite.
+    if (identity.identifier && !record.identifier) {
+      sets.push('`identifier` = COALESCE(`identifier`, ?)', '`identifier_type` = COALESCE(`identifier_type`, ?)');
+      params.push(identity.identifier, identity.identifierType);
+    }
+    if (identity.displayName && !record.display_name) {
+      sets.push('`display_name` = COALESCE(`display_name`, ?)');
+      params.push(identity.displayName);
+    }
+    params.push(String(record.user_id));
+    await db.run(`UPDATE \`accounts\` SET ${sets.join(', ')} WHERE \`user_id\` = ?`, params);
+    await db.run('INSERT INTO `sign_ins` (`user_id`, `at`, `at_dt`) VALUES (?, ?, ?)', [
       String(record.user_id),
+      now,
+      dtOf(now),
     ]);
+    // Retention: keep 90 days of sign-in history (~5% of logins).
+    if (Math.random() < 0.05) {
+      await db.run('DELETE FROM `sign_ins` WHERE `at` < ?', [now - 90 * 24 * 3600 * 1000]);
+    }
   } catch (_) {
-    // Pre-migration table without last_seen_at — ignore.
+    // Pre-migration table / no ALTER rights — API timestamps still move.
   }
 
   res.json(await issueSessionTokens(String(record.user_id)));
@@ -549,7 +663,7 @@ api.post('/v1/receipts', h(async (req, res) => {
   }
 
   await db.run(
-    'INSERT INTO `verified_receipts` (`user_id`, `entry_id`, `bank_id`, `bank_name`, `reference`, `raw_payload`, `sender_name`, `receiver_name`, `amount`, `currency`, `receipt_date`, `status`, `message`, `reason`, `verified_at`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO `verified_receipts` (`user_id`, `entry_id`, `bank_id`, `bank_name`, `reference`, `raw_payload`, `sender_name`, `receiver_name`, `amount`, `currency`, `receipt_date`, `status`, `message`, `reason`, `verified_at`, `verified_dt`, `created_at`, `created_dt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.user_id,
       row.entry_id,
@@ -566,7 +680,9 @@ api.post('/v1/receipts', h(async (req, res) => {
       row.message,
       row.reason,
       row.verified_at,
+      dtOf(row.verified_at),
       row.created_at,
+      dtOf(row.created_at),
     ],
   );
   res.status(201).json({ ok: true, duplicate: false });

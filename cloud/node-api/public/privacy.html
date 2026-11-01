@@ -186,13 +186,15 @@
   <h2>The optional cloud account &amp; backup</h2>
   <p>
     Creating a cloud account (for sign-in across devices and encrypted history
-    backup) is entirely optional. If you do, this is <em>all</em> the server can
-    ever see about your identity and your backup:
+    backup) is entirely optional. If you do, the server stores the following
+    about your identity and backup:
   </p>
   <div class="table-scroll">
   <table>
     <tr><th>Data stored</th><th>What it is</th></tr>
-    <tr><td><code>identifierHash</code></td><td>SHA-256 digest of your normalized identifier. Your phone number or email is never sent or stored.</td></tr>
+    <tr><td><code>identifier</code></td><td>Your phone number or email, in readable form (sent over HTTPS when you create the account or sign in) together with an <code>identifierHash</code> used as the login lookup key. Your password is <strong>never</strong> sent or stored — sign-in proves it with a PBKDF2-derived key only.</td></tr>
+    <tr><td><code>displayName</code></td><td>The optional name you enter at sign-up (shown to you in the app, and visible to the service operator for support).</td></tr>
+    <tr><td><code>sign_ins</code></td><td>When you signed in and how many times (kept 90 days). No IP addresses, no device fingerprints.</td></tr>
     <tr><td><code>authKey</code></td><td>A PBKDF2-SHA256 key derived from your password on the device (120,000 iterations). Your raw password never reaches the server, and the stored key is not usable as a password anywhere else.</td></tr>
     <tr><td><code>blob</code></td><td>Your history backup, AES-256-GCM encrypted on the device. The server stores ciphertext it cannot decrypt.</td></tr>
     <tr><td><code>receiptHash</code></td><td>A SHA-256 fingerprint of a verified Telebirr invoice, used only to record that this month's Pro payment belongs to your account. Raw receipt data is never stored.</td></tr>
