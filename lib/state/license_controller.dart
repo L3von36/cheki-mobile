@@ -146,6 +146,12 @@ class LicenseController extends ChangeNotifier {
   ///
   /// The device identity loads FIRST — license validation needs the
   /// device hash, so the persisted token is checked only after it.
+  /// The launch trial-budget sync is AWAITED (v1.18.11): the counter is
+  /// server-accurate before the gate opens, so a wiped install never
+  /// gets a single free check from the reset. Offline, the sync times
+  /// out after [kTrialSyncTimeoutMs] and the local counter gates as
+  /// usual (the server clamps on a later launch). Paying users skip
+  /// the sync entirely — no added startup delay.
   Future<void> ensureLoaded() async {
     if (_loaded || _loading) return;
     _loading = true;
@@ -162,7 +168,14 @@ class LicenseController extends ChangeNotifier {
     }
     // Catch clear-storage abuse at launch: the server's device ledger
     // restores an exhausted budget even after local state was wiped.
-    unawaited(_syncTrialBudget());
+    await _syncTrialBudget().timeout(
+      const Duration(milliseconds: kTrialSyncTimeoutMs),
+      onTimeout: () {
+        // The abandoned sync still resets the flag in its own finally;
+        // clearing it here too keeps later syncs unblocked either way.
+        _syncingTrials = false;
+      },
+    );
   }
 
   Future<void> _loadTrials() async {

@@ -148,6 +148,31 @@ void main() {
       await c.consumeAttempt();
       expect(c.trialsLeft, kFreeTrialChecks - 1);
     });
+
+    test('launch clamp is awaited — counter is server-accurate the moment '
+        'ensureLoaded returns', () async {
+      final (store, now) = fixtures();
+      // This device burned 4 checks before the wipe.
+      const serverUsed = 4;
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used}) async =>
+            TrialSyncInfo(
+          used: serverUsed,
+          freeChecks: kFreeTrialChecks,
+          trialsRemaining: kFreeTrialChecks - serverUsed,
+          proActive: false,
+        ),
+      );
+      // Deliberately NO pumpEventQueue: the gate awaits ensureLoaded, so
+      // the clamp must already be applied when it returns.
+      await c.ensureLoaded();
+      expect(c.trialsLeft, kFreeTrialChecks - 4);
+      expect(c.canVerifyNow, isTrue);
+    });
   });
 
   group('free trial', () {

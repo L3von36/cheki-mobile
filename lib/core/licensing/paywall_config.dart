@@ -28,3 +28,7 @@ const int kActivationReceiptMaxAgeDays = 7;
 
 /// Free checks before the paywall appears.
 const int kFreeTrialChecks = 5;
+
+/// How long the app launch waits for the server's trial-budget sync
+/// before falling back to the local counter (offline starts).
+const int kTrialSyncTimeoutMs = 2500;
