@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -21,6 +22,14 @@ typedef ReceiptClaimFn = Future<CloudReceiptClaim> Function({
   int? paidAtMs,
 });
 
+/// Signature of the best-effort server trial-budget sync (v1.18.10):
+/// reports this device's usage and returns the server's authoritative
+/// counter, or null when offline. Wired to [CloudController.syncTrials].
+typedef TrialSyncFn = Future<TrialSyncInfo?> Function({
+  required String deviceHashHex,
+  int? used,
+});
+
 /// Central licensing state: free-trial counter, activation status and the
 /// device identity users quote when buying a code. Exposed app-wide via
 /// `provider`.
@@ -41,13 +50,15 @@ class LicenseController extends ChangeNotifier {
     String publicKeyHex = kLicensePublicKeyV1,
     ReceiptVerifyFn? receiptVerifier,
     ReceiptClaimFn? receiptClaim,
+    TrialSyncFn? trialSync,
   })  : _store = store ?? SecureLicenseStore(),
         _deviceKeySource =
             deviceKeySource ?? (() => const AndroidId().getId()),
         _now = now ?? (() => DateTime.now().toUtc()),
         _publicKeyHex = publicKeyHex,
         _receiptVerifier = receiptVerifier ?? ReceiptVerifier.I.verify,
-        _receiptClaim = receiptClaim;
+        _receiptClaim = receiptClaim,
+        _trialSync = trialSync;
 
   final LicenseKeyValue _store;
   final Future<String?> Function() _deviceKeySource;
@@ -55,6 +66,7 @@ class LicenseController extends ChangeNotifier {
   final String _publicKeyHex;
   final ReceiptVerifyFn _receiptVerifier;
   final ReceiptClaimFn? _receiptClaim;
+  final TrialSyncFn? _trialSync;
 
   static const String _kTrialsKey = 'trial_checks';
   static const String _kTokenKey = 'license_token';
@@ -64,7 +76,11 @@ class LicenseController extends ChangeNotifier {
 
   bool _loaded = false;
   bool _loading = false;
+  bool _syncingTrials = false;
   int _trialsUsed = 0;
+
+  /// True while a trial-budget sync with the server is in flight.
+  bool get isSyncingTrials => _syncingTrials;
 
   /// Expiry carried by the signed token, and by the locally stored
   /// self-verified receipt. Either grants entitlement; the later wins.
@@ -144,6 +160,9 @@ class LicenseController extends ChangeNotifier {
     } finally {
       _loading = false;
     }
+    // Catch clear-storage abuse at launch: the server's device ledger
+    // restores an exhausted budget even after local state was wiped.
+    unawaited(_syncTrialBudget());
   }
 
   Future<void> _loadTrials() async {
@@ -220,6 +239,8 @@ class LicenseController extends ChangeNotifier {
   // ---------------------------------------------------------------- mutation
 
   /// Counts one verification against the trial — no-op while entitled.
+  /// Reports the usage to the server's device ledger in the background so
+  /// clearing app storage can never mint the budget back.
   Future<void> consumeAttempt() async {
     if (isEntitled) return;
     _trialsUsed += 1;
@@ -229,6 +250,7 @@ class LicenseController extends ChangeNotifier {
       // Storage failed — keep the in-memory count for this session.
     }
     notifyListeners();
+    unawaited(_syncTrialBudget());
   }
 
   /// Validates and stores an activation code. Returns the result so the
@@ -387,6 +409,42 @@ class LicenseController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- internals
+
+  /// Syncs the free-trial budget with the server's device ledger. The
+  /// server counter is authoritative and monotonic — a wiped app reporting
+  /// `used: 0` is clamped back up to what it really consumed, which flips
+  /// an abused install straight to the paywall. Silent no-op offline
+  /// (the local counter keeps gating) and while a paid plan is active.
+  Future<void> _syncTrialBudget() async {
+    final sync = _trialSync;
+    if (sync == null || isEntitled || isSyncingTrials) return;
+    if (_deviceHash == null) return;
+    _syncingTrials = true;
+    try {
+      final info = await sync(
+        deviceHashHex: _deviceHashHex,
+        used: _trialsUsed,
+      );
+      final serverUsed = info?.used ?? 0;
+      if (serverUsed > _trialsUsed) {
+        _trialsUsed = serverUsed;
+        try {
+          await _store.write(_kTrialsKey, '$_trialsUsed');
+        } catch (_) {
+          // Keep the clamped value in memory at least.
+        }
+        notifyListeners();
+      }
+    } catch (_) {
+      // Never let an anti-abuse sync break the licensing flow.
+    } finally {
+      _syncingTrials = false;
+    }
+  }
+
+  String get _deviceHashHex => _deviceHash!
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
 
   Future<DateTime?> _expiryOf(String? token) async {
     if (token == null || token.trim().isEmpty) return null;

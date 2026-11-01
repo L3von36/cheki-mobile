@@ -305,6 +305,103 @@ api.patch('/v1/account', h(async (req, res) => {
   res.json({ ok: true });
 }));
 
+/* ── free-trial budget (anti-abuse, v1.18.10) ────────────────────────── */
+//
+// The 5 free checks used to live only on the device — "clear storage" or
+// a reinstall reset the counter and minted fresh trials. Professionals
+// make a trial a property of the IDENTITY, not the install:
+//   * per DEVICE — SHA-256 of the Android SSAID, which survives
+//     reinstalls and clear-storage (only a factory reset changes it);
+//   * per ACCOUNT — a signed-in user's receipt-ledger rows count too, so
+//     a second device cannot double-dip on one account;
+//   * monotonic — the client can never lower a server-side counter, and
+//     a wiped app reporting `used: 0` simply gets clamped back up;
+//   * Pro wins — an active plan (license code or paid receipt) is
+//     unlimited, so paying users are never bothered.
+// Residual (accepted) abuse paths: factory-reset + new account, and
+// permanently-offline use — the same trade-offs commercial apps make.
+
+const kFreeChecks = 5;
+
+api.post('/v1/trials/sync', h(async (req, res) => {
+  const body = req.body || {};
+  const deviceHash =
+    typeof body.deviceHash === 'string' ? body.deviceHash.trim().toLowerCase() : '';
+  if (!isHex64(deviceHash)) {
+    return fail(res, err('bad_input', 400, 'deviceHash must be a 64-hex digest.'));
+  }
+  // Client-reported usage (offline-first installs). Clamped to sane bounds;
+  // only ever raises the server counter (CASE WHEN — portable SQL).
+  const reported = Math.max(0, Math.min(1_000_000, Math.floor(Number(body.used) || 0)));
+  const now = Date.now();
+  const nowDt = dtOf(now);
+  await db.ensureReady();
+
+  // Optional session: no bearer is fine (pre-sign-up devices sync too).
+  const session = await requireSession(req);
+  let accountUsed = 0;
+  let proActive = false;
+  let proUntil = null;
+  if (session.ok) {
+    try {
+      const rows = await db.query(
+        'SELECT COUNT(*) AS n FROM `verified_receipts` WHERE `user_id` = ?',
+        [session.userId],
+      );
+      accountUsed = Number(rows[0]?.n) || 0;
+      const pro = await db.query('SELECT `expires_at` FROM `pro_status` WHERE `user_id` = ?', [
+        session.userId,
+      ]);
+      if (pro.length && Number(pro[0].expires_at) > now) {
+        proActive = true;
+        proUntil = Number(pro[0].expires_at);
+      }
+    } catch (_) {
+      // Degraded schema — fall back to device-only accounting.
+    }
+  }
+
+  try {
+    const existing = await db.query(
+      'SELECT `checks_used` FROM `device_trials` WHERE `device_hash` = ?',
+      [deviceHash],
+    );
+    if (!existing.length) {
+      await db.run(
+        'INSERT INTO `device_trials` (`device_hash`, `checks_used`, `first_used_at`, `first_used_dt`, `last_used_at`, `last_used_dt`) VALUES (?, ?, ?, ?, ?, ?)',
+        [deviceHash, reported, now, nowDt, now, nowDt],
+      );
+    } else {
+      const current = Number(existing[0].checks_used) || 0;
+      const merged = Math.max(current, reported);
+      await db.run(
+        'UPDATE `device_trials` SET `checks_used` = ?, `last_used_at` = ?, `last_used_dt` = ? WHERE `device_hash` = ?',
+        [merged, now, nowDt, deviceHash],
+      );
+    }
+  } catch (_) {
+    // Degraded schema — respond with best-effort numbers below.
+  }
+
+  let deviceUsed = reported;
+  try {
+    const rows = await db.query('SELECT `checks_used` FROM `device_trials` WHERE `device_hash` = ?', [
+      deviceHash,
+    ]);
+    if (rows.length) deviceUsed = Number(rows[0].checks_used) || 0;
+  } catch (_) {
+    // Keep the reported number as the fallback.
+  }
+  const used = Math.max(deviceUsed, accountUsed);
+  res.json({
+    ok: true,
+    used,
+    freeChecks: kFreeChecks,
+    trialsRemaining: Math.max(0, kFreeChecks - used),
+    pro: { active: proActive, until: proUntil },
+  });
+}));
+
 /* ── login / session creation ───────────────────────────────────────── */
 
 async function createSession(req, res) {

@@ -383,6 +383,54 @@ async function run() {
     ok(anonPatch.status === 401, 'PATCH /v1/account without bearer → 401');
   }
 
+  // ── free-trial anti-abuse (v1.18.10) ──────────────────────────────────
+  console.log('[trial budget sync]');
+  {
+    const dev = H64();
+    const fresh = await call('POST', '/v1/trials/sync', { body: { deviceHash: dev } });
+    ok(
+      fresh.status === 200 && fresh.json?.used === 0 && fresh.json?.freeChecks === 5 && fresh.json?.trialsRemaining === 5,
+      'fresh device → 5 trials remaining',
+    );
+
+    const used3 = await call('POST', '/v1/trials/sync', { body: { deviceHash: dev, used: 3 } });
+    ok(used3.json?.used === 3 && used3.json?.trialsRemaining === 2, 'used=3 → 2 remaining');
+
+    // Clear-storage simulation: the wiped app reports nothing (or 0) —
+    // the server counter must not go down.
+    const wiped = await call('POST', '/v1/trials/sync', { body: { deviceHash: dev } });
+    ok(wiped.json?.used === 3 && wiped.json?.trialsRemaining === 2, 'cleared app cannot lower the counter');
+    const liar = await call('POST', '/v1/trials/sync', { body: { deviceHash: dev, used: 0 } });
+    ok(liar.json?.used === 3, 'explicit used=0 is clamped back up');
+    const grow = await call('POST', '/v1/trials/sync', { body: { deviceHash: dev, used: 7 } });
+    ok(grow.json?.used === 7 && grow.json?.trialsRemaining === 0, 'counter grows with the client, remaining floors at 0');
+
+    const bad = await call('POST', '/v1/trials/sync', { body: { deviceHash: 'xyz' } });
+    ok(bad.status === 400 && bad.json?.error === 'bad_input', 'bad deviceHash → 400');
+
+    // Account-level cap: ledger rows count against the trial on ANY device,
+    // so one account cannot double-dip from a second phone.
+    const acctHash = H64();
+    const acctKey = H64();
+    await call('POST', '/v1/accounts', {
+      body: { identifierHash: acctHash, authKey: acctKey, identifier: '+251922334455', displayName: 'Trial Tester' },
+    });
+    const acctLogin = await call('POST', '/v1/session', { body: { identifierHash: acctHash, authKey: acctKey } });
+    const acctToken = acctLogin.json?.accessToken || '';
+    await call('POST', '/v1/receipts', {
+      bearer: acctToken,
+      body: { entryId: 't1', bankId: 'cbe', reference: 'FT-TRIAL-1', status: 'verified' },
+    });
+    const otherDevice = await call('POST', '/v1/trials/sync', {
+      bearer: acctToken,
+      body: { deviceHash: H64() },
+    });
+    ok(otherDevice.json?.used >= 1, `account ledger caps the trial on a new device (used=${otherDevice.json?.used})`);
+
+    const proSync = await call('POST', '/v1/trials/sync', { body: { deviceHash: H64() } });
+    ok(proSync.json?.pro?.active === false, 'no Pro → pro.active false (flag present)');
+  }
+
   // ── cleanup endpoints ─────────────────────────────────────────────────
   console.log('[delete + revoke]');
   {

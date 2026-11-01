@@ -52,6 +52,24 @@ class CloudReceiptClaim {
   });
 }
 
+/// Reply from POST /v1/trials/sync — the server's authoritative free-trial
+/// budget for this device (and account, when signed in).
+class TrialSyncInfo {
+  final int used;
+  final int freeChecks;
+  final int trialsRemaining;
+  final bool proActive;
+  final int? proUntilMs;
+
+  const TrialSyncInfo({
+    required this.used,
+    required this.freeChecks,
+    required this.trialsRemaining,
+    required this.proActive,
+    this.proUntilMs,
+  });
+}
+
 /// One verification mirrored to the server-side receipt ledger
 /// (POST /v1/receipts). Built from a local [HistoryEntry] by the cloud
 /// controller; the server dedupes per (account, entryId).
@@ -286,6 +304,33 @@ class CloudApi {
     final r = await _send('POST', '/v1/accounts/lookup',
         body: {'identifierHash': identifierHash});
     return r['exists'] == true;
+  }
+
+  /// Server view of this device's free-trial budget
+  /// (POST /v1/trials/sync). No session required — pre-sign-up devices
+  /// sync keyed by [deviceHashHex] alone; a [sessionToken] adds the
+  /// account-level cap. Returns null on a malformed reply.
+  Future<TrialSyncInfo?> syncTrials({
+    String? sessionToken,
+    required String deviceHashHex,
+    int? used,
+  }) async {
+    final r = await _send('POST', '/v1/trials/sync',
+        bearer:
+            (sessionToken == null || sessionToken.isEmpty) ? null : sessionToken,
+        body: {
+          'deviceHash': deviceHashHex,
+          if (used != null) 'used': used,
+        });
+    final pro = r['pro'];
+    if (pro is! Map) return null;
+    return TrialSyncInfo(
+      used: (r['used'] as num?)?.toInt() ?? 0,
+      freeChecks: (r['freeChecks'] as num?)?.toInt() ?? 0,
+      trialsRemaining: (r['trialsRemaining'] as num?)?.toInt() ?? 0,
+      proActive: pro['active'] == true,
+      proUntilMs: (pro['until'] as num?)?.toInt(),
+    );
   }
 
   Future<CloudSession> createSession({

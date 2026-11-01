@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mahtem/core/cloud/cloud_api.dart';
 import 'package:mahtem/core/licensing/license.dart';
 import 'package:mahtem/core/licensing/license_store.dart';
 import 'package:mahtem/core/licensing/paywall_config.dart';
@@ -92,6 +93,62 @@ void main() {
       deviceHash: deviceHashFor(deviceKey),
     );
   }
+
+  group('server trial clamp (v1.18.10)', () {
+    test('cleared storage cannot mint trials back — server counter wins',
+        () async {
+      final (store, now) = fixtures();
+      // The device burned 3 checks before the wipe; the server remembers.
+      var serverUsed = 3;
+      Future<TrialSyncInfo?> syncFn(
+          {required String deviceHashHex, int? used}) async {
+        if (used != null && used > serverUsed) serverUsed = used;
+        return TrialSyncInfo(
+          used: serverUsed,
+          freeChecks: kFreeTrialChecks,
+          trialsRemaining:
+              (kFreeTrialChecks - serverUsed).clamp(0, kFreeTrialChecks),
+          proActive: false,
+        );
+      }
+
+      // A wiped install: local counter is back to 0.
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: syncFn,
+      );
+      await c.ensureLoaded();
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 3,
+          reason: 'the server restores the burned budget');
+      expect(c.canVerifyNow, isTrue);
+
+      // One more check burns #4 and reports it; the server keeps counting.
+      await c.consumeAttempt();
+      await pumpEventQueue();
+      expect(c.trialsLeft, 1);
+      expect(serverUsed, 4);
+    });
+
+    test('offline sync (null) leaves the local counter alone', () async {
+      final (store, now) = fixtures();
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used}) async => null,
+      );
+      await c.ensureLoaded();
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks);
+      await c.consumeAttempt();
+      expect(c.trialsLeft, kFreeTrialChecks - 1);
+    });
+  });
 
   group('free trial', () {
     test('starts with 5 checks and blocks when used up', () async {

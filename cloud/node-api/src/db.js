@@ -173,6 +173,18 @@ function ensureSchema() {
         \`at\`      BIGINT NOT NULL,
         \`at_dt\`   DATETIME NULL
     )${suffix}`,
+    // Anti-trial-abuse ledger (v1.18.10): free checks are budgeted per
+    // DEVICE (hash of the Android SSAID — survives reinstalls and
+    // "clear storage", resets only on factory reset) so wiping app data
+    // cannot mint fresh trials. Counters are monotonic on the server.
+    `\`device_trials\` (
+        \`device_hash\`   CHAR(64) NOT NULL PRIMARY KEY,
+        \`checks_used\`   BIGINT NOT NULL DEFAULT 0,
+        \`first_used_at\` BIGINT NOT NULL,
+        \`first_used_dt\` DATETIME NULL,
+        \`last_used_at\`  BIGINT NOT NULL,
+        \`last_used_dt\`  DATETIME NULL
+    )${suffix}`,
     `\`vaults\` (
         \`user_id\`    CHAR(36) NOT NULL PRIMARY KEY,
         \`blob\`       ${blobType} NOT NULL,

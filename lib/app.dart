@@ -79,9 +79,12 @@ class MahtemApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => AppTab()),
         // Licensing loads in the background — the paywall/gate awaits it.
+        // trialSync keys the free budget to the server's device + account
+        // ledger, so "clear storage" cannot mint fresh trials (v1.18.10).
         ChangeNotifierProvider(
           create: (context) => LicenseController(
             receiptClaim: context.read<CloudController>().claimProReceipt,
+            trialSync: context.read<CloudController>().syncTrials,
           )..ensureLoaded(),
         ),
         // Appearance + language restore synchronously from prefs.

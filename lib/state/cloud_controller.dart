@@ -214,6 +214,25 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Best-effort free-trial budget sync against the server's device +
+  /// account ledger (anti clear-storage abuse). Works signed-out too —
+  /// the device hash alone keys the budget. Returns null when offline or
+  /// the server is unreachable; the local counter keeps gating then.
+  Future<TrialSyncInfo?> syncTrials({
+    required String deviceHashHex,
+    int? used,
+  }) async {
+    try {
+      return await _api.syncTrials(
+        sessionToken: _sessionToken,
+        deviceHashHex: deviceHashHex,
+        used: used,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---------------------------------------------------------------- receipt ledger
   // v1.19.0 — every verification runs through VerifyHistory.record; the
   // UI hooks call [queueReceipt] right after, and the record is mirrored
@@ -895,7 +914,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _lastRemoteRevision = remote.revision;
       final key = hexToBytes(_vaultKeyHex!);
       final incoming = await _decodeRemoteEntries(key, remote.blob);
-      return history.mergeRemote(incoming);
+      return await history.mergeRemote(incoming);
     } on CloudApiException catch (e) {
       _handleApiFailure(e);
     } on VaultDecryptException {
