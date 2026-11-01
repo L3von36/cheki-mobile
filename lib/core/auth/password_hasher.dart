@@ -8,10 +8,13 @@
 library;
 
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+
+import '../cpu_tasks.dart';
 
 /// App default — 120k PBKDF2 iterations (OWASP guidance floor for
 /// PBKDF2-HMAC-SHA256). Changing it does not break stored accounts: the
@@ -105,13 +108,24 @@ class PasswordHasher {
     String password,
     Uint8List salt,
     int iterations,
-  ) async {
-    final key = await Pbkdf2(
-      macAlgorithm: Hmac.sha256(),
-      iterations: iterations,
-      bits: _keyBits,
-    ).deriveKey(secretKey: SecretKey(utf8.encode(password)), nonce: salt);
-    return Uint8List.fromList(await key.extractBytes());
+  ) {
+    // The `cryptography` package's PBKDF2 is pure Dart: 120k iterations
+    // stall the UI isolate for a second or more on low-end phones, which
+    // is exactly what made sign-in feel laggy. Run it on a short-lived
+    // background isolate (password/salt are plain sendable values);
+    // under the test runner's FakeAsync zone a background isolate can
+    // never deliver its result, so the config flips those to inline.
+    Future<Uint8List> derive() async {
+      final key = await Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: iterations,
+        bits: _keyBits,
+      ).deriveKey(secretKey: SecretKey(utf8.encode(password)), nonce: salt);
+      return Uint8List.fromList(await key.extractBytes());
+    }
+
+    if (kRunCpuTasksOnBackgroundIsolate) return Isolate.run(derive);
+    return derive();
   }
 }
 

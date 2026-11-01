@@ -14,9 +14,12 @@
 library;
 
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+
+import '../cpu_tasks.dart';
 
 const int kCloudKdfIterations = 120000;
 
@@ -44,23 +47,38 @@ Future<String> cloudIdentifierHash(String identifier) async {
 
 /// Client-side login secret: PBKDF2(password, fixed app salt). Sent to
 /// the server at account creation / sign-in INSTEAD of the password.
-Future<String> deriveCloudAuthKey(String password) async {
-  final key = await _kdf.deriveKey(
-    secretKey: SecretKey(utf8.encode(password)),
-    nonce: utf8.encode('mahtem-cloud-auth-v1'),
-  );
-  return bytesToHex(await key.extractBytes());
+/// The derivation runs on a background isolate — 120k pure-Dart
+/// iterations otherwise stall the UI for a second or more at sign-in.
+/// Tests flip [kRunCpuTasksOnBackgroundIsolate] off (FakeAsync zones can
+/// never receive a background isolate's result) and derive inline.
+Future<String> deriveCloudAuthKey(String password) {
+  Future<String> derive() async {
+    final key = await _kdf.deriveKey(
+      secretKey: SecretKey(utf8.encode(password)),
+      nonce: utf8.encode('mahtem-cloud-auth-v1'),
+    );
+    return bytesToHex(await key.extractBytes());
+  }
+
+  if (kRunCpuTasksOnBackgroundIsolate) return Isolate.run(derive);
+  return derive();
 }
 
 /// Vault encryption key: PBKDF2 over the password AND the identifier —
 /// per-user salt without server storage. NEVER leaves the device.
-Future<Uint8List> deriveVaultKey(String password, String identifier) async {
-  final key = await _kdf.deriveKey(
-    secretKey: SecretKey(utf8.encode(password)),
-    nonce:
-        utf8.encode('mahtem-cloud-vault-v1:${normalizeCloudIdentifier(identifier)}'),
-  );
-  return Uint8List.fromList(await key.extractBytes());
+/// Background isolate, same reason as [deriveCloudAuthKey].
+Future<Uint8List> deriveVaultKey(String password, String identifier) {
+  Future<Uint8List> derive() async {
+    final key = await _kdf.deriveKey(
+      secretKey: SecretKey(utf8.encode(password)),
+      nonce:
+          utf8.encode('mahtem-cloud-vault-v1:${normalizeCloudIdentifier(identifier)}'),
+    );
+    return Uint8List.fromList(await key.extractBytes());
+  }
+
+  if (kRunCpuTasksOnBackgroundIsolate) return Isolate.run(derive);
+  return derive();
 }
 
 /// Encrypts the vault JSON. Wire format: base64( nonce(12) ‖ mac(16) ‖

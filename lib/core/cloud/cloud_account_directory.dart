@@ -13,6 +13,8 @@
 /// when the auth screens arm it right after sign-in.
 library;
 
+import 'dart:async';
+
 import '../auth/remote_account.dart';
 import 'cloud_api.dart';
 import 'cloud_keys.dart';
@@ -30,6 +32,10 @@ class CloudAccountDirectory implements RemoteAccountDirectory {
   }) async {
     final identifierHash = await cloudIdentifierHash(accountId);
     final authKey = await deriveCloudAuthKey(password);
+    // The vault key needs only the typed credentials, not the session —
+    // derive it while the network round trip is in flight instead of
+    // adding another PBKDF2 stall after the answer arrives.
+    final vaultKeyFuture = deriveVaultKey(password, accountId);
     final CloudSession session;
     try {
       session = await _api.createSession(
@@ -54,7 +60,7 @@ class CloudAccountDirectory implements RemoteAccountDirectory {
     try {
       final remote = await _api.getVault(session.sessionToken);
       if (remote != null) {
-        final key = await deriveVaultKey(password, accountId);
+        final key = await vaultKeyFuture;
         profile = decodeVaultDocument(
           await decryptVaultBlob(key, remote.blob),
         ).account;
@@ -63,10 +69,15 @@ class CloudAccountDirectory implements RemoteAccountDirectory {
       profile = null;
     }
 
-    // Hygiene: this session was only needed for the profile read.
-    try {
-      await _api.deleteSession(session.sessionToken);
-    } catch (_) {/* ignore — the session expires on its own */}
+    // Hygiene: this session was only needed for the profile read. The
+    // delete rides in the background — an extra round trip here used to
+    // sit on the sign-in critical path for nothing (sessions expire on
+    // their own anyway).
+    unawaited(() async {
+      try {
+        await _api.deleteSession(session.sessionToken);
+      } catch (_) {/* ignore — the session expires on its own */}
+    }());
 
     return RemoteAuthConfirmed(profile);
   }

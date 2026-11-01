@@ -127,6 +127,10 @@ void main() {
     await provisionCloudAccount();
     await uploadVaultWithProfile(null);
     await directory.authenticate(accountId: accountId, password: password);
+    // v1.18.12: the delete is fire-and-forget — it no longer sits on the
+    // sign-in critical path. Flush the event loop so the background
+    // deletion lands before the assertion.
+    await pumpEventQueue();
     expect(server.sessionDeletes, 1);
   });
 

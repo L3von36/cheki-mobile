@@ -50,6 +50,11 @@ class _ScanScreenState extends State<ScanScreen>
   bool _handled = false;
   bool _torchOn = false;
 
+  /// True while a gallery image is being decoded (QR pass + OCR
+  /// fallback). Shows a scrim + spinner so the seconds of work are
+  /// visible progress instead of a dead screen.
+  bool _galleryBusy = false;
+
   // Subtle breathing animation on the brackets.
   late final AnimationController _pulse = AnimationController(
     vsync: this,
@@ -82,18 +87,22 @@ class _ScanScreenState extends State<ScanScreen>
   void _startCamera() {
     _controller?.dispose();
     _controller = MobileScannerController(
-      // Every frame feeds the stabilizer, which needs repeated readings to
-      // separate a stable decode from decoder noise — so "normal" speed.
-      // No format lock: bank apps print several 2-D symbologies and the
-      // sanitizer + detector decide what is a receipt anyway.
-      detectionSpeed: DetectionSpeed.normal,
+      // Unrestricted: analyze every frame the camera delivers. The
+      // stabilizer is the noise guard — it still requires two agreeing
+      // readings — and back-to-back frames make those two agreements
+      // land in ~100 ms instead of the ~600 ms the old "normal" pacing
+      // imposed between analyses (that pacing was most of the "slow to
+      // detect" feel). No format lock: bank apps print several 2-D
+      // symbologies and the sanitizer + detector decide what is a
+      // receipt anyway.
+      detectionSpeed: DetectionSpeed.unrestricted,
       facing: CameraFacing.back,
       torchEnabled: false,
       // Cap capture at 720p. The default lets the camera run at its full
       // (often 1080p/4K) resolution, and the decoder spends most of that
       // frame budget on pixels it then throws away — the cap is what
-      // removes the detect-time stutter on low-end phones. QR codes are
-      // resolved long before 720p.
+      // keeps per-frame analysis affordable on low-end phones now that
+      // every frame is analyzed. QR codes are resolved long before 720p.
       cameraResolution: const Size(1280, 720),
     );
     setState(() => _cameraState = _CameraState.granted);
@@ -166,18 +175,21 @@ class _ScanScreenState extends State<ScanScreen>
   }
 
   Future<void> _pickFromGallery() async {
-    if (_handled) return;
+    if (_handled || _galleryBusy) return;
     try {
       // Downscale on pick: a 12–48 MP photo takes seconds to decode, and
-      // both the QR pass and the OCR pass work fine on a 1800 px copy —
+      // both the QR pass and the OCR pass work fine on a 1280 px copy —
       // this single change is what made gallery picks feel instant.
+      // 1280 px (down from 1800) halves the QR and OCR passes again;
+      // receipt QRs and printed numbers still resolve with margin.
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1800,
-        maxHeight: 1800,
+        maxWidth: 1280,
+        maxHeight: 1280,
         imageQuality: 85,
       );
       if (image == null || !mounted) return;
+      setState(() => _galleryBusy = true);
       // Halt the camera during the still-image decode — live frame
       // analysis racing the decode is what made the pick feel stuck.
       try {
@@ -247,6 +259,8 @@ class _ScanScreenState extends State<ScanScreen>
         );
       }
       await _resumeCamera();
+    } finally {
+      if (mounted) setState(() => _galleryBusy = false);
     }
   }
 
@@ -362,6 +376,26 @@ class _ScanScreenState extends State<ScanScreen>
           if (_cameraState == _CameraState.granted)
             // Viewfinder.
             const _ViewfinderOverlay(pulse: true),
+
+          // Gallery decode in progress — visible work, not a dead screen.
+          if (_galleryBusy)
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: Color(0x88000000),
+                  child: Center(
+                    child: SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF34D27B),
+                        strokeWidth: 3.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Bottom action buttons — all optical, no keyboard.
           Positioned(
