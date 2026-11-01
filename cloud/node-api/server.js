@@ -21,7 +21,7 @@ db.ensureReady().catch((e) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`[mahtem-api] v1.15.0-node listening on :${PORT} (driver: ${db.driver})`);
+  console.log(`[mahtem-api] ${config.version} listening on :${PORT} (driver: ${db.driver})`);
 });
 
 for (const signal of ['SIGTERM', 'SIGINT']) {

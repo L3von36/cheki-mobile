@@ -9,119 +9,12 @@
 <meta property="og:url" content="https://mahtem.com.et/privacy.html">
 <meta property="og:title" content="Privacy Policy — Mahtem ማህተም">
 <meta property="og:description" content="Zero-knowledge design: what Mahtem stores on your device, what reaches our server, and what never leaves your phone.">
-<meta name="theme-color" content="#1C2B5E">
+<meta name="theme-color" content="#FFFFFF">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2322A45D'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23fff' stroke-width='3.5' stroke-dasharray='6 4'/%3E%3Ctext x='32' y='40' font-size='21' font-weight='700' text-anchor='middle' fill='%23fff' font-family='Noto Sans Ethiopic,sans-serif'%3E%E1%88%9B%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --green: #22A45D;
-    --green-deep: #168A4C;
-    --green-soft: #E1F5EA;
-    --navy: #1C2B5E;
-    --navy-2: #16224A;
-    --navy-ink: #101A3D;
-    --ink: #16224D;
-    --muted: #5b6474;
-    --dim: #8a93a8;
-    --line: #E4EAF3;
-    --bg-soft: #F3F6FC;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; font-size: 14px; }
-  body {
-    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Ethiopic", sans-serif;
-    color: var(--ink); line-height: 1.7; background: #fff;
-    -webkit-font-smoothing: antialiased;
-  }
-  .am { font-family: "Noto Sans Ethiopic", "Plus Jakarta Sans", sans-serif; }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
-
-  header {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(255,255,255,.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav { display: flex; align-items: center; justify-content: space-between; height: 58px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--navy); font-size: 1.1rem; letter-spacing: -.01em; }
-  .brand:hover { text-decoration: none; }
-  .seal {
-    width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
-    color: #fff; display: flex; align-items: center; justify-content: center;
-    font-size: 1.05rem; font-weight: 700; box-shadow: 0 4px 12px rgba(34,164,93,.35);
-  }
-  .brand .am { color: var(--dim); font-weight: 500; font-size: .95rem; }
-  .backlink {
-    display: inline-flex; align-items: center; gap: 7px;
-    color: var(--green-deep); font-weight: 700; font-size: .9rem;
-    padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
-  }
-  .backlink:hover { border-color: var(--green); text-decoration: none; }
-
-  .pagehead { background: linear-gradient(158deg, var(--navy) 0%, var(--navy-2) 55%, var(--navy-ink) 100%); color: #fff; padding: 42px 0 40px; }
-  .pagehead h1 { font-size: 1.8rem; letter-spacing: -.02em; font-weight: 800; }
-  .pagehead p { color: #C4D0EA; margin-top: 8px; font-size: .98rem; }
-  .pagehead .pill {
-    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
-    background: rgba(111,227,161,.1); border: 1px solid rgba(111,227,161,.35);
-    color: #6fe3a1; font-size: .78rem; font-weight: 700; letter-spacing: .06em;
-    padding: 5px 13px; border-radius: 999px;
-  }
-
-  main { padding: 38px 0 60px; }
-  h2 {
-    color: var(--navy); font-size: 1.2rem; margin: 34px 0 10px;
-    letter-spacing: -.01em; font-weight: 800; display: flex; align-items: center; gap: 10px;
-  }
-  h2::before { content: ""; width: 4px; height: 20px; background: var(--green); border-radius: 3px; flex-shrink: 0; }
-  h2:first-child { margin-top: 0; }
-  p, li { color: #37404f; font-size: .95rem; overflow-wrap: break-word; }
-  strong { color: var(--ink); }
-  ul { padding-left: 22px; margin: 10px 0; }
-  li { margin: 7px 0; }
-  li::marker { color: var(--green-deep); }
-  a { color: var(--green-deep); font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; margin: 18px 0 8px; font-size: .92rem; border-radius: 12px; overflow: hidden; }
-  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  td:first-child { white-space: nowrap; }
-  th, td { text-align: left; padding: 10px 12px; border: 1px solid var(--line); vertical-align: top; }
-  th { background: var(--green-soft); color: var(--green-deep); font-weight: 700; }
-  tbody tr:nth-child(odd) td { background: #FBFDFE; }
-  td code, p code { background: #F1F4F9; padding: 1px 7px; border-radius: 5px; font-size: .86em; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--navy); }
-  .note {
-    background: var(--green-soft); border-left: 4px solid var(--green);
-    padding: 14px 18px; border-radius: 0 12px 12px 0; margin: 18px 0; font-size: .93rem; color: #14532D;
-  }
-  .shortver {
-    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 16px;
-    padding: 20px 22px; margin: 0 0 8px;
-  }
-  .shortver p { margin: 0; }
-  .updated { color: var(--muted); font-size: .88rem; margin-top: 38px; padding-top: 18px; border-top: 1px dashed var(--line); }
-
-  footer { border-top: 1px solid var(--line); background: var(--bg-soft); padding: 30px 0 40px; color: var(--muted); font-size: .9rem; }
-  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  footer a { font-weight: 600; }
-  @media (max-width: 640px) {
-    .pagehead h1 { font-size: 1.55rem; }
-    table { font-size: .86rem; }
-    th, td { padding: 9px 10px; }
-  }
-  @media (max-width: 480px) {
-    .pagehead { padding: 36px 0 34px; }
-    .pagehead h1 { font-size: 1.4rem; }
-    main { padding: 36px 0 56px; }
-    .shortver { padding: 18px; }
-    .note { padding: 14px 16px; }
-    .backlink { padding: 8px 10px; gap: 0; }
-    .backlink .bl-text { display: none; }
-    .table-scroll table { min-width: 470px; }
-  }
-</style>
+<style>:root{--green:#22A45D;--green-deep:#168A4C;--green-soft:#E1F5EA;--navy:#1C2B5E;--navy-2:#16224A;--navy-ink:#101A3D;--ink:#16224D;--muted:#5b6474;--dim:#8a93a8;--line:#E4EAF3;--bg-soft:#F3F6FC}*{margin:0;padding:0;box-sizing:border-box}html{-webkit-text-size-adjust:100%;font-size:14px}body{font-family:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Ethiopic",sans-serif;color:var(--ink);line-height:1.7;background:#fff;-webkit-font-smoothing:antialiased}.am{font-family:"Noto Sans Ethiopic","Plus Jakarta Sans",sans-serif}.wrap{max-width:860px;margin:0 auto;padding:0 24px}header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}.nav{display:flex;align-items:center;justify-content:space-between;height:58px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--navy);font-size:1.1rem;letter-spacing:-.01em}.brand:hover{text-decoration:none}.seal{width:32px;height:32px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,var(--green) 0%,var(--green-deep) 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.05rem;font-weight:700;box-shadow:0 4px 12px rgba(34,164,93,.35)}.brand .am{color:var(--dim);font-weight:500;font-size:.95rem}.backlink{display:inline-flex;align-items:center;gap:7px;color:var(--green-deep);font-weight:700;font-size:.9rem;padding:8px 14px;border:1px solid var(--line);border-radius:10px;background:#fff}.backlink:hover{border-color:var(--green);text-decoration:none}.pagehead{background:radial-gradient(700px 300px at 85% -30%,rgba(34,164,93,.12) 0%,transparent 62%),radial-gradient(600px 300px at 0% 130%,rgba(46,107,230,.08) 0%,transparent 58%),linear-gradient(180deg,#FBFCFE 0%,#F2F6FB 100%);border-bottom:1px solid var(--line);color:var(--ink);padding:42px 0 40px}.pagehead h1{font-size:1.8rem;letter-spacing:-.02em;font-weight:800;color:var(--navy-ink)}.pagehead p{color:var(--muted);margin-top:8px;font-size:.98rem}.pagehead .pill{display:inline-flex;align-items:center;gap:8px;margin-bottom:18px;background:#fff;border:1px solid rgba(34,164,93,.4);color:var(--green-deep);font-size:.78rem;font-weight:700;letter-spacing:.06em;padding:5px 13px;border-radius:999px;box-shadow:0 4px 14px rgba(34,164,93,.1)}main{padding:38px 0 60px}h2{color:var(--navy);font-size:1.2rem;margin:34px 0 10px;letter-spacing:-.01em;font-weight:800;display:flex;align-items:center;gap:10px}h2::before{content:"";width:4px;height:20px;background:var(--green);border-radius:3px;flex-shrink:0}h2:first-child{margin-top:0}p,li{color:#37404f;font-size:.95rem;overflow-wrap:break-word}strong{color:var(--ink)}ul{padding-left:22px;margin:10px 0}li{margin:7px 0}li::marker{color:var(--green-deep)}a{color:var(--green-deep);font-weight:600}table{width:100%;border-collapse:collapse;margin:18px 0 8px;font-size:.92rem;border-radius:12px;overflow:hidden}.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}td:first-child{white-space:nowrap}th,td{text-align:left;padding:10px 12px;border:1px solid var(--line);vertical-align:top}th{background:var(--green-soft);color:var(--green-deep);font-weight:700}tbody tr:nth-child(odd) td{background:#FBFDFE}td code,p code{background:#F1F4F9;padding:1px 7px;border-radius:5px;font-size:.86em;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--navy)}.note{background:var(--green-soft);border-left:4px solid var(--green);padding:14px 18px;border-radius:0 12px 12px 0;margin:18px 0;font-size:.93rem;color:#14532D}.shortver{background:var(--bg-soft);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:0 0 8px}.shortver p{margin:0}.updated{color:var(--muted);font-size:.88rem;margin-top:38px;padding-top:18px;border-top:1px dashed var(--line)}footer{border-top:1px solid var(--line);background:var(--bg-soft);padding:30px 0 40px;color:var(--muted);font-size:.9rem}footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}footer a{font-weight:600}@media (max-width:640px){.pagehead h1{font-size:1.55rem}table{font-size:.86rem}th,td{padding:9px 10px}}@media (max-width:480px){.pagehead{padding:36px 0 34px}.pagehead h1{font-size:1.4rem}main{padding:36px 0 56px}.shortver{padding:18px}.note{padding:14px 16px}.backlink{padding:8px 10px;gap:0}.backlink .bl-text{display:none}.table-scroll table{min-width:470px}}</style>
 </head>
 <body>
 
@@ -263,7 +156,7 @@
 <footer>
   <div class="wrap">
     <span>© 2026 Mahtem · mahtem.com.et</span>
-    <span><a href="index.html">Home</a> · <a href="https://github.com/L3von36/cheki-mobile">Source code (MIT)</a></span>
+    <span><a href="index.html">Home</a> · <a href="index.html#download">Download the app</a></span>
   </div>
 </footer>
 

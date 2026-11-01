@@ -148,6 +148,11 @@ app.use((req, res, next) => {
 // The landing page and privacy policy are served by this same process.
 app.use(express.static(config.publicDir, { index: 'index.html', extensions: ['html'] }));
 
+// Public release endpoints (landing-page downloads). Mounted before the bot
+// screen: they carry no user data, and /v1/dl/:kind is a plain link
+// navigation that cannot send custom headers.
+app.use(require('./releases').router());
+
 // Cheap bot screen — the app always sends this header.
 app.use((req, res, next) => {
   if (!req.get('X-Mahtem-Client')) {
