@@ -706,8 +706,10 @@ void main() {
       history: history,
     );
 
-    // Every scheduled attempt hits the wire: initial + 3 retries.
-    final allAttempts = await _waitFor(() => server.requests >= 4);
+    // Every scheduled attempt hits the wire: initial + 3 retries. While
+    // the server is down, the HTTP layer also makes one quiet retry per
+    // attempt (2 calls per attempt), so a full window is 8 calls.
+    final allAttempts = await _waitFor(() => server.requests >= 8);
     expect(allAttempts, isTrue, reason: 'initial attempt + every retry '
         'must hit the wire while the window is open');
 

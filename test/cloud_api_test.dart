@@ -190,7 +190,7 @@ void main() {
     final api = CloudApi(
       client: MockClient((request) async {
         calls++;
-        if (calls == 1) throw const http.ClientException('connection reset');
+        if (calls == 1) throw http.ClientException('connection reset');
         return http.Response(
             jsonEncode({
               'sessionToken': 'tok-2',
@@ -231,7 +231,7 @@ void main() {
     final api = CloudApi(
       client: MockClient((request) async {
         calls++;
-        throw const http.ClientException('connection reset');
+        throw http.ClientException('connection reset');
       }),
     );
 
