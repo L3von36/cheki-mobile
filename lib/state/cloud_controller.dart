@@ -223,6 +223,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     int? used,
   }) async {
     try {
+      if (_enabled && !await _ensureFreshSession()) return null;
       return await _api.syncTrials(
         sessionToken: _sessionToken,
         deviceHashHex: deviceHashHex,

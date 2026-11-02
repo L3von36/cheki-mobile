@@ -427,6 +427,17 @@ async function run() {
     });
     ok(otherDevice.json?.used >= 1, `account ledger caps the trial on a new device (used=${otherDevice.json?.used})`);
 
+    const accountUsed4 = await call('POST', '/v1/trials/sync', {
+      bearer: acctToken,
+      body: { deviceHash: H64(), used: 4 },
+    });
+    const accountWiped = await call('POST', '/v1/trials/sync', {
+      bearer: acctToken,
+      body: { deviceHash: H64() },
+    });
+    ok(accountUsed4.json?.used === 4 && accountWiped.json?.used === 4,
+      'account usage survives device changes and local counter resets');
+
     const proSync = await call('POST', '/v1/trials/sync', { body: { deviceHash: H64() } });
     ok(proSync.json?.pro?.active === false, 'no Pro → pro.active false (flag present)');
   }

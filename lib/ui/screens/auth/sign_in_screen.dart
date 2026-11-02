@@ -1,11 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/verify_history.dart';
 import '../../../state/auth_controller.dart';
 import '../../../state/cloud_controller.dart';
+import '../../../state/license_controller.dart';
 import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import 'auth_shared.dart';
@@ -56,6 +55,7 @@ class _SignInScreenState extends State<SignInScreen> {
     // "sign in doesn't create an account"). Known failures map to
     // localized AuthErrors; anything unknown shows the generic message.
     final cloud = context.read<CloudController>();
+    final license = context.read<LicenseController>();
     final history = context.read<VerifyHistory>();
     final navigator = Navigator.of(context);
     final password = _passwordCtrl.text;
@@ -72,16 +72,15 @@ class _SignInScreenState extends State<SignInScreen> {
 
     switch (result) {
       case AuthSuccess(:final account):
+        await cloud.autoEnable(
+          password: password,
+          account: account,
+          history: history,
+        );
+        await license.refreshTrialBudget();
         if (navigator.canPop()) {
           navigator.popUntil((route) => route.isFirst);
         }
-        unawaited(
-          cloud.autoEnable(
-            password: password,
-            account: account,
-            history: history,
-          ),
-        );
       case AuthFailure(:final error):
         if (mounted) setState(() => _error = strings.errorAuth(error));
       case null:

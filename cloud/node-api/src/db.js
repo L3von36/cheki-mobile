@@ -185,6 +185,14 @@ function ensureSchema() {
         \`last_used_at\`  BIGINT NOT NULL,
         \`last_used_dt\`  DATETIME NULL
     )${suffix}`,
+    `\`account_trials\` (
+      \`user_id\`       CHAR(36) NOT NULL PRIMARY KEY,
+      \`checks_used\`   BIGINT NOT NULL DEFAULT 0,
+      \`first_used_at\` BIGINT NOT NULL,
+      \`first_used_dt\` DATETIME NULL,
+      \`last_used_at\`  BIGINT NOT NULL,
+      \`last_used_dt\`  DATETIME NULL
+    )${suffix}`,
     `\`vaults\` (
         \`user_id\`    CHAR(36) NOT NULL PRIMARY KEY,
         \`blob\`       ${blobType} NOT NULL,

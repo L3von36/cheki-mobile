@@ -42,10 +42,13 @@ const int _kTokenLen = _kPayloadLen + 64;
 /// First 4 bytes of SHA-256 over the device key (SSAID). These exact bytes
 /// are what the user's device code shows and what a license embeds.
 Uint8List deviceHashFor(String deviceKey) {
-  final digest =
-      SHA256Digest().process(utf8.encode('mahtem-device-v1:$deviceKey'));
+  final digest = deviceTrialHashFor(deviceKey);
   return Uint8List.sublistView(digest, 0, 4);
 }
+
+/// Full SHA-256 device identity used by the server-side trial ledger.
+Uint8List deviceTrialHashFor(String deviceKey) =>
+    SHA256Digest().process(utf8.encode('mahtem-device-v1:$deviceKey'));
 
 /// Human-facing device code — the value the user sends the app owner
 /// together with their Telebirr payment receipt.

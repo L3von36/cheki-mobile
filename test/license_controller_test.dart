@@ -95,6 +95,34 @@ void main() {
   }
 
   group('server trial clamp (v1.18.10)', () {
+    test('sends a full SHA-256 device hash to the server', () async {
+      final (store, now) = fixtures();
+      String? sentHash;
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used}) async {
+          sentHash = deviceHashHex;
+          return TrialSyncInfo(
+            used: 0,
+            freeChecks: kFreeTrialChecks,
+            trialsRemaining: kFreeTrialChecks,
+            proActive: false,
+          );
+        },
+      );
+
+      await c.ensureLoaded();
+
+      final expected = deviceTrialHashFor('device-1')
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
+      expect(sentHash, hasLength(64));
+      expect(sentHash, expected);
+    });
+
     test('cleared storage cannot mint trials back — server counter wins',
         () async {
       final (store, now) = fixtures();

@@ -51,6 +51,25 @@ CREATE TABLE IF NOT EXISTS `sign_ins` (
     KEY `ix_sign_ins_user_time` (`user_id`, `at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ── monotonic free-trial budgets: device + signed-in account ─────────
+CREATE TABLE IF NOT EXISTS `device_trials` (
+    `device_hash`   CHAR(64) NOT NULL PRIMARY KEY,
+    `checks_used`   BIGINT NOT NULL DEFAULT 0,
+    `first_used_at` BIGINT NOT NULL,
+    `first_used_dt` DATETIME NULL,
+    `last_used_at`  BIGINT NOT NULL,
+    `last_used_dt`  DATETIME NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `account_trials` (
+    `user_id`       CHAR(36) NOT NULL PRIMARY KEY,
+    `checks_used`   BIGINT NOT NULL DEFAULT 0,
+    `first_used_at` BIGINT NOT NULL,
+    `first_used_dt` DATETIME NULL,
+    `last_used_at`  BIGINT NOT NULL,
+    `last_used_dt`  DATETIME NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `refresh_tokens` (
     `token`      CHAR(64) NOT NULL PRIMARY KEY,
     `user_id`    CHAR(64) NOT NULL,

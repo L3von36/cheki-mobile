@@ -317,8 +317,8 @@ api.patch('/v1/account', h(async (req, res) => {
 // make a trial a property of the IDENTITY, not the install:
 //   * per DEVICE — SHA-256 of the Android SSAID, which survives
 //     reinstalls and clear-storage (only a factory reset changes it);
-//   * per ACCOUNT — a signed-in user's receipt-ledger rows count too, so
-//     a second device cannot double-dip on one account;
+//   * per ACCOUNT — a signed-in user's monotonic usage counter is shared
+//     across devices, seeded from existing receipt-ledger rows;
 //   * monotonic — the client can never lower a server-side counter, and
 //     a wiped app reporting `used: 0` simply gets clamped back up;
 //   * Pro wins — an active plan (license code or paid receipt) is
@@ -345,15 +345,22 @@ api.post('/v1/trials/sync', h(async (req, res) => {
   // Optional session: no bearer is fine (pre-sign-up devices sync too).
   const session = await requireSession(req);
   let accountUsed = 0;
+  let accountUserId = null;
   let proActive = false;
   let proUntil = null;
   if (session.ok) {
+    accountUserId = session.userId;
     try {
       const rows = await db.query(
         'SELECT COUNT(*) AS n FROM `verified_receipts` WHERE `user_id` = ?',
         [session.userId],
       );
       accountUsed = Number(rows[0]?.n) || 0;
+      const trialRows = await db.query(
+        'SELECT `checks_used` FROM `account_trials` WHERE `user_id` = ?',
+        [session.userId],
+      );
+      accountUsed = Math.max(accountUsed, Number(trialRows[0]?.checks_used) || 0);
       const pro = await db.query('SELECT `expires_at` FROM `pro_status` WHERE `user_id` = ?', [
         session.userId,
       ]);
@@ -397,6 +404,23 @@ api.post('/v1/trials/sync', h(async (req, res) => {
   } catch (_) {
     // Keep the reported number as the fallback.
   }
+  if (accountUserId) {
+    const accountNow = Math.max(accountUsed, deviceUsed, reported);
+    try {
+      await db.run(
+        `${db.INSERT_IGNORE} \`account_trials\` (\`user_id\`, \`checks_used\`, \`first_used_at\`, \`first_used_dt\`, \`last_used_at\`, \`last_used_dt\`) VALUES (?, 0, ?, ?, ?, ?)`,
+        [accountUserId, now, nowDt, now, nowDt],
+      );
+      await db.run(
+        'UPDATE `account_trials` SET `checks_used` = CASE WHEN `checks_used` < ? THEN ? ELSE `checks_used` END, `last_used_at` = ?, `last_used_dt` = ? WHERE `user_id` = ?',
+        [accountNow, accountNow, now, nowDt, accountUserId],
+      );
+      accountUsed = Math.max(accountUsed, accountNow);
+    } catch (_) {
+      // Degraded schema — retain device and receipt-ledger accounting.
+    }
+  }
+
   const used = Math.max(deviceUsed, accountUsed);
   res.json({
     ok: true,

@@ -103,6 +103,8 @@ class LicenseController extends ChangeNotifier {
   /// payment. Empty until [ensureLoaded] finished.
   String deviceCode = '';
 
+  String _trialDeviceHashHex = '';
+
   // ---------------------------------------------------------------- accessors
 
   bool get isLoaded => _loaded;
@@ -178,6 +180,13 @@ class LicenseController extends ChangeNotifier {
     );
   }
 
+  /// Rechecks the server budget after sign-in makes an account session
+  /// available, so another device's usage is applied before verification.
+  Future<void> refreshTrialBudget() async {
+    if (!_loaded) await ensureLoaded();
+    await _syncTrialBudget();
+  }
+
   Future<void> _loadTrials() async {
     try {
       final raw = await _store.read(_kTrialsKey);
@@ -246,6 +255,9 @@ class LicenseController extends ChangeNotifier {
       }
     }
     _deviceHash = deviceHashFor(key);
+    _trialDeviceHashHex = deviceTrialHashFor(key)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
     deviceCode = deviceCodeFor(_deviceHash!);
   }
 
@@ -435,7 +447,7 @@ class LicenseController extends ChangeNotifier {
     _syncingTrials = true;
     try {
       final info = await sync(
-        deviceHashHex: _deviceHashHex,
+        deviceHashHex: _trialDeviceHashHex,
         used: _trialsUsed,
       );
       final serverUsed = info?.used ?? 0;
@@ -454,10 +466,6 @@ class LicenseController extends ChangeNotifier {
       _syncingTrials = false;
     }
   }
-
-  String get _deviceHashHex => _deviceHash!
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
 
   Future<DateTime?> _expiryOf(String? token) async {
     if (token == null || token.trim().isEmpty) return null;
