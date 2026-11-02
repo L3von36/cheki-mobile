@@ -145,6 +145,7 @@ void main() {
       revisionClock: () => 12345,
     );
     final history = VerifyHistory();
+    await history.useAccount(await cloudIdentifierHash(account.id));
     await history.add(_entry('h1'));
     await history.add(_entry('h2'));
 
@@ -229,6 +230,7 @@ void main() {
       revisionClock: () => 20000,
     );
     final history = VerifyHistory();
+    await history.useAccount(await cloudIdentifierHash(account.id));
     await history.add(_entry('h1', verifiedAt: 5000));
 
     await controller.enable(
@@ -317,6 +319,7 @@ void main() {
       revisionClock: () => 30000,
     );
     final history = VerifyHistory();
+    await history.useAccount(await cloudIdentifierHash(account.id));
     await history.add(_entry('h1', verifiedAt: 1000));
 
     await controller.enable(
@@ -607,6 +610,7 @@ void main() {
     final d1 = _tuned(server, hasher, await SharedPreferences.getInstance(),
         revisionClock: () => 80000);
     final h1 = VerifyHistory();
+    await h1.useAccount(await cloudIdentifierHash(account.id));
     await h1.add(_entry('from-phone-1', verifiedAt: 9000));
     await d1.enable(password: 'correct-horse', account: account, history: h1);
 
