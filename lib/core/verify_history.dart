@@ -128,6 +128,8 @@ class VerifyHistory extends ChangeNotifier {
   static const int _maxEntries = 100;
 
   final List<HistoryEntry> _entries = [];
+  String _storageKey = _key;
+  String? _accountScope;
   bool _loaded = false;
   Future<void>? _loadFuture;
 
@@ -150,7 +152,7 @@ class VerifyHistory extends ChangeNotifier {
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_key);
+      final raw = prefs.getString(_storageKey);
       if (raw != null && raw.isNotEmpty) {
         final list = jsonDecode(raw) as List;
         _entries
@@ -166,6 +168,45 @@ class VerifyHistory extends ChangeNotifier {
       _loadFuture = null;
       notifyListeners();
     }
+  }
+
+  /// Selects the local history namespace for a cloud account. Legacy
+  /// device-wide history has no reliable owner and is never attributed.
+  Future<void> useAccount(String accountScope) async {
+    if (_accountScope == accountScope) return;
+    if (_entries.isNotEmpty) {
+      _entries.clear();
+      notifyListeners();
+    }
+    final nextKey = '$_key.$accountScope';
+    _storageKey = nextKey;
+    await ensureLoaded();
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(nextKey);
+    final nextEntries = <HistoryEntry>[];
+
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List;
+        nextEntries.addAll(list
+            .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>)));
+      } catch (_) {
+        // A corrupt account history should not prevent sign-in.
+      }
+    }
+
+    final changed = _entries.length != nextEntries.length ||
+        !_entries.asMap().entries.every((entry) =>
+            entry.value.id == (entry.key < nextEntries.length
+                ? nextEntries[entry.key].id
+                : null));
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _storageKey = nextKey;
+    _accountScope = accountScope;
+    if (changed) notifyListeners();
   }
 
   /// Prepends a new entry and persists.

@@ -791,6 +791,7 @@ void main() {
     final controller = _tuned(server, hasher, await SharedPreferences.getInstance(),
         revisionClock: () => 90000);
     final history = VerifyHistory();
+    await history.useAccount(await cloudIdentifierHash(account.id));
     await history.add(_entry('a1', verifiedAt: 100));
     await controller.autoEnable(
       password: 'correct-horse',
@@ -812,6 +813,23 @@ void main() {
     expect(server.vaults.keys, containsAll(firstVaultKeys),
         reason: 'the previous account cloud copy must survive the switch');
     expect(server.vaults, hasLength(2)); // new account has its own vault
+    expect(history.entries, isEmpty,
+        reason: 'the second account must not inherit local receipts');
+    final secondVault = server.vaults.values.last;
+    final secondKey = await deriveVaultKey('other-pass', other.id);
+    final secondEntries = decodeVaultPayload(
+      await decryptVaultBlob(secondKey, secondVault['blob'] as String),
+    );
+    expect(secondEntries, isEmpty,
+        reason: 'the first account receipt must not be uploaded to the second vault');
+
+    await controller.autoEnable(
+      password: 'correct-horse',
+      account: account,
+      history: history,
+    );
+    expect(history.entries.map((entry) => entry.id), contains('a1'),
+        reason: 'switching back must restore only the original account history');
   });
 
   test('realtime polling pulls new entries from another device while open', () async {

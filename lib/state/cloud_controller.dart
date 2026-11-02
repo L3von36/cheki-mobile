@@ -248,6 +248,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   static const Duration _receiptFlushDelay = Duration(seconds: 2);
 
   final List<CloudReceiptRecord> _pendingReceipts = [];
+  String? _receiptOwnerHash;
   Timer? _receiptTimer;
   bool _flushingReceipts = false;
 
@@ -316,8 +317,9 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     final prefs = _prefs;
     if (prefs == null) return;
     try {
+      final key = _pendingReceiptStorageKey(_receiptOwnerHash);
       prefs.setString(
-        _kPendingReceipts,
+        key,
         jsonEncode(_pendingReceipts.map((r) => r.toJson()).toList()),
       );
     } catch (_) {
@@ -325,8 +327,13 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void _loadPendingReceipts(SharedPreferences prefs) {
-    final raw = prefs.getString(_kPendingReceipts);
+  String _pendingReceiptStorageKey(String? ownerHash) =>
+      ownerHash == null ? _kPendingReceipts : '$_kPendingReceipts.$ownerHash';
+
+  void _loadPendingReceipts(SharedPreferences prefs, {String? storageKey}) {
+    final raw = prefs.getString(
+      storageKey ?? _pendingReceiptStorageKey(_receiptOwnerHash),
+    );
     if (raw == null || raw.isEmpty) return;
     try {
       final list = jsonDecode(raw);
@@ -346,6 +353,16 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  void _useReceiptAccount(String ownerHash) {
+    if (_receiptOwnerHash == ownerHash) return;
+    if (_pendingReceipts.isNotEmpty) _persistPendingReceipts();
+    _pendingReceipts.clear();
+    _receiptOwnerHash = ownerHash;
+    final prefs = _prefs;
+    if (prefs == null) return;
+    _loadPendingReceipts(prefs);
+  }
+
   // ---------------------------------------------------------------- wiring
   /// Hooks the history store so every local change can auto-sync while a
   /// backup session is live. Idempotent for the same instance (the proxy
@@ -361,8 +378,18 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     if (_catchUpPending) {
       if (_enabled && hasSession && _autoSync) {
         _catchUpPending = false;
-        _scheduleAutoSync(bootCatchUpDelay);
+        unawaited(_prepareBootHistory(history));
       }
+    }
+  }
+
+  Future<void> _prepareBootHistory(VerifyHistory history) async {
+    final identifierHash = _identifierHash;
+    if (identifierHash == null) return;
+    await history.useAccount(identifierHash);
+    _useReceiptAccount(identifierHash);
+    if (_enabled && hasSession && _autoSync && identical(_history, history)) {
+      _scheduleAutoSync(bootCatchUpDelay);
     }
   }
 
@@ -592,6 +619,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// happens if the vault hasn't changed.
   Future<int> pollNow(VerifyHistory history) async {
     if (!_enabled || !hasSession || isWorking || _isPulling) return 0;
+    final identifierHash = _identifierHash;
+    if (identifierHash != null) await history.useAccount(identifierHash);
     if (!await _ensureFreshSession()) return 0;
     _isPulling = true;
     try {
@@ -649,12 +678,15 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     required AccountRecord account,
     required VerifyHistory history,
   }) async {
+    final accountHash = await cloudIdentifierHash(account.id);
     // Already syncing THIS exact account (re-sign-in)? Everything is
     // live — refresh the local history without creating another session.
     if (_enabled &&
         hasSession &&
         _identifierHash != null &&
-        _identifierHash == await cloudIdentifierHash(account.id)) {
+        _identifierHash == accountHash) {
+      await history.useAccount(accountHash);
+      _useReceiptAccount(accountHash);
       if (isWorking) {
         _armPassword = password;
         _armAccount = account;
@@ -674,6 +706,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
       _scheduleArm(_armRecheckDelay);
       return;
     }
+    await history.useAccount(accountHash);
+    _useReceiptAccount(accountHash);
     // Account SWITCH (another device account): re-link to that cloud
     // identity. The previous account's server copy is intentionally left
     // untouched — signing back into it merges and continues.
@@ -760,6 +794,7 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     _lastSyncAt = prefs.getInt(_kLastSync);
     _autoSync = prefs.getBool(_kAutoSync) ?? true;
     _dirty = prefs.getBool(_kDirty) ?? false;
+    _receiptOwnerHash = _identifierHash;
     _loadPendingReceipts(prefs);
     _profile = _profileFromPrefs(prefs);
     // Boot catch-up pushes pending changes and pulls changes from other
@@ -811,6 +846,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     _setWorking(true);
     try {
       final identifierHash = await cloudIdentifierHash(account.id);
+      await history.useAccount(identifierHash);
+      _useReceiptAccount(identifierHash);
       final authKey = await deriveCloudAuthKey(password);
       final vaultKey = await deriveVaultKey(password, account.id);
 
@@ -906,6 +943,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   /// (-1 on failure).
   Future<int> restore(VerifyHistory history) async {
     if (!hasSession || isWorking) return -1;
+    final identifierHash = _identifierHash;
+    if (identifierHash != null) await history.useAccount(identifierHash);
     if (!await _ensureFreshSession()) return -1;
     _failure = CloudFailure.none;
     _setWorking(true);
@@ -973,6 +1012,8 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
 
   // ---------------------------------------------------------------- internals
   Future<void> _mergeUpload(VerifyHistory history) async {
+    final identifierHash = _identifierHash;
+    if (identifierHash != null) await history.useAccount(identifierHash);
     await history.ensureLoaded();
     final key = hexToBytes(_vaultKeyHex!);
     for (var attempt = 0; attempt < 2; attempt++) {
