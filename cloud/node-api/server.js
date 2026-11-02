@@ -11,6 +11,7 @@
 
 const app = require('./src/app');
 const db = require('./src/db');
+const config = require('./src/config');
 
 const PORT = Number(process.env.PORT) || 8080;
 

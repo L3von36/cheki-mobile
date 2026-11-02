@@ -39,9 +39,17 @@ const KIND_SUFFIX = {
 /** Freshness window before we re-fetch from GitHub. */
 const TTL_MS = 10 * 60 * 1000;
 
+/**
+ * After a failed fetch with nothing cached, refuse to retry for this long —
+ * a rate-limited or offline GitHub must not turn every landing-page view
+ * into a new upstream request.
+ */
+const FAIL_BACKOFF_MS = 60 * 1000;
+
 /** In-memory cache: { release, at } + the in-flight fetch (dedupe). */
 let cache = { release: null, at: 0 };
 let inflight = null;
+let failAt = 0;
 
 function slimRelease(raw) {
   const assets = Array.isArray(raw.assets) ? raw.assets : [];
@@ -62,15 +70,27 @@ function slimRelease(raw) {
 }
 
 async function fetchLatest() {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'mahtem-api/1.18 (+https://mahtem.com.et)',
+  };
+  // Optional: a fine-grained personal-access token raises the limit from
+  // 60/hour (per server IP) to 5,000/hour. Set GITHUB_TOKEN in .env.
+  if (process.env.GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
   const upstream = await fetch(API_URL, {
     signal: AbortSignal.timeout(8_000),
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'mahtem-api/1.18 (+https://mahtem.com.et)',
-    },
+    headers,
   });
   if (!upstream.ok) {
-    throw new Error(`github responded ${upstream.status}`);
+    let detail = '';
+    try {
+      detail = (await upstream.text()).replace(/\s+/g, ' ').trim().slice(0, 200);
+    } catch (_) {
+      // body unreadable — the status alone will do
+    }
+    throw new Error(`github responded ${upstream.status}${detail ? `: ${detail}` : ''}`);
   }
   const release = slimRelease(await upstream.json());
   if (!release.tag_name) throw new Error('github payload missing tag_name');
@@ -83,6 +103,7 @@ async function getLatest() {
   if (fresh) return { release: cache.release, stale: false };
 
   if (!inflight) {
+    if (!cache.release && Date.now() - failAt < FAIL_BACKOFF_MS) return null;
     inflight = fetchLatest()
       .then((release) => {
         cache = { release, at: Date.now() };
@@ -90,6 +111,7 @@ async function getLatest() {
       })
       .catch((e) => {
         console.error('[mahtem-api] releases:', e && e.message);
+        failAt = Date.now();
         if (cache.release) return { release: cache.release, stale: true };
         return null;
       })
