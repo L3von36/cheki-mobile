@@ -191,6 +191,7 @@ class CloudApi {
   final Uri baseUrl;
 
   static const Duration _timeout = Duration(seconds: 25);
+  static const Duration _retryDelay = Duration(milliseconds: 600);
   static const Map<String, String> _clientHeader = {
     'X-Mahtem-Client': 'mahtem-android',
   };
@@ -202,29 +203,54 @@ class CloudApi {
     String? bearer,
     Map<String, String>? queryParameters,
   }) async {
-    final http.Response resp;
-    try {
-      final baseUri = baseUrl.replace(path: path);
-      final uri = queryParameters != null && queryParameters.isNotEmpty
-          ? baseUri.replace(queryParameters: queryParameters)
-          : baseUri;
-      final request = http.Request(method, uri)
-        ..headers.addAll(_clientHeader);
-      if (bearer != null) request.headers['Authorization'] = 'Bearer $bearer';
-      if (body != null) {
-        request.headers['Content-Type'] = 'application/json';
-        request.body = jsonEncode(body);
-      }
-      resp = await _client
-          .send(request)
-          .then(http.Response.fromStream)
-          .timeout(_timeout);
-    } on TimeoutException {
-      throw const CloudApiException(CloudApiError.network, 0);
-    } catch (_) {
-      throw const CloudApiException(CloudApiError.network, 0);
-    }
+    final baseUri = baseUrl.replace(path: path);
+    final uri = queryParameters != null && queryParameters.isNotEmpty
+        ? baseUri.replace(queryParameters: queryParameters)
+        : baseUri;
 
+    // Transport failures get one quiet second attempt. Mobile networks blip
+    // constantly (tower handoffs, radios waking from idle), and a first
+    // sign-in on a new device chains 4-5 sequential calls — without this,
+    // a single blip aborts the whole flow and the user must retype their
+    // password. Only transport errors retry; an HTTP status is an answer,
+    // never a failure. /v1/session/refresh rotates a single-use token, so
+    // a possibly-consumed attempt must never be replayed.
+    final retriable = path != '/v1/session/refresh';
+    for (var attempt = 1;; attempt++) {
+      http.Response resp;
+      try {
+        resp = await _transmit(method, uri, body: body, bearer: bearer);
+      } catch (_) {
+        if (!retriable || attempt >= 2) {
+          throw const CloudApiException(CloudApiError.network, 0);
+        }
+        await Future<void>.delayed(_retryDelay);
+        continue;
+      }
+      return _decode(resp);
+    }
+  }
+
+  Future<http.Response> _transmit(
+    String method,
+    Uri uri, {
+    Map<String, dynamic>? body,
+    String? bearer,
+  }) async {
+    final request = http.Request(method, uri)
+      ..headers.addAll(_clientHeader);
+    if (bearer != null) request.headers['Authorization'] = 'Bearer $bearer';
+    if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    }
+    return _client
+        .send(request)
+        .then(http.Response.fromStream)
+        .timeout(_timeout);
+  }
+
+  Map<String, dynamic> _decode(http.Response resp) {
     Map<String, dynamic>? decoded;
     try {
       if (resp.body.isNotEmpty) {

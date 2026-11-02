@@ -184,4 +184,62 @@ void main() {
     await api.revokeSession(refreshToken: 'ref-123');
     expect(bodySent, contains('"refreshToken":"ref-123"'));
   });
+
+  test('a transport blip retries once and then succeeds', () async {
+    var calls = 0;
+    final api = CloudApi(
+      client: MockClient((request) async {
+        calls++;
+        if (calls == 1) throw const http.ClientException('connection reset');
+        return http.Response(
+            jsonEncode({
+              'sessionToken': 'tok-2',
+              'userId': 'u1',
+              'expiresAt': 9999999999999,
+            }),
+            200);
+      }),
+    );
+
+    final session = await api.createSession(
+      identifierHash: _idh,
+      authKey: _auth,
+    );
+    expect(session.sessionToken, 'tok-2');
+    expect(calls, 2);
+  });
+
+  test('HTTP error statuses are answers, never retried', () async {
+    var calls = 0;
+    final api = CloudApi(
+      client: MockClient((request) async {
+        calls++;
+        return http.Response(jsonEncode({'error': 'no_account'}), 404);
+      }),
+    );
+
+    await expectLater(
+      api.createSession(identifierHash: _idh, authKey: _auth),
+      throwsA(isA<CloudApiException>()),
+    );
+    expect(calls, 1);
+  });
+
+  test('refresh with a dead transport fails after a single attempt',
+      () async {
+    var calls = 0;
+    final api = CloudApi(
+      client: MockClient((request) async {
+        calls++;
+        throw const http.ClientException('connection reset');
+      }),
+    );
+
+    await expectLater(
+      api.refreshSession('ref-old'),
+      throwsA(isA<CloudApiException>()),
+    );
+    // The single-use refresh token must never be replayed.
+    expect(calls, 1);
+  });
 }
