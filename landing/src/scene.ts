@@ -230,6 +230,11 @@ function drawCard(ctx: CanvasRenderingContext2D, palette: typeof darkPalette, x:
   ctx.fillText(meta, px(x + 24), px(y + 83));
 }
 
+// World-unit bounds of the phone, used to fit it inside the camera frustum.
+const PHONE_HEIGHT = 6.55;
+const PHONE_WIDTH = 3.5; // body plus the protruding side buttons
+const CAMERA_REST_Z = 9.4; // camera distance at scroll 0
+
 export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePhoneScene {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -239,14 +244,14 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-  camera.position.set(0, 0.1, 9.4);
+  camera.position.set(0, 0.1, CAMERA_REST_Z);
 
   const phone = new THREE.Group();
   phone.rotation.set(0.05, -0.18, 0.06);
   scene.add(phone);
 
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color: darkPalette.body, metalness: 0.72, roughness: 0.24, clearcoat: 0.9, clearcoatRoughness: 0.18 });
-  const body = new THREE.Mesh(new RoundedBoxGeometry(3.25, 6.55, 0.38, 8, 0.2), bodyMaterial);
+  const body = new THREE.Mesh(new RoundedBoxGeometry(3.25, PHONE_HEIGHT, 0.38, 8, 0.2), bodyMaterial);
   phone.add(body);
 
   const screenCanvas = document.createElement('canvas');
@@ -303,7 +308,7 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
   let dragging = false;
   let frame = 0;
   const clock = new THREE.Clock();
-  const targetCamera = new THREE.Vector3(0, 0.1, 9.4);
+  const targetCamera = new THREE.Vector3(0, 0.1, CAMERA_REST_Z);
   const currentCamera = targetCamera.clone();
 
   function updateScreen(nextScreen: ScreenState) {
@@ -339,6 +344,15 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    // Scale the phone so it fits the canvas at the resting distance; the
+    // scroll-driven push-in is allowed to crop closer by design.
+    const frustumHeight = 2 * Math.tan((camera.fov * Math.PI) / 360) * CAMERA_REST_Z;
+    const fit = Math.min(
+      1,
+      (frustumHeight * 0.94) / PHONE_HEIGHT,
+      (frustumHeight * camera.aspect * 0.94) / PHONE_WIDTH,
+    );
+    phone.scale.setScalar(fit);
   }
 
   function render() {
