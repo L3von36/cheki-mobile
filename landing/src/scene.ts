@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import screenHome from './assets/screen-1-home.jpg';
+import screenResult from './assets/screen-2-result.jpg';
+import screenHistory from './assets/screen-3-history.jpg';
+import screenScan from './assets/screen-4-scan.jpg';
+import screenPro from './assets/screen-5-pro.jpg';
+import screenSettings from './assets/screen-6-settings.jpg';
 
 export type PhoneTheme = 'dark' | 'light';
 
@@ -10,232 +16,51 @@ export type InteractivePhoneScene = {
   destroy: () => void;
 };
 
-type ScreenState = 0 | 1 | 2;
+// Real screenshots from the shipping app — one per swipe, in demo order.
+const SCREEN_SOURCES = [screenHome, screenResult, screenHistory, screenScan, screenPro, screenSettings];
+const SCREEN_COUNT = SCREEN_SOURCES.length;
 
-const darkPalette = {
-  screen: '#0b151c',
-  panel: '#14252b',
-  ink: '#eaf3ef',
-  muted: '#819398',
-  mint: '#70f3d0',
-  violet: '#7b83ff',
-  body: '#1b2731',
-  rim: '#70f3d0',
-};
-
-const lightPalette = {
-  screen: '#f7fbf8',
-  panel: '#e5f0eb',
-  ink: '#122329',
-  muted: '#65777a',
-  mint: '#087d69',
-  violet: '#635cdc',
-  body: '#d6e1dc',
-  rim: '#087d69',
-};
+type ScreenImages = (HTMLImageElement | null)[];
 
 function hexColor(value: string) {
   return new THREE.Color(value);
 }
 
-function mixHex(dark: string, light: string, amount: number) {
-  return `#${hexColor(dark).lerp(hexColor(light), amount).getHexString()}`;
-}
+const DARK_BODY = '#1b2731';
+const LIGHT_BODY = '#d6e1dc';
 
-function blendedPalette(amount: number) {
-  return {
-    screen: mixHex(darkPalette.screen, lightPalette.screen, amount),
-    panel: mixHex(darkPalette.panel, lightPalette.panel, amount),
-    ink: mixHex(darkPalette.ink, lightPalette.ink, amount),
-    muted: mixHex(darkPalette.muted, lightPalette.muted, amount),
-    mint: mixHex(darkPalette.mint, lightPalette.mint, amount),
-    violet: mixHex(darkPalette.violet, lightPalette.violet, amount),
-    body: mixHex(darkPalette.body, lightPalette.body, amount),
-    rim: mixHex(darkPalette.rim, lightPalette.rim, amount),
-  };
-}
+// The screen canvas matches the screenshots' native 574x1280 aspect, so the
+// texture is a 1:1 fit with nothing cropped.
+const SCREEN_CANVAS_WIDTH = 574;
+const SCREEN_CANVAS_HEIGHT = 1280;
 
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, height, radius);
-}
-
-function drawScreen(canvas: HTMLCanvasElement, screen: ScreenState, themeMix: number) {
+function drawScreen(canvas: HTMLCanvasElement, screen: number, images: ScreenImages) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const palette = blendedPalette(themeMix);
-  const isDark = themeMix < 0.5;
-  const width = canvas.width;
-  const height = canvas.height;
-  const scale = width / 560;
-  const font = (size: number, weight = 400) => `${weight} ${Math.round(size * scale)}px Arial, sans-serif`;
-  const mono = (size: number) => `${Math.round(size * scale)}px monospace`;
-  const px = (value: number) => value * scale;
-
-  ctx.fillStyle = palette.screen;
-  ctx.fillRect(0, 0, width, height);
-  const wash = ctx.createRadialGradient(px(110), px(140), 0, px(110), px(140), px(300));
-  wash.addColorStop(0, `rgba(8,125,105,${0.13 - themeMix * 0.03})`);
-  wash.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = palette.muted;
-  ctx.font = mono(10);
-  ctx.fillText('9:41', px(30), px(30));
-  ctx.fillText('● ● ▮', px(425), px(30));
-  ctx.fillStyle = palette.muted;
-  ctx.font = mono(11);
-  ctx.fillText(screen === 0 ? 'CBE · TELEBIRR · BOA' : screen === 1 ? 'RECEIPT HISTORY' : 'MAHTEM PRO', px(30), px(92));
-  ctx.fillStyle = palette.ink;
-  ctx.font = font(28, 700);
-  ctx.fillText(screen === 0 ? 'Verify a receipt' : screen === 1 ? 'Every check, saved' : 'Own it once', px(30), px(132));
-  ctx.strokeStyle = palette.mint;
-  ctx.lineWidth = px(1);
-  ctx.beginPath();
-  ctx.arc(px(478), px(119), px(20), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = palette.mint;
-  ctx.font = mono(9);
-  ctx.fillText('MA', px(466), px(122));
-
-  if (screen === 0) {
-    roundedRect(ctx, px(24), px(166), px(512), px(250), px(18));
-    ctx.fillStyle = palette.panel;
-    ctx.fill();
-    ctx.fillStyle = palette.muted;
-    ctx.font = mono(11);
-    ctx.fillText('RECEIPT CHECK', px(48), px(202));
-    ctx.fillStyle = palette.mint;
-    ctx.font = font(28, 400);
-    ctx.fillText('✓ Verified', px(44), px(254));
-    ctx.fillStyle = palette.ink;
-    ctx.font = mono(10);
-    ctx.fillText('CD8A4K2H9P · CBE · ETB 12,500.00', px(48), px(288));
-    for (let pip = 0; pip < 5; pip++) {
-      ctx.beginPath();
-      ctx.arc(px(56 + pip * 30), px(326), px(6), 0, Math.PI * 2);
-      if (pip < 3) {
-        ctx.fillStyle = palette.mint;
-        ctx.fill();
-      } else {
-        ctx.strokeStyle = palette.muted;
-        ctx.lineWidth = px(1);
-        ctx.stroke();
-      }
-    }
-    ctx.fillStyle = palette.muted;
-    ctx.font = mono(10);
-    ctx.fillText('3 OF 5 FREE', px(212), px(330));
-    ctx.strokeStyle = isDark ? 'rgba(255,255,255,.12)' : 'rgba(18,35,41,.12)';
-    ctx.beginPath();
-    ctx.moveTo(px(48), px(368));
-    ctx.lineTo(px(510), px(368));
-    ctx.stroke();
-    ctx.fillStyle = palette.mint;
-    ctx.font = mono(10);
-    ctx.fillText('5 free checks · no account needed', px(48), px(400));
-    drawCard(ctx, palette, 24, 445, 'NEW CHECK', 'Paste the reference', 'From SMS, PDF or the paper slip');
-    drawCard(ctx, palette, 24, 594, 'LATEST RESULT', 'CBE · ETB 12,500', 'Verified · 2m ago');
-  } else if (screen === 1) {
-    roundedRect(ctx, px(24), px(168), px(512), px(320), px(18));
-    ctx.fillStyle = palette.panel;
-    ctx.fill();
-    ctx.strokeStyle = `${palette.mint}88`;
-    ctx.lineWidth = px(2);
-    ctx.beginPath();
-    ctx.moveTo(px(75), px(375));
-    ctx.bezierCurveTo(px(160), px(210), px(280), px(430), px(470), px(235));
-    ctx.stroke();
-    ctx.strokeStyle = `${palette.violet}bb`;
-    ctx.beginPath();
-    ctx.moveTo(px(75), px(260));
-    ctx.bezierCurveTo(px(180), px(450), px(330), px(180), px(482), px(390));
-    ctx.stroke();
-    const nodes = [[92, 358], [252, 292], [465, 238], [399, 389]];
-    nodes.forEach(([x, y], index) => {
-      ctx.fillStyle = index === 2 ? palette.violet : palette.mint;
-      ctx.beginPath();
-      ctx.arc(px(x), px(y), px(7), 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.fillStyle = palette.muted;
-    ctx.font = mono(10);
-    ctx.fillText('CHECKS THIS WEEK', px(48), px(202));
-    const history = [['CBE · CD8A4K2H9P', 'verified · now'], ['M-Pesa · QPF92K8', 'verified · 1h ago'], ['Telebirr · TB770412', 'not found · 3h ago']];
-    history.forEach((row, index) => drawCard(ctx, palette, 24, 522 + index * 118, row[0], row[1], index === 2 ? '✕' : '✓'));
-  } else {
-    ctx.fillStyle = palette.muted;
-    ctx.font = mono(11);
-    ctx.fillText('WHAT PRO INCLUDES', px(30), px(184));
-    const rows = [['One-time activation', 'ACTIVE', palette.mint, 'unlimited checks · no subscription'], ['Zero-knowledge backup', 'ON', palette.violet, 'encrypted with your password'], ['History on this device', '512 CHECKS', palette.muted, 'syncs to a new phone']] as const;
-    rows.forEach((row, index) => {
-      const y = 216 + index * 124;
-      roundedRect(ctx, px(24), px(y), px(512), px(100), px(16));
-      ctx.fillStyle = index === 0 ? palette.panel : `${palette.panel}aa`;
-      ctx.fill();
-      ctx.fillStyle = row[2];
-      ctx.beginPath();
-      ctx.arc(px(58), px(y + 50), px(16), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = index === 0 ? palette.screen : palette.ink;
-      ctx.font = font(16, 700);
-      ctx.fillText(index === 0 ? '★' : index === 1 ? '▲' : '≡', px(52), px(y + 56));
-      ctx.fillStyle = palette.ink;
-      ctx.font = font(16, 700);
-      ctx.fillText(row[0], px(92), px(y + 43));
-      ctx.fillStyle = palette.muted;
-      ctx.font = mono(10);
-      ctx.fillText(row[3], px(92), px(y + 69));
-      ctx.fillStyle = row[2];
-      ctx.font = mono(10);
-      ctx.fillText(row[1], px(419), px(y + 53));
-    });
-    ctx.fillStyle = palette.muted;
-    ctx.font = mono(11);
-    ctx.fillText('CHECKS THIS MONTH', px(30), px(640));
-    ctx.fillStyle = palette.mint;
-    ctx.font = font(42, 400);
-    ctx.fillText('214', px(30), px(690));
-  }
-
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,.12)' : 'rgba(18,35,41,.12)';
-  ctx.beginPath();
-  ctx.moveTo(px(24), px(1015));
-  ctx.lineTo(px(536), px(1015));
-  ctx.stroke();
-  ctx.fillStyle = palette.mint;
-  ctx.font = mono(10);
-  ctx.fillText('VERIFY', px(50), px(1060));
-  ctx.fillStyle = palette.muted;
-  ctx.fillText('HISTORY', px(185), px(1060));
-  ctx.fillText('PRO', px(345), px(1060));
-  ctx.fillText('MORE', px(466), px(1060));
-}
-
-function drawCard(ctx: CanvasRenderingContext2D, palette: typeof darkPalette, x: number, y: number, eyebrow: string, title: string, meta: string) {
-  const scale = ctx.canvas.width / 560;
-  const px = (value: number) => value * scale;
-  roundedRect(ctx, px(x), px(y), px(512), px(100), px(16));
-  ctx.fillStyle = palette.panel;
-  ctx.fill();
-  ctx.fillStyle = palette.muted;
-  ctx.font = `${Math.round(10 * scale)}px monospace`;
-  ctx.fillText(eyebrow, px(x + 24), px(y + 27));
-  ctx.fillStyle = palette.ink;
-  ctx.font = `700 ${Math.round(16 * scale)}px Arial, sans-serif`;
-  ctx.fillText(title, px(x + 24), px(y + 62));
-  ctx.fillStyle = palette.mint;
-  ctx.font = `${Math.round(10 * scale)}px monospace`;
-  ctx.fillText(meta, px(x + 24), px(y + 83));
+  ctx.fillStyle = '#0b1218';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const image = images[screen];
+  if (!image || !image.complete || image.naturalWidth === 0) return;
+  // Cover-fit so any future screenshot with a slightly different aspect still fills the frame.
+  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
 }
 
 // World-unit bounds of the phone, used to fit it inside the camera frustum.
 const PHONE_HEIGHT = 6.55;
 const PHONE_WIDTH = 3.5; // body plus the protruding side buttons
 const CAMERA_REST_Z = 9.4; // camera distance at scroll 0
+const SCREEN_HEIGHT_U = 5.85; // leaves an even ~0.33-unit bezel on all sides
+const SCREEN_WIDTH_U = (SCREEN_HEIGHT_U * SCREEN_CANVAS_WIDTH) / SCREEN_CANVAS_HEIGHT;
 
-export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePhoneScene {
+export function mountInteractivePhone(
+  canvas: HTMLCanvasElement,
+  options: { onScreenChange?: (screen: number) => void } = {},
+): InteractivePhoneScene {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -250,31 +75,40 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
   phone.rotation.set(0.05, -0.18, 0.06);
   scene.add(phone);
 
-  const bodyMaterial = new THREE.MeshPhysicalMaterial({ color: darkPalette.body, metalness: 0.72, roughness: 0.24, clearcoat: 0.9, clearcoatRoughness: 0.18 });
+  const bodyMaterial = new THREE.MeshPhysicalMaterial({ color: DARK_BODY, metalness: 0.72, roughness: 0.24, clearcoat: 0.9, clearcoatRoughness: 0.18 });
   const body = new THREE.Mesh(new RoundedBoxGeometry(3.25, PHONE_HEIGHT, 0.38, 8, 0.2), bodyMaterial);
   phone.add(body);
 
   const screenCanvas = document.createElement('canvas');
-  screenCanvas.width = 560;
-  screenCanvas.height = 1120;
-  drawScreen(screenCanvas, 0, 0);
+  screenCanvas.width = SCREEN_CANVAS_WIDTH;
+  screenCanvas.height = SCREEN_CANVAS_HEIGHT;
+
+  const screenImages: ScreenImages = SCREEN_SOURCES.map((src) => {
+    const image = new Image();
+    image.onload = () => {
+      drawScreen(screenCanvas, screenState, screenImages);
+      screenTexture.needsUpdate = true;
+    };
+    image.src = src;
+    return image;
+  });
+
+  drawScreen(screenCanvas, 0, screenImages);
   const screenTexture = new THREE.CanvasTexture(screenCanvas);
   screenTexture.colorSpace = THREE.SRGBColorSpace;
   screenTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const screenMaterial = new THREE.MeshBasicMaterial({ map: screenTexture, transparent: true, toneMapped: false });
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.82, 5.65), screenMaterial);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_WIDTH_U, SCREEN_HEIGHT_U), screenMaterial);
   screen.position.z = 0.211;
   phone.add(screen);
 
+  // Punch-hole camera over the screenshots' own status bar; the fake notch
+  // pill is gone because the real UI carries its own device chrome.
   const bezelMaterial = new THREE.MeshBasicMaterial({ color: '#05080a' });
-  const notch = new THREE.Mesh(new RoundedBoxGeometry(0.75, 0.16, 0.035, 5, 0.07), bezelMaterial);
-  notch.position.set(0, 2.58, 0.23);
-  phone.add(notch);
-
-  const cameraLens = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.03, 24), new THREE.MeshBasicMaterial({ color: '#142b32' }));
-  cameraLens.rotation.x = Math.PI / 2;
-  cameraLens.position.set(0.97, 2.59, 0.232);
-  phone.add(cameraLens);
+  const punchHole = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 24), bezelMaterial);
+  punchHole.rotation.x = Math.PI / 2;
+  punchHole.position.set(0, SCREEN_HEIGHT_U / 2 - 0.092, 0.222);
+  phone.add(punchHole);
 
   const buttonMaterial = new THREE.MeshStandardMaterial({ color: '#3a4c55', metalness: 0.8, roughness: 0.3 });
   const volume = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.68, 0.12), buttonMaterial);
@@ -296,14 +130,12 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
   backLight.position.set(0, -4, -3);
   scene.add(backLight);
 
-  let theme: PhoneTheme = 'dark';
   let targetThemeMix = 0;
   let themeMix = 0;
-  let renderedThemeMix = 0;
   let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scrollProgress = 0;
   let animatedScrollProgress = 0;
-  let screenState: ScreenState = 0;
+  let screenState = 0;
   let startX = 0;
   let dragging = false;
   let frame = 0;
@@ -311,10 +143,11 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
   const targetCamera = new THREE.Vector3(0, 0.1, CAMERA_REST_Z);
   const currentCamera = targetCamera.clone();
 
-  function updateScreen(nextScreen: ScreenState) {
-    screenState = nextScreen;
-    drawScreen(screenCanvas, screenState, themeMix);
+  function updateScreen(nextScreen: number) {
+    screenState = ((nextScreen % SCREEN_COUNT) + SCREEN_COUNT) % SCREEN_COUNT;
+    drawScreen(screenCanvas, screenState, screenImages);
     screenTexture.needsUpdate = true;
+    options.onScreenChange?.(screenState);
   }
 
   function onPointerDown(event: PointerEvent) {
@@ -328,8 +161,7 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
     dragging = false;
     const delta = event.clientX - startX;
     if (Math.abs(delta) > 35) {
-      const direction = delta < 0 ? 1 : -1;
-      updateScreen(((screenState + direction + 3) % 3) as ScreenState);
+      updateScreen(screenState + (delta < 0 ? 1 : -1));
     }
   }
 
@@ -358,11 +190,6 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
   function render() {
     const elapsed = clock.getElapsedTime();
     themeMix = THREE.MathUtils.damp(themeMix, targetThemeMix, 4.8, 1 / 60);
-    if (Math.abs(themeMix - renderedThemeMix) > 0.002) {
-      drawScreen(screenCanvas, screenState, themeMix);
-      screenTexture.needsUpdate = true;
-      renderedThemeMix = themeMix;
-    }
     animatedScrollProgress = THREE.MathUtils.damp(animatedScrollProgress, scrollProgress, reducedMotion ? 8 : 4.5, 1 / 60);
     const smoothScroll = animatedScrollProgress;
     const movement = reducedMotion ? 0 : elapsed;
@@ -376,8 +203,8 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
     camera.position.copy(currentCamera);
     camera.lookAt(0, 0, 0);
 
-    const lightBody = hexColor(lightPalette.body);
-    bodyMaterial.color.lerpColors(hexColor(darkPalette.body), lightBody, themeMix);
+    const lightBody = hexColor(LIGHT_BODY);
+    bodyMaterial.color.lerpColors(hexColor(DARK_BODY), lightBody, themeMix);
     bodyMaterial.roughness = THREE.MathUtils.lerp(0.24, 0.5, themeMix);
     bodyMaterial.metalness = THREE.MathUtils.lerp(0.72, 0.2, themeMix);
     ambient.intensity = THREE.MathUtils.lerp(0.6, 1.15, themeMix);
@@ -402,8 +229,7 @@ export function mountInteractivePhone(canvas: HTMLCanvasElement): InteractivePho
 
   return {
     setTheme(value: PhoneTheme) {
-      theme = value;
-      targetThemeMix = theme === 'light' ? 1 : 0;
+      targetThemeMix = value === 'light' ? 1 : 0;
     },
     setReducedMotion(value: boolean) {
       reducedMotion = value;

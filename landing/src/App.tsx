@@ -28,6 +28,9 @@ const principles = [
   { value: '0', label: 'accounts needed to verify' },
 ];
 
+// Keep in sync with SCREEN_SOURCES in scene.ts.
+const DEMO_SCREEN_COUNT = 6;
+
 type DemoTab = 'Overview' | 'Verify' | 'History';
 
 const workflowSteps = [
@@ -72,7 +75,7 @@ function PhoneSimulator() {
   );
 }
 
-function InteractivePhone({ theme, reducedMotion }: { theme: 'dark' | 'light'; reducedMotion: boolean }) {
+function InteractivePhone({ theme, reducedMotion, onScreenChange }: { theme: 'dark' | 'light'; reducedMotion: boolean; onScreenChange: (screen: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<InteractivePhoneScene | null>(null);
 
@@ -80,7 +83,7 @@ function InteractivePhone({ theme, reducedMotion }: { theme: 'dark' | 'light'; r
     let cancelled = false;
     import('./scene').then(({ mountInteractivePhone }) => {
       if (!cancelled && canvasRef.current) {
-        sceneRef.current = mountInteractivePhone(canvasRef.current);
+        sceneRef.current = mountInteractivePhone(canvasRef.current, { onScreenChange });
         sceneRef.current.setTheme(theme);
         sceneRef.current.setReducedMotion(reducedMotion);
       }
@@ -117,6 +120,7 @@ function scrollToId(id: string) {
 function App() {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [demoTab, setDemoTab] = useState<DemoTab>('Overview');
+  const [heroScreen, setHeroScreen] = useState(0);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const requestedTheme = new URLSearchParams(window.location.search).get('theme');
     if (requestedTheme === 'light' || requestedTheme === 'dark') return requestedTheme;
@@ -172,10 +176,10 @@ function App() {
 
           <div className="hero-visual hero-phone-visual" aria-label="Mahtem mobile app preview">
             <div className="phone-visual-label"><span>Live demo / mobile</span><strong>Swipe the screens</strong></div>
-            <InteractivePhone theme={theme} reducedMotion={reducedMotion} />
+            <InteractivePhone theme={theme} reducedMotion={reducedMotion} onScreenChange={setHeroScreen} />
             <div className="phone-visual-caption"><span>Verified with the bank</span><i>↗</i><span>CBE · Telebirr · M-Pesa & more</span></div>
           </div>
-          <div className="hero-index" aria-hidden="true"><span>01</span><i /><span>04</span></div>
+          <div className="hero-index" aria-hidden="true"><span>{String(heroScreen + 1).padStart(2, '0')}</span><i /><span>{String(DEMO_SCREEN_COUNT).padStart(2, '0')}</span></div>
         </section>
 
         <section className="signal-strip" id="signal" aria-label="Mahtem at a glance">
