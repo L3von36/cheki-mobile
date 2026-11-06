@@ -1,33 +1,35 @@
 'use strict';
 
 /**
- * Mahtem Cloud API (v1.15.0-node) — Zero-Knowledge OAuth 2.1 / JWT backend.
+ * Mahtem Cloud API (v1.19.0-node) — BetterAuth identity + Zero-Knowledge data backend.
  *
  * Node.js/Express + MySQL port of `cloud/worker.js` (Cloudflare Worker) for
  * Plesk shared hosting (Phusion Passenger). Route map, request/response
  * shapes, error codes and status codes are identical to the Worker, so the
  * Flutter client (lib/core/cloud/cloud_api.dart) works without changes.
  *
- * PRIVACY CONTRACT (zero-knowledge credentials; readable account + receipt
+ * AUTH LAYERS (v1.19.0):
+ *   * BetterAuth (/api/auth/*, src/auth.mjs) is the identity provider —
+ *     email+password sign-up/sign-in, GitHub (device flow), bearer-token
+ *     sessions. `requireSession` resolves BetterAuth bearer tokens onto
+ *     the same `accounts.user_id` the legacy layer used (auth-bridge.cjs),
+ *     so every data route below is auth-layer agnostic.
+ *   * The legacy zero-knowledge handshake (PBKDF2 authKey → /v1/session →
+ *     15-min JWT + refresh rotation) stays for already-installed clients;
+ *     POST /v1/auth/legacy-migrate upgrades such accounts to BetterAuth on
+ *     first sign-in of the new client WITHOUT losing user_id-scoped data.
+ *
+ * PRIVACY CONTRACT (zero-knowledge vault; readable account + receipt
  * ledger for the owner):
- *   * Client derives `authKey = PBKDF2(password, "mahtem-cloud-auth-v1")`.
- *     The raw password never reaches this server. `auth_hash` is the only
- *     credential material stored.
- *   * v1.17.0: the account row also carries the readable identifier
- *     (phone/email as normalized on-device), optional display name, sign-in
- *     count/times and a sign_ins audit trail — the owner reviews accounts
- *     in phpMyAdmin (see v_user_overview / v_receipt_overview views).
  *   * Vault (history backup) is AES-256-GCM encrypted on-device. This server
- *     cannot decrypt it.
+ *     cannot decrypt it. The vault KEY is derived on-device from the typed
+ *     password — the BetterAuth migration never needs it.
  *   * Each verification is recorded in `verified_receipts` (bank, reference,
  *     scanned payload, parties, amount, outcome) under the user's account.
  *
- * TOKEN ARCHITECTURE (identical to the Worker):
- *   * Short-lived access token: JWT HS256, 15 minutes, stateless verification.
- *   * Rotating single-use refresh token: 30 days, reuse-detecting.
- *   * JWT secret auto-provisioned into the `config` table on first use.
- *
- * Every request must carry the `X-Mahtem-Client` header (cheap bot screen).
+ * Every /v1 request must carry the `X-Mahtem-Client` header (cheap bot
+ * screen); /api/auth/* is exempt (the browser device-approval page calls
+ * it too).
  */
 
 const express = require('express');
@@ -36,6 +38,7 @@ const config = require('./config');
 const db = require('./db');
 const { signAccessToken, verifyAccessToken } = require('./jwt');
 const { migrateImportFromWorker } = require('./migrate');
+const authBridge = require('./auth-bridge.cjs');
 
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600; // 30 days
 const PLAN_DAYS = 31;
@@ -94,7 +97,10 @@ async function issueSessionTokens(userId) {
   };
 }
 
-/** Bearer-token session check (JWT only — legacy sess: KV tokens are gone). */
+/** Bearer-token session check. Two credential flavors, one user space:
+ *   * legacy JWT (3 dot-separated parts, stateless) — installed clients;
+ *   * BetterAuth session token (auth-bridge resolves it onto the same
+ *     accounts.user_id; the row is linked/provisioned on first sight). */
 async function requireSession(req) {
   const auth = req.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
@@ -119,6 +125,15 @@ async function requireSession(req) {
     return { ok: false, status: 401, error: 'invalid_token', message: 'Access token is invalid or signature check failed.' };
   }
 
+  try {
+    const session = await authBridge.sessionUserId(req);
+    if (session) {
+      return { ok: true, token, userId: session.userId, exp: session.exp };
+    }
+  } catch (e) {
+    console.error('[mahtem-api] better-auth session lookup failed:', e && (e.message || e));
+    return { ok: false, status: 503, error: 'auth_unavailable', message: 'Auth service unavailable.' };
+  }
   return { ok: false, status: 401, error: 'unauthorized', message: 'Session missing or expired.' };
 }
 
@@ -147,6 +162,12 @@ app.use((req, res, next) => {
 
 // The landing page and privacy policy are served by this same process.
 app.use(express.static(config.publicDir, { index: 'index.html', extensions: ['html'] }));
+
+// BetterAuth identity layer (/api/auth/*): sign-up, sign-in, GitHub device
+// flow, session endpoints. Mounted before the bot screen (the browser
+// device-approval page calls it without X-Mahtem-Client) and before the
+// JSON body parser (Better Auth reads the raw request stream).
+app.all('/api/auth/*', authBridge.handle);
 
 // Public release endpoints (landing-page downloads). Mounted before the bot
 // screen: they carry no user data, and /v1/dl/:kind is a plain link
@@ -182,7 +203,7 @@ api.get('/v1/health', h(async (req, res) => {
   res.json({
     ok: true,
     service: 'mahtem-api',
-    auth: 'OAuth 2.0 / JWT (HS256) + Zero-Knowledge',
+    auth: 'BetterAuth (bearer + GitHub device flow) + legacy JWT',
     version: config.version,
     db: dbOk,
     time: new Date().toISOString(),
@@ -562,6 +583,118 @@ async function checkSession(req, res) {
 
 api.get('/v1/session', h((req, res) => checkSession(req, res)));
 api.get('/v1/auth/me', h((req, res) => checkSession(req, res)));
+
+/* ── BetterAuth bridge endpoints ────────────────────────────────────── */
+
+// Which social providers the Flutter app should show (env-driven).
+api.get('/v1/auth/providers', h(async (req, res) => {
+  let github = false;
+  try {
+    github = await authBridge.githubEnabled();
+  } catch (_) {
+    github = false;
+  }
+  res.json({ ok: true, provider: 'better-auth', github, deviceFlow: true });
+}));
+
+// One-time upgrade path for accounts created by the legacy zero-knowledge
+// handshake: the client proves the OLD credential (identifierHash + PBKDF2
+// authKey — the same proof /v1/session has always required) and hands over
+// the typed password, which BetterAuth hashes (scrypt) server-side. The
+// BetterAuth user is linked to the EXISTING user_id, so the vault, the
+// receipt ledger, the Pro plan and the trial budget all carry over.
+api.post('/v1/auth/legacy-migrate', h(async (req, res) => {
+  const body = req.body || {};
+  const identifierHash = body.identifierHash;
+  const authKey = body.authKey;
+  const password = typeof body.password === 'string' ? body.password : '';
+  const identifier = typeof body.identifier === 'string' ? body.identifier.trim() : '';
+  const displayName = typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 64) : '';
+  if (!isHex64(identifierHash) || !isHex64(authKey)) {
+    return fail(res, err('bad_input', 400, 'identifierHash and authKey must be 64-hex digests.'));
+  }
+  if (password.length < 6 || password.length > 128) {
+    return fail(res, err('bad_input', 400, 'password must be 6-128 characters.'));
+  }
+  if (!identifier) {
+    return fail(res, err('bad_input', 400, 'identifier (normalized phone or email) is required.'));
+  }
+  await db.ensureReady();
+
+  let rows = await db.query(
+    'SELECT `user_id`, `auth_hash`, `status`, `identifier`, `display_name` FROM `accounts` WHERE `identifier_hash` = ?',
+    [identifierHash],
+  );
+  if (!rows.length && config.migrateFromUrl) {
+    await migrateImportFromWorker(config.migrateFromUrl, identifierHash, authKey);
+    rows = await db.query(
+      'SELECT `user_id`, `auth_hash`, `status`, `identifier`, `display_name` FROM `accounts` WHERE `identifier_hash` = ?',
+      [identifierHash],
+    );
+  }
+  if (!rows.length) {
+    return fail(res, err('no_account', 404, 'No legacy account for this identifier.'));
+  }
+  const record = rows[0];
+  const authHash = hashAuthKey(authKey, String(record.user_id));
+  const a = Buffer.from(authHash, 'hex');
+  const b = Buffer.from(String(record.auth_hash), 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return fail(res, err('bad_credentials', 401, 'Wrong identifier or password.'));
+  }
+  if (String(record.status || 'active') === 'disabled') {
+    return fail(res, err('account_disabled', 403, 'This account has been disabled.'));
+  }
+
+  const auth = await authBridge.getAuth();
+  const baEmail = identifier.includes('@')
+    ? identifier.toLowerCase()
+    : `${identifier}@phone.mahtem.et`;
+  const name = displayName || String(record.display_name || '') || identifier;
+
+  let result;
+  try {
+    result = await auth.api.signUpEmail({ body: { email: baEmail, password, name } });
+  } catch (signUpError) {
+    // The BetterAuth identity already exists (an earlier device migrated
+    // it): the typed password must prove it before we re-link.
+    try {
+      result = await auth.api.signInEmail({ body: { email: baEmail, password } });
+    } catch (_) {
+      return fail(res, err('exists', 409, 'A BetterAuth account already exists for this identifier with a different password.'));
+    }
+  }
+
+  try {
+    const now = Date.now();
+    await db.run(
+      'UPDATE `accounts` SET `better_auth_user_id` = COALESCE(`better_auth_user_id`, ?), `identifier` = COALESCE(`identifier`, ?), `identifier_type` = COALESCE(`identifier_type`, ?), `display_name` = COALESCE(`display_name`, ?), `last_seen_at` = ?, `last_seen_dt` = ? WHERE `user_id` = ?',
+      [
+        result.user.id,
+        identifier,
+        identifier.includes('@') ? 'email' : 'phone',
+        name || null,
+        now,
+        dtOf(now),
+        String(record.user_id),
+      ],
+    );
+    await db.run('INSERT INTO `sign_ins` (`user_id`, `at`, `at_dt`) VALUES (?, ?, ?)', [
+      String(record.user_id),
+      now,
+      dtOf(now),
+    ]);
+  } catch (_) {
+    // Degraded schema — the link rides on the next bridge resolution.
+  }
+
+  res.json({
+    ok: true,
+    token: result.token,
+    user: { id: result.user.id, email: result.user.email, name: result.user.name },
+    userId: String(record.user_id),
+  });
+}));
 
 /* ── encrypted vault sync ───────────────────────────────────────────── */
 

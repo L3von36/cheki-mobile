@@ -161,3 +161,26 @@ change the app's address yourself — it ships with the next tagged build.
 - The JWT signing secret is auto-created in the `config` table. Don't drop
   that table alone; if you ever restore an old backup, sessions simply
   re-login.
+
+---
+
+## BetterAuth identity layer (v1.19.0) — what to know
+
+Auth now runs on Better Auth (`/api/auth/*`) alongside the legacy JWT handshake
+(installed clients keep working). Nothing extra to do at deploy time:
+
+- **Schema**: Better Auth's own tables (user/session/account/verification/deviceCode)
+  live in `data/mahtem-auth.sqlite` and are created automatically at boot from
+  `src/auth-schema.sql`. Keep the file writable; back it up with the MySQL dumps.
+- **Secret**: auto-generated into the MySQL `config` table on first use, or set
+  `BETTER_AUTH_SECRET` (32+ chars) in `.env`.
+- **GitHub sign-in (optional)**: create an OAuth App at
+  <https://github.com/settings/developers> with callback
+  `https://mahtem.com.et/api/auth/callback/github`, then set
+  `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` in `.env`. The app shows
+  "Continue with GitHub" only when both are set (device-flow — no app changes).
+- **Bridge**: BetterAuth sessions resolve onto the same `accounts.user_id`
+  (`better_auth_user_id` column, added automatically). Migrate old accounts with
+  `POST /v1/auth/legacy-migrate` (the app does this automatically on sign-in).
+- **Base URL**: `BETTER_AUTH_URL` should stay unset in production (defaults to
+  the site URL); set it only for local testing.

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -6,6 +8,7 @@ import '../core/auth/account.dart';
 import '../core/auth/account_store.dart';
 import '../core/auth/password_hasher.dart';
 import '../core/auth/remote_account.dart';
+import '../core/cloud/cloud_api.dart';
 import '../core/error_safety_net.dart';
 
 /// Why a sign-up / sign-in attempt was refused. The UI maps these to
@@ -21,6 +24,10 @@ enum AuthError {
   wrongPassword,
   network,
   storageFailed,
+
+  /// The account signs in with GitHub — password sign-in cannot prove it.
+  /// The UI responds by opening the GitHub device-flow sheet.
+  githubRequired,
 }
 
 /// Result of a sign-up / sign-in attempt.
@@ -62,15 +69,25 @@ class AuthController extends ChangeNotifier {
     AccountKeyValue? store,
     PasswordHasher? hasher,
     RemoteAccountDirectory? remoteDirectory,
+    BetterAuthLink? cloudLink,
+    void Function(String token)? onSessionTokenDropped,
     DateTime Function()? now,
   }) : _store = store ?? ResilientAccountStore(),
        _hasher = hasher ?? PasswordHasher(),
        _remoteDirectory = remoteDirectory,
+       _cloudLink = cloudLink,
+       _onSessionTokenDropped = onSessionTokenDropped,
        _now = now ?? (() => DateTime.now().toUtc());
 
   final AccountKeyValue _store;
   final PasswordHasher _hasher;
   final RemoteAccountDirectory? _remoteDirectory;
+
+  /// Best-effort BetterAuth link for locally-proven password accounts —
+  /// runs in the background after sign-in so every account ends up with a
+  /// BetterAuth identity (v1.19.0). Null in tests / when disabled.
+  final BetterAuthLink? _cloudLink;
+  final void Function(String token)? _onSessionTokenDropped;
   final DateTime Function() _now;
 
   static const String _kAccountsKey = 'accounts_v1';
@@ -85,6 +102,14 @@ class AuthController extends ChangeNotifier {
   bool _busy = false;
   List<AccountRecord> _accounts = <AccountRecord>[];
   String? _sessionId;
+
+  /// BetterAuth bearer token of the current session, when one was minted
+  /// (GitHub sign-in, remote directory sign-in or the background link).
+  /// The app's cloud calls accept it directly (server-side bridge).
+  String? _sessionToken;
+
+  /// The signed-in account's BetterAuth bearer token, or null.
+  String? get sessionToken => _sessionToken;
 
   // ---------------------------------------------------------------- accessors
 
@@ -153,6 +178,7 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _loadSession() async {
     _sessionId = null;
+    _sessionToken = null;
     try {
       final raw = await _store.read(_kSessionKey);
       if (raw == null || raw.isEmpty) return;
@@ -161,10 +187,14 @@ class AuthController extends ChangeNotifier {
       final id = map['accountId'];
       if (id is String && _accounts.any((a) => a.id == id)) {
         _sessionId = id;
+        _sessionToken = map['token'] is String && (map['token'] as String).isNotEmpty
+            ? map['token'] as String
+            : null;
       }
     } catch (e, s) {
       DiagnosticsLog.I.record('auth: session payload unreadable — $e', s);
       _sessionId = null;
+      _sessionToken = null;
     }
   }
 
@@ -261,6 +291,11 @@ class AuthController extends ChangeNotifier {
       for (final a in _accounts) {
         if (a.id == id) account = a;
       }
+      // GitHub accounts have no local password to verify — the only way
+      // back in is the GitHub device flow, which the UI opens for this.
+      if (account != null && account.provider == AccountRecord.kProviderGithub) {
+        return const AuthFailure(AuthError.githubRequired);
+      }
       if (account == null) {
         final directory = _remoteDirectory;
         if (directory == null) {
@@ -278,8 +313,9 @@ class AuthController extends ChangeNotifier {
           return const AuthFailure(AuthError.network);
         }
         return switch (outcome) {
-          RemoteAuthConfirmed(:final profile) =>
-            await _adoptCloudAccount(id, identifier.trim(), profile, password),
+          RemoteAuthConfirmed(:final profile, :final sessionToken) =>
+            await _adoptCloudAccount(id, identifier.trim(), profile, password,
+                sessionToken: sessionToken),
           RemoteAuthUnknownAccount() =>
             const AuthFailure(AuthError.accountNotFound),
           RemoteAuthBadPassword() =>
@@ -291,14 +327,31 @@ class AuthController extends ChangeNotifier {
       if (!ok) return const AuthFailure(AuthError.wrongPassword);
       await _storeSession(account.id);
       _sessionId = account.id;
+      _sessionToken = null;
       notifyListeners();
+      // v1.19.0 — quietly make sure this account also exists in the
+      // BetterAuth identity layer (first sign-in after the upgrade, or an
+      // earlier attempt that ran offline). Non-blocking: the sign-in is
+      // already complete, and a failure retries on the next sign-in.
+      if (!account.baLinked) unawaited(_linkCloudIdentity(account, password));
       return AuthSuccess(account);
     });
   }
 
-  /// Clears the session — accounts stay on the device.
+  /// Clears the session — accounts stay on the device. Any stored
+  /// BetterAuth session is revoked server-side best-effort (its 30-day
+  /// expiry is the backstop when the device is offline).
   Future<void> signOut() async {
+    final token = _sessionToken;
     _sessionId = null;
+    _sessionToken = null;
+    if (token != null) {
+      try {
+        _onSessionTokenDropped?.call(token);
+      } catch (_) {
+        // Revocation is hygiene, never a gate for local sign-out.
+      }
+    }
     try {
       await _store.delete(_kSessionKey);
     } catch (_) {
@@ -318,6 +371,7 @@ class AuthController extends ChangeNotifier {
     try {
       _accounts = <AccountRecord>[];
       _sessionId = null;
+      _sessionToken = null;
       try {
         await _store.delete(_kAccountsKey);
         await _store.delete(_kSessionKey);
@@ -344,8 +398,9 @@ class AuthController extends ChangeNotifier {
     String id,
     String typedIdentifier,
     RemoteAccountProfile? profile,
-    String password,
-  ) async {
+    String password, {
+    String? sessionToken,
+  }) async {
     final String hash;
     try {
       hash = (await _hasher.hash(password)).encode();
@@ -385,14 +440,17 @@ class AuthController extends ChangeNotifier {
               isUtc: true,
             )
           : _now(),
+      // The identity was just proven through BetterAuth — it is linked.
+      baLinked: sessionToken != null,
     );
     _accounts.add(account);
     if (!await _persistAccounts()) {
       _accounts.remove(account);
       return const AuthFailure(AuthError.storageFailed);
     }
-    await _storeSession(account.id);
+    await _storeSession(account.id, token: sessionToken);
     _sessionId = account.id;
+    _sessionToken = sessionToken;
     // Observability without leaking the identifier into the trail.
     DiagnosticsLog.I.record(
       'auth: account restored via cloud sign-in',
@@ -433,17 +491,126 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> _storeSession(String accountId) async {
+  Future<void> _storeSession(String accountId, {String? token}) async {
     try {
       await _store.write(
         _kSessionKey,
         jsonEncode(<String, dynamic>{
           'accountId': accountId,
           'sinceMs': _now().millisecondsSinceEpoch,
+          if (token != null && token.isNotEmpty) 'token': token,
         }),
       );
     } catch (_) {
       // Session persistence failed — sign-in still holds for this run.
     }
+  }
+
+  /// v1.19.0 — background BetterAuth link for a locally-proven password
+  /// account. Fires after a successful sign-in; on success the record is
+  /// flagged (so it never runs twice) and the bearer token rides in the
+  /// persisted session. Failures are silent: the next sign-in retries,
+  /// and the remote directory performs the same upgrade when needed.
+  Future<void> _linkCloudIdentity(AccountRecord account, String password) async {
+    final link = _cloudLink;
+    if (link == null) return;
+    try {
+      final token = await link.linkAccount(
+        accountId: account.id,
+        identifier: account.identifier,
+        displayName: account.displayName,
+        password: password,
+      );
+      if (token == null || token.isEmpty) return;
+      final index = _accounts.indexWhere((a) => a.id == account.id);
+      if (index < 0) return;
+      _accounts[index] = _accounts[index].copyWith(baLinked: true);
+      await _persistAccounts();
+      if (_sessionId == account.id && _sessionToken == null) {
+        _sessionToken = token;
+        await _storeSession(account.id, token: token);
+      }
+      DiagnosticsLog.I.record(
+        'auth: account linked to BetterAuth identity',
+        StackTrace.current,
+      );
+      notifyListeners();
+    } catch (e, s) {
+      DiagnosticsLog.I.record('auth: BetterAuth link failed — $e', s);
+    }
+  }
+
+  /// v1.19.0 — completes a GitHub device-flow sign-in: the browser proved
+  /// the user's identity and the app holds the resulting BetterAuth
+  /// session. Creates (or refreshes) the local record — GitHub accounts
+  /// carry an unusable random password hash, since sign-in always reruns
+  /// the device flow — and signs the user in.
+  Future<AuthResult> completeGitHubSignIn(BetterAuthSession session) {
+    return _guard(() async {
+      final identifier = identifierFromBetterAuthEmail(session.user.email);
+      final validation = validateAccountIdentifier(identifier);
+      if (validation is! AccountIdValid) {
+        return const AuthFailure(AuthError.invalidIdentifier);
+      }
+      final id = validation.normalized;
+      final name = session.user.name.trim();
+
+      AccountRecord? existing;
+      for (final a in _accounts) {
+        if (a.id == id) existing = a;
+      }
+      if (existing != null && existing.provider == AccountRecord.kProviderGithub) {
+        // Refresh the display name if the GitHub profile grew one.
+        if (name.length >= _minNameLength && name != existing.displayName) {
+          final index = _accounts.indexOf(existing);
+          _accounts[index] = existing.copyWith(displayName: name);
+          await _persistAccounts();
+          existing = _accounts[index];
+        }
+        await _storeSession(existing.id, token: session.token);
+        _sessionId = existing.id;
+        _sessionToken = session.token;
+        notifyListeners();
+        return AuthSuccess(existing);
+      }
+
+      // A password account with the same identifier exists — GitHub simply
+      // proves the same identity; adopt the session without touching the
+      // local credential.
+      if (existing != null) {
+        await _storeSession(existing.id, token: session.token);
+        _sessionId = existing.id;
+        _sessionToken = session.token;
+        notifyListeners();
+        return AuthSuccess(existing);
+      }
+
+      // A random 256-bit value no password verifies against — the record
+      // exists so settings can show the account; sign-in reruns GitHub.
+      final random = Random.secure();
+      final unusableHash =
+          List.generate(64, (_) => random.nextInt(16).toRadixString(16)).join();
+      _makeRoomForNewAccount();
+      final account = AccountRecord(
+        id: id,
+        identifier: displayIdentifierFor(id),
+        displayName: name.length >= _minNameLength
+            ? name
+            : displayIdentifierFor(id),
+        passwordHash: unusableHash,
+        createdAtUtc: _now(),
+        provider: AccountRecord.kProviderGithub,
+      );
+      _accounts.add(account);
+      if (!await _persistAccounts()) {
+        _accounts.remove(account);
+        return const AuthFailure(AuthError.storageFailed);
+      }
+      await _storeSession(account.id, token: session.token);
+      _sessionId = account.id;
+      _sessionToken = session.token;
+      notifyListeners();
+      return AuthSuccess(account);
+    });
   }
 }
