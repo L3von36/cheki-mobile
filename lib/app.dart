@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/auth/account_store.dart';
 import 'core/auth/password_hasher.dart';
 import 'core/cloud/cloud_account_directory.dart';
+import 'core/cloud/cloud_api.dart';
 import 'core/error_safety_net.dart';
 import 'core/localization/am_material_localizations.dart';
 import 'core/localization/app_strings.dart';
@@ -108,6 +111,13 @@ class MahtemApp extends StatelessWidget {
                     store: authStore,
                     hasher: hasher,
                     remoteDirectory: CloudAccountDirectory(),
+                    // v1.19.0 — BetterAuth identity layer: fresh password
+                    // accounts link quietly after sign-in; dropped session
+                    // tokens revoke server-side (best-effort).
+                    cloudLink: CloudAccountDirectory(),
+                    onSessionTokenDropped: (token) {
+                      unawaited(CloudApi().betterAuthSignOut(token));
+                    },
                   ))
                 ..ensureLoaded(),
         ),

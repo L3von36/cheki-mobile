@@ -12,6 +12,7 @@
     "test": "node test/run-local.cjs"
   },
   "dependencies": {
+    "better-auth": "^1.7.18",
     "express": "^4.19.2",
     "mysql2": "^3.11.0"
   }

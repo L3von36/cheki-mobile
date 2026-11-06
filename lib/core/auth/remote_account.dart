@@ -53,9 +53,13 @@ sealed class RemoteAuthOutcome {
 /// The cloud recognized the identifier and the password proved it.
 /// [profile] is null when the cloud vault predates profiles (or holds
 /// no vault at all) — the caller falls back to safe display defaults.
+/// [sessionToken] carries the BetterAuth bearer session when the proof
+/// ran through the BetterAuth layer (v1.19.0) — the controller persists
+/// it alongside the session so cloud calls can use it directly.
 class RemoteAuthConfirmed extends RemoteAuthOutcome {
   final RemoteAccountProfile? profile;
-  const RemoteAuthConfirmed(this.profile);
+  final String? sessionToken;
+  const RemoteAuthConfirmed(this.profile, {this.sessionToken});
 }
 
 /// No cloud account exists for this identifier: the account genuinely
@@ -82,6 +86,21 @@ class RemoteAuthUnreachable extends RemoteAuthOutcome {
 abstract class RemoteAccountDirectory {
   Future<RemoteAuthOutcome> authenticate({
     required String accountId,
+    required String password,
+  });
+}
+
+/// Links a LOCALLY-proven account (the password was just verified against
+/// the on-device PBKDF2 hash) to the BetterAuth identity layer: the server
+/// re-proves the zero-knowledge credential, creates/links the BetterAuth
+/// user and returns the bearer session. Returns null when the link could
+/// not be established right now (offline, server trouble) — linking is
+/// best-effort and retries on a later sign-in.
+abstract class BetterAuthLink {
+  Future<String?> linkAccount({
+    required String accountId,
+    required String identifier,
+    required String displayName,
     required String password,
   });
 }

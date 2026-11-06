@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Approve device — Mahtem ማህተም</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2322A45D'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23fff' stroke-width='3.5' stroke-dasharray='6 4'/%3E%3Ctext x='32' y='40' font-size='21' font-weight='700' text-anchor='middle' fill='%23fff' font-family='Noto Sans Ethiopic,sans-serif'%3E%E1%88%9B%3C/text%3E%3C/svg%3E">
+<style>
+:root{--green:#26B367;--green-deep:#168A4C;--mint:#6fe3a1;--ink:#E6ECF5;--muted:#9AA9BE;--line:rgba(255,255,255,.09)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:radial-gradient(700px 420px at 50% -10%,rgba(38,179,103,.16) 0%,transparent 60%),#04070A;color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:100%;max-width:420px;background:linear-gradient(170deg,#0B1424 0%,#04070A 80%);border:1px solid var(--line);border-radius:24px;padding:30px 28px;box-shadow:0 40px 90px rgba(0,0,0,.5)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;margin-bottom:20px}
+.seal{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#26B367,var(--green-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.brand .am{color:var(--muted);font-weight:500;font-size:.9rem}
+h1{font-size:1.25rem;letter-spacing:-.015em;margin-bottom:8px}
+p.sub{color:var(--muted);font-size:.92rem;line-height:1.55}
+.code{margin:18px 0;padding:16px;border:1px solid rgba(38,179,103,.4);border-radius:14px;background:rgba(38,179,103,.08);text-align:center;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:1.7rem;font-weight:800;letter-spacing:.35em;color:var(--mint);text-indent:.35em}
+.status{margin:14px 0;font-size:.9rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.6s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+button{width:100%;padding:13px;border-radius:12px;border:1px solid transparent;font-weight:700;font-size:.95rem;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .15s ease,box-shadow .15s ease}
+button:active{transform:translateY(1px)}
+.approve{background:linear-gradient(135deg,#26B367,var(--green-deep));color:#fff;box-shadow:0 10px 24px rgba(38,179,103,.3)}
+.approve:hover{box-shadow:0 12px 28px rgba(22,138,76,.4)}
+.deny{background:transparent;border-color:rgba(255,255,255,.14);color:var(--muted);margin-top:10px}
+.gh{background:#fff;color:#0d1117;margin-top:18px}
+.gh:hover{box-shadow:0 10px 26px rgba(255,255,255,.12)}
+.err{margin-top:12px;padding:11px 13px;border-radius:11px;background:rgba(255,99,99,.1);border:1px solid rgba(255,99,99,.35);color:#ffb3b3;font-size:.86rem;display:none}
+.ok-panel{text-align:center;padding:16px 0 6px}
+.ok-panel .big{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;background:rgba(38,179,103,.14);border:1px solid rgba(38,179,103,.45);display:flex;align-items:center;justify-content:center;color:var(--mint)}
+form.ema{margin-top:14px;display:grid;gap:9px}
+form.ema input{padding:11px 13px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);font-family:inherit;font-size:.92rem}
+form.ema input:focus{outline:none;border-color:rgba(38,179,103,.5)}
+.or{margin-top:14px;color:var(--muted);font-size:.8rem;text-align:center;letter-spacing:.08em;text-transform:uppercase}
+.note{margin-top:16px;color:var(--muted);font-size:.8rem;line-height:1.5}
+.spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:rot .8s linear infinite;display:inline-block}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand"><span class="seal">ማ</span> Mahtem <span class="am">ማህተም</span></div>
+  <div id="stage"><p class="sub">Checking this device code…</p></div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var stage = document.getElementById('stage');
+  var params = new URLSearchParams(location.search);
+  var userCode = (params.get('user_code') || '').trim().toUpperCase();
+  var API = '/api/auth';
+  var CLIENT = { 'Content-Type': 'application/json', 'X-Mahtem-Client': 'device-page' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function render(html) { stage.innerHTML = html; }
+  function showError(msg) {
+    var box = document.querySelector('.err');
+    if (box) { box.textContent = msg; box.style.display = 'block'; }
+    else render('<p class="sub">' + esc(msg) + '</p>');
+  }
+
+  function getJSON(url) {
+    return fetch(url, { headers: { 'X-Mahtem-Client': 'device-page' } }).then(function (r) {
+      return r.json().then(function (body) { return { status: r.status, body: body }; });
+    });
+  }
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: CLIENT,
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (b) { return { status: r.status, body: b }; });
+    });
+  }
+
+  function donePanel(title, sub, good) {
+    render('<div class="ok-panel">' +
+      '<div class="big"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>' +
+      '<h1>' + esc(title) + '</h1><p class="sub" style="margin-top:6px">' + esc(sub) + '</p></div>');
+    if (!good) document.querySelector('.big').style.borderColor = 'rgba(255,99,99,.45)';
+  }
+
+  function approvalPanel() {
+    render(
+      '<h1>Approve this sign-in?</h1>' +
+      '<p class="sub">A Mahtem app on another device is asking to sign in as <b>' + esc(window.__user) + '</b>.</p>' +
+      '<div class="code">' + esc(userCode) + '</div>' +
+      '<p class="sub">Only approve if the code above matches the one shown in the app.</p>' +
+      '<div class="err"></div>' +
+      '<button class="approve" id="approve">Approve device</button>' +
+      '<button class="deny" id="deny">No, it wasn\u2019t me</button>'
+    );
+    document.getElementById('approve').addEventListener('click', function () {
+      var btn = this; btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span> Approving…';
+      postJSON(API + '/device/approve', { userCode: userCode }).then(function (r) {
+        if (r.status === 200 && r.body && r.body.success) {
+          donePanel('Device approved', 'Return to the Mahtem app — it signs in on its own within a few seconds.', true);
+        } else {
+          btn.disabled = false; btn.textContent = 'Approve device';
+          showError((r.body && (r.body.error_description || r.body.message)) || 'Approval failed.');
+        }
+      }).catch(function () { btn.disabled = false; btn.textContent = 'Approve device'; showError('Network problem — try again.'); });
+    });
+    document.getElementById('deny').addEventListener('click', function () {
+      postJSON(API + '/device/deny', { userCode: userCode }).then(function () {
+        donePanel('Denied', 'The device was not signed in.', false);
+      }).catch(function () { donePanel('Denied', 'The device was not signed in.', false); });
+    });
+  }
+
+  function signInPanel(providers) {
+    var html =
+      '<h1>Sign in to continue</h1>' +
+      '<p class="sub">A Mahtem app is asking to sign in. First sign in on this device, then approve the code.</p>' +
+      '<div class="code">' + esc(userCode) + '</div>' +
+      '<div class="err"></div>';
+    if (providers && providers.github) {
+      html += '<button class="gh" id="gh"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.66.41.35.77 1.05.77 2.12 0 1.53-.01 2.76-.01 3.14 0 .3.2.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg> Continue with GitHub</button>';
+      if (providers.github && !providers.githubOnly) html += '<div class="or">or use email</div>';
+    }
+    html +=
+      '<form class="ema" id="ema">' +
+      '<input id="email" type="email" placeholder="Email or phone number" autocomplete="username" required>' +
+      '<input id="password" type="password" placeholder="Password" autocomplete="current-password" required>' +
+      '<button class="approve" type="submit">Sign in</button></form>' +
+      '<p class="note">Why sign in? So this device is linked to YOUR account — never approve a code you did not request.</p>';
+    render(html);
+
+    var ghBtn = document.getElementById('gh');
+    if (ghBtn) {
+      ghBtn.addEventListener('click', function () {
+        var here = location.origin + '/auth/device.html?user_code=' + encodeURIComponent(userCode);
+        postJSON(API + '/sign-in/social', { provider: 'github', callbackURL: here }).then(function (r) {
+          if (r.body && r.body.url) location.href = r.body.url;
+          else showError((r.body && r.body.message) || 'Could not start GitHub sign-in.');
+        }).catch(function () { showError('Network problem — try again.'); });
+      });
+    }
+    document.getElementById('ema').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var raw = document.getElementById('email').value.trim();
+      var password = document.getElementById('password').value;
+      var email = /^[0-9+\s-]+$/.test(raw)
+        ? raw.replace(/[^0-9]/g, '').replace(/^0/, '251').replace(/^\+?251/, '251') + '@phone.mahtem.et'
+        : raw.toLowerCase();
+      postJSON(API + '/sign-in/email', { email: email, password: password }).then(function (r) {
+        if (r.status === 200) check();
+        else showError((r.body && r.body.message) || 'Wrong email/identifier or password.');
+      }).catch(function () { showError('Network problem — try again.'); });
+    });
+  }
+
+  function check() {
+    // Session first (null body = signed out), then the code's status.
+    getJSON(API + '/get-session').then(function (sessionResponse) {
+      var user = sessionResponse.body && sessionResponse.body.user;
+      return getJSON(API + '/device?user_code=' + encodeURIComponent(userCode)).then(function (r) {
+        if (r.status !== 200 || !r.body || !r.body.status) {
+          return donePanel('Code not found', 'This device code is invalid or was already used. Request a new one from the app.', false);
+        }
+        var status = r.body.status;
+        if (status === 'approved') return donePanel('Device approved', 'Return to the Mahtem app.', true);
+        if (status === 'denied') return donePanel('Denied', 'This sign-in request was denied.', false);
+        if (!user) {
+          return getJSON('/v1/auth/providers').then(function (p) {
+            signInPanel((p.status === 200 && p.body) || { github: false });
+          }).catch(function () { signInPanel({ github: false }); });
+        }
+        window.__user = user.email || user.name || 'your account';
+        approvalPanel();
+      });
+    }).catch(function () { showError('Could not reach the server. Check your connection and reload.'); });
+  }
+
+  if (!userCode) {
+    donePanel('Missing code', 'Open this page from the Mahtem app — it carries the approval code.', false);
+  } else {
+    check();
+  }
+})();
+</script>
+</body>
+</html>

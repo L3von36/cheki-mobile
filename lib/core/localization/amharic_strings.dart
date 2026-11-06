@@ -178,10 +178,47 @@ final class AmharicStrings extends AppStrings {
     AuthError.network =>
       'የመለያ አገልግሎቱን ማግኘት አልተቻለም። የበይነመረብ ግንኙነትዎን ያረጋግጡ።',
     AuthError.storageFailed => 'መለያውን ማስቀመጥ አልተቻለም። እንደገና ይሞክሩ።',
+    AuthError.githubRequired =>
+      'ይህ መለያ በGitHub ይገባል — «በGitHub ይቀጥሉ»ን ይጫኑ።',
   };
 
   @override
   String get genericAuthError => 'ችግር አጋጥሟል። እባክዎ እንደገና ይሞክሩ።';
+
+  // ── GitHub መግቢያ (BetterAuth device flow) ───────────────────────────
+
+  @override
+  String get continueWithGithub => 'በGitHub ይቀጥሉ';
+
+  @override
+  String get githubSheetTitle => 'በGitHub መግቢያ';
+
+  @override
+  String get githubSheetBody =>
+      'አንድ-ጊዜ የመሣሪያ ኮድ ተፈጥሯል። በብራውዘርዎ ፈቅደው ይግቡ — '
+      'ይህ ስክሪን ከፈቀዱ በኋላ በራሱ ይቀጥላል።';
+
+  @override
+  String get githubDeviceCodeLabel => 'የመሣሪያ ኮድ';
+
+  @override
+  String get githubOpenBrowser => 'ብራውዘሩን እንደገና ይክፈቱ';
+
+  @override
+  String get githubWaiting => 'በመፈቀድ ላይ…';
+
+  @override
+  String get githubNotEnabled =>
+      'በGitHub መግቢያ ገና አልተከፈተም — በስልክ ቁጥር/ኢሜይል እና በይለፍ ቃልዎ ይግቡ።';
+
+  @override
+  String get githubExpired => 'የመሣሪያ ኮዱ ጊዜው አልፏል። እንደገና ይጀምሩ።';
+
+  @override
+  String get githubDenied => 'መግቢያው በብራውዘሩ ውስጥ አልተፈቀደም።';
+
+  @override
+  String get retry => 'እንደገና ይሞክሩ';
 
   // ---------------------------------------------------------------- settings
 

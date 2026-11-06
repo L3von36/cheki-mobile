@@ -142,6 +142,19 @@ abstract base class AppStrings {
   String errorAuth(AuthError error);
   String get genericAuthError;
 
+  // ── GitHub sign-in (BetterAuth device flow, v1.19.0) ────────────────
+
+  String get continueWithGithub;
+  String get githubSheetTitle;
+  String get githubSheetBody;
+  String get githubDeviceCodeLabel;
+  String get githubOpenBrowser;
+  String get githubWaiting;
+  String get githubNotEnabled;
+  String get githubExpired;
+  String get githubDenied;
+  String get retry;
+
   // ---------------------------------------------------------------- settings
 
   String get settingsTitle;
