@@ -2,13 +2,21 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:mahtem/core/cloud/cloud_api.dart';
 
-/// In-memory twin of the deployed mahtem-api Worker: accounts, sessions
-/// and vaults with the same routes and status codes the real server uses.
+/// In-memory twin of the deployed mahtem-api server: accounts, sessions
+/// and vaults with the same routes and status codes the real server uses,
+/// plus the BetterAuth tier (sign-in/email + /v1/auth/legacy-migrate).
 /// Shared by the cloud controller and cloud account directory tests.
 class FakeCloudServer {
   final users = <String, Map<String, dynamic>>{};
   final vaults = <String, Map<String, dynamic>>{};
+
+  /// BetterAuth identities keyed by the synthetic email the client maps
+  /// identifiers onto (`<intl>@phone.mahtem.et`). Created only by
+  /// /v1/auth/legacy-migrate, exactly like production: an account
+  /// provisioned the legacy way signs in via the migration fallback.
+  final betterAuthUsers = <String, Map<String, dynamic>>{};
   int revisionBumps = 0;
   int putAttempts = 0; // every vault PUT, successful or not
   int requests = 0; // every request that reached the client at all
@@ -141,6 +149,60 @@ class FakeCloudServer {
         if (request.method == 'DELETE' && path == '/v1/session') {
           sessionDeletes++;
           return http.Response(jsonEncode({'ok': true}), 200);
+        }
+        if (request.method == 'POST' && path == '/api/auth/sign-in/email') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final ba = betterAuthUsers[body['email'] as String];
+          if (ba == null || ba['password'] != body['password']) {
+            // Enumeration-safe: unknown identity and wrong password are
+            // indistinguishable, same as the real Better Auth.
+            return http.Response(
+                jsonEncode({'error': 'INVALID_EMAIL_OR_PASSWORD'}), 401);
+          }
+          return http.Response(jsonEncode({
+            'token': ba['token'],
+            'user': {
+              'id': ba['id'],
+              'email': body['email'],
+              'name': ba['name'],
+            },
+          }), 200);
+        }
+        if (request.method == 'POST' && path == '/v1/auth/legacy-migrate') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          final user = users[body['identifierHash'] as String];
+          if (user == null) {
+            return http.Response(jsonEncode({'error': 'no_account'}), 404);
+          }
+          if (user['authKey'] != body['authKey']) {
+            return http.Response(jsonEncode({'error': 'bad_credentials'}), 401);
+          }
+          final displayName = (body['displayName'] as String?)?.trim();
+          final email = betterAuthEmailFor(body['identifier'] as String);
+          final ba = betterAuthUsers.putIfAbsent(email, () {
+            return {
+              'id': user['id'],
+              'name': (displayName == null || displayName.isEmpty)
+                  ? body['identifier']
+                  : displayName,
+              'password': body['password'],
+              // Same user id as the legacy account, so the bearer token
+              // resolves to the same vault/ledger everywhere.
+              'token': 'tok-${user['id']}',
+            };
+          });
+          ba['password'] = body['password'];
+          if (displayName != null && displayName.isNotEmpty) {
+            ba['name'] = displayName;
+          }
+          return http.Response(jsonEncode({
+            'token': ba['token'],
+            'user': {
+              'id': user['id'],
+              'email': email,
+              'name': ba['name'],
+            },
+          }), 200);
         }
         return http.Response(jsonEncode({'error': 'not_found'}), 404);
       });

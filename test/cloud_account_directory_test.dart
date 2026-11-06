@@ -12,7 +12,9 @@ import 'fixtures/fake_cloud_server.dart';
 
 /// End-to-end twin of the "cleared app data / second phone" path:
 /// provision a cloud account the way backup arming does, then prove the
-/// credentials the way sign-in's remote fallback does.
+/// credentials the way sign-in's remote fallback does. Since v1.19.0 the
+/// proof runs through BetterAuth sign-in with the legacy-migration
+/// fallback — the fake server emulates both tiers.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -97,7 +99,12 @@ void main() {
       password: password,
     );
     expect(outcome, isA<RemoteAuthConfirmed>());
-    expect((outcome as RemoteAuthConfirmed).profile, isNull);
+    // v1.19.0: there is always a profile — with no vault it is built from
+    // the BetterAuth identity (the synthetic email maps back to the typed
+    // identifier; the display name is what the migration recorded).
+    final profile = (outcome as RemoteAuthConfirmed).profile!;
+    expect(profile.identifier, accountId);
+    expect(profile.displayName, accountId);
   });
 
   test(
@@ -123,15 +130,16 @@ void main() {
     },
   );
 
-  test('the throwaway session is deleted after the profile read', () async {
+  test('the confirmed session is kept for the caller, not deleted', () async {
     await provisionCloudAccount();
     await uploadVaultWithProfile(null);
-    await directory.authenticate(accountId: accountId, password: password);
-    // v1.18.12: the delete is fire-and-forget — it no longer sits on the
-    // sign-in critical path. Flush the event loop so the background
-    // deletion lands before the assertion.
+    final outcome = await directory.authenticate(accountId: accountId, password: password);
+    // v1.19.0: the session handed back IS the sign-in session (the
+    // BetterAuth bearer token) — deleting it would sign the caller out.
+    // The old throwaway-session cleanup died with the legacy-only flow.
     await pumpEventQueue();
-    expect(server.sessionDeletes, 1);
+    expect(server.sessionDeletes, 0);
+    expect((outcome as RemoteAuthConfirmed).sessionToken, isNotEmpty);
   });
 
   test('identifier hashing matches the backup arming path', () async {
