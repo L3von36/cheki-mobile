@@ -8,6 +8,15 @@ library;
 
 /// A single device-local account.
 class AccountRecord {
+  /// How the account authenticates in the cloud:
+  ///   * [kProviderPassword] — phone/email + password (BetterAuth email
+  ///     mapping for phones), PBKDF2 hash verified locally first;
+  ///   * [kProviderGithub] — GitHub sign-in via the device flow; there is
+  ///     no local password and [passwordHash] holds an unusable random
+  ///     value (sign-in always goes through the GitHub flow again).
+  static const String kProviderPassword = 'password';
+  static const String kProviderGithub = 'github';
+
   /// Normalized identifier (see [validateAccountIdentifier]) — the
   /// lookup key for sign-in, always lowercase/digits.
   final String id;
@@ -22,21 +31,49 @@ class AccountRecord {
 
   final DateTime createdAtUtc;
 
+  /// Which cloud identity provider owns this account (v1.19.0).
+  final String provider;
+
+  /// True once the account has been linked to its BetterAuth identity
+  /// (best-effort at sign-in; retried on later sign-ins when it wasn't).
+  final bool baLinked;
+
   const AccountRecord({
     required this.id,
     required this.identifier,
     required this.displayName,
     required this.passwordHash,
     required this.createdAtUtc,
+    this.provider = kProviderPassword,
+    this.baLinked = false,
   });
 
+  AccountRecord copyWith({
+    String? identifier,
+    String? displayName,
+    String? passwordHash,
+    String? provider,
+    bool? baLinked,
+  }) =>
+      AccountRecord(
+        id: id,
+        identifier: identifier ?? this.identifier,
+        displayName: displayName ?? this.displayName,
+        passwordHash: passwordHash ?? this.passwordHash,
+        createdAtUtc: createdAtUtc,
+        provider: provider ?? this.provider,
+        baLinked: baLinked ?? this.baLinked,
+      );
+
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id,
-    'identifier': identifier,
-    'displayName': displayName,
-    'passwordHash': passwordHash,
-    'createdAtMs': createdAtUtc.millisecondsSinceEpoch,
-  };
+        'id': id,
+        'identifier': identifier,
+        'displayName': displayName,
+        'passwordHash': passwordHash,
+        'createdAtMs': createdAtUtc.millisecondsSinceEpoch,
+        'provider': provider,
+        'baLinked': baLinked,
+      };
 
   static AccountRecord? tryFromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -62,6 +99,10 @@ class AccountRecord {
         createdAtMs,
         isUtc: true,
       ),
+      // Tolerant: accounts persisted before v1.19.0 are password accounts.
+      provider:
+          json['provider'] == kProviderGithub ? kProviderGithub : kProviderPassword,
+      baLinked: json['baLinked'] == true,
     );
   }
 

@@ -249,6 +249,10 @@ function ensureSchema() {
     'ALTER TABLE `accounts` ADD COLUMN `sign_in_count` BIGINT NOT NULL DEFAULT 0',
     'ALTER TABLE `accounts` ADD COLUMN `created_dt` DATETIME NULL',
     'ALTER TABLE `accounts` ADD COLUMN `last_seen_dt` DATETIME NULL',
+    // v1.19.0 — BetterAuth identity link (see src/auth.mjs). The BetterAuth
+    // tables themselves live in a separate SQLite database; this column is
+    // the only touch point.
+    'ALTER TABLE `accounts` ADD COLUMN `better_auth_user_id` VARCHAR(64) NULL',
     'ALTER TABLE `verified_receipts` ADD COLUMN `verified_dt` DATETIME NULL',
     'ALTER TABLE `verified_receipts` ADD COLUMN `created_dt` DATETIME NULL',
   ];
@@ -259,11 +263,13 @@ function ensureSchema() {
   const indexStatements = mysql
     ? [
         'CREATE INDEX `ix_accounts_identifier` ON `accounts` (`identifier`(191))',
+        'CREATE INDEX `ix_accounts_ba_user` ON `accounts` (`better_auth_user_id`)',
         'CREATE INDEX `ix_sign_ins_user_time` ON `sign_ins` (`user_id`, `at`)',
         'CREATE INDEX `ix_receipts_user_time` ON `verified_receipts` (`user_id`, `verified_at`)',
       ]
     : [
         'CREATE INDEX IF NOT EXISTS `ix_accounts_identifier` ON `accounts` (`identifier`)',
+        'CREATE INDEX IF NOT EXISTS `ix_accounts_ba_user` ON `accounts` (`better_auth_user_id`)',
         'CREATE INDEX IF NOT EXISTS `ix_sign_ins_user_time` ON `sign_ins` (`user_id`, `at`)',
         'CREATE INDEX IF NOT EXISTS `ix_receipts_user_time` ON `verified_receipts` (`user_id`, `verified_at`)',
       ];

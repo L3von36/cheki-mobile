@@ -41,7 +41,7 @@ const driver = (process.env.DB_DRIVER || 'mysql').trim().toLowerCase();
 
 const config = {
   appRoot: APP_ROOT,
-  version: '1.18.0-node',
+  version: '1.19.0-node',
 
   /** 'mysql' in production. 'sqlite' exists only for local development tests. */
   driver: driver === 'sqlite' ? 'sqlite' : 'mysql',
@@ -57,6 +57,23 @@ const config = {
   /** Local development / testing only (never used when driver = mysql). */
   sqlitePath:
     process.env.DB_SQLITE_PATH || path.join(APP_ROOT, 'data', 'mahtem.sqlite'),
+
+  /**
+   * BetterAuth identity database — ALWAYS SQLite (node:sqlite), on Plesk
+   * too. Deliberately separate from the MySQL data so a Better Auth
+   * version bump can never migrate/corrupt app tables. Override only for
+   * exotic setups.
+   */
+  betterAuthSqlitePath:
+    process.env.BETTER_AUTH_SQLITE_PATH ||
+    path.join(APP_ROOT, 'data', 'mahtem-auth.sqlite'),
+
+  /**
+   * Canonical public origin, used as BetterAuth's baseURL when
+   * BETTER_AUTH_URL is not set. Passenger serves this API at the site
+   * root, so the site URL IS the API base URL.
+   */
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://mahtem.com.et',
 
   /**
    * JWT signing secret. Leave empty to auto-provision a random secret into

@@ -178,10 +178,48 @@ final class EnglishStrings extends AppStrings {
       "Can't reach the account service. Check your internet and try again.",
     AuthError.storageFailed =>
       'Could not save the account on this device. Try again.',
+    AuthError.githubRequired =>
+      'This account signs in with GitHub — tap "Continue with GitHub".',
   };
 
   @override
   String get genericAuthError => 'Something went wrong. Try again.';
+
+  // ── GitHub sign-in (BetterAuth device flow) ─────────────────────────
+
+  @override
+  String get continueWithGithub => 'Continue with GitHub';
+
+  @override
+  String get githubSheetTitle => 'Sign in with GitHub';
+
+  @override
+  String get githubSheetBody =>
+      'A one-time device code was created. Approve the sign-in in your '
+      'browser — this screen continues automatically once you approve.';
+
+  @override
+  String get githubDeviceCodeLabel => 'DEVICE CODE';
+
+  @override
+  String get githubOpenBrowser => 'Open the browser again';
+
+  @override
+  String get githubWaiting => 'Waiting for approval…';
+
+  @override
+  String get githubNotEnabled =>
+      'GitHub sign-in is not enabled on the server yet — sign in with your '
+      'phone/email and password.';
+
+  @override
+  String get githubExpired => 'The device code expired. Start again.';
+
+  @override
+  String get githubDenied => 'Sign-in was denied in the browser.';
+
+  @override
+  String get retry => 'Try again';
 
   // ---------------------------------------------------------------- settings
 

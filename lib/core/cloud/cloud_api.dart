@@ -181,6 +181,72 @@ class CloudVaultRemote {
   });
 }
 
+/// A BetterAuth identity (v1.19.0). [email] is what Better Auth stores —
+/// for phone-number accounts it is the synthetic `<intl>@phone.mahtem.et`
+/// mapping (see [betterAuthEmailFor]); reverse it with
+/// [identifierFromBetterAuthEmail].
+class BetterAuthUser {
+  final String id;
+  final String email;
+  final String name;
+
+  const BetterAuthUser({required this.id, required this.email, required this.name});
+}
+
+/// A BetterAuth session: the raw session token used as
+/// `Authorization: Bearer <token>` everywhere (the server's bearer plugin
+/// and the /v1 bridge both accept it).
+class BetterAuthSession {
+  final String token;
+  final BetterAuthUser user;
+
+  const BetterAuthSession({required this.token, required this.user});
+}
+
+/// Reply from POST /api/auth/device/code — the OAuth 2.0 device grant.
+class BetterAuthDeviceCode {
+  final String deviceCode;
+  final String userCode;
+  final String verificationUri;
+  final String? verificationUriComplete;
+  final int expiresInSeconds;
+  final int intervalSeconds;
+
+  const BetterAuthDeviceCode({
+    required this.deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    this.verificationUriComplete,
+    required this.expiresInSeconds,
+    required this.intervalSeconds,
+  });
+}
+
+/// Outcome of one /api/auth/device/token poll — see
+/// [BetterAuthPollOutcome] at the bottom of this file.
+
+/// The email Better Auth sees for a normalized account identifier.
+/// Phone numbers map onto a reserved synthetic domain the server maps
+/// straight back; emails pass through 1:1.
+String betterAuthEmailFor(String normalizedIdentifier) {
+  final id = normalizedIdentifier.trim().toLowerCase();
+  if (id.contains('@')) return id;
+  return '$id@phone.mahtem.et';
+}
+
+/// Inverse of [betterAuthEmailFor] — the readable identifier (normalized)
+/// behind a Better Auth email.
+String identifierFromBetterAuthEmail(String email) {
+  final value = email.trim().toLowerCase();
+  final at = value.lastIndexOf('@');
+  if (at <= 0) return value;
+  final local = value.substring(0, at);
+  if (value.endsWith('@phone.mahtem.et') && RegExp(r'^[0-9]+$').hasMatch(local)) {
+    return local;
+  }
+  return value;
+}
+
 class CloudApi {
   CloudApi({http.Client? client, String baseUrl = kCloudApiBaseUrl})
       : _client = client ?? http.Client(),
@@ -510,4 +576,247 @@ class CloudApi {
   /// readable receipt history.
   Future<void> deleteReceipts(String sessionToken) =>
       _send('DELETE', '/v1/receipts', bearer: sessionToken);
+
+  // ── BetterAuth identity layer (v1.19.0) ─────────────────────────────
+
+  /// Fixed OAuth device-grant client id the app presents to
+  /// /api/auth/device/*. The server does not validate it (no client
+  /// registry) but binds it to the grant, so it must match at poll time.
+  static const String betterAuthClientId = 'mahtem-app';
+
+  static const Map<String, String> _originHeader = {
+    // Better Auth CSRF protection requires state-changing POSTs to carry a
+    // trusted Origin. Native apps are exempt once they hold a bearer token
+    // — but sign-up/sign-in happen before any token exists, so the client
+    // presents its own API origin, which the server trusts.
+    'Origin': kCloudApiBaseUrl,
+  };
+
+  /// Thin sender for /api/auth/* endpoints: same transport retry as
+  /// [_send], but Better Auth-aware decoding (its error bodies carry
+  /// `code`/`message`, and unauthenticated get-session replies 200/null).
+  Future<({int status, Map<String, dynamic>? body})> _sendBa(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    String? bearer,
+  }) async {
+    final uri = baseUrl.replace(path: path);
+    for (var attempt = 1;; attempt++) {
+      http.Response resp;
+      try {
+        final request = http.Request(method, uri)
+          ..headers.addAll(_clientHeader)
+          ..headers.addAll(_originHeader);
+        if (bearer != null) request.headers['Authorization'] = 'Bearer $bearer';
+        if (body != null) {
+          request.headers['Content-Type'] = 'application/json';
+          request.body = jsonEncode(body);
+        }
+        resp = await _client
+            .send(request)
+            .then(http.Response.fromStream)
+            .timeout(_timeout);
+      } catch (_) {
+        if (attempt >= 2) {
+          throw const CloudApiException(CloudApiError.network, 0);
+        }
+        await Future<void>.delayed(_retryDelay);
+        continue;
+      }
+      Map<String, dynamic>? decoded;
+      try {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) decoded = d;
+      } catch (_) {
+        decoded = null;
+      }
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return (status: resp.statusCode, body: decoded);
+      }
+      throw CloudApiException(_betterAuthErrorFor(resp.statusCode, decoded), resp.statusCode);
+    }
+  }
+
+  static CloudApiError _betterAuthErrorFor(
+    int status,
+    Map<String, dynamic>? body,
+  ) {
+    final code = (body?['code'] ?? body?['error'])?.toString().toUpperCase();
+    switch (code) {
+      case 'USER_ALREADY_EXISTS':
+      case 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL':
+        return CloudApiError.exists;
+      case 'INVALID_EMAIL_OR_PASSWORD':
+      case 'INVALID_PASSWORD':
+      case 'BAD_CREDENTIALS':
+        return CloudApiError.badCredentials;
+      case 'AUTHORIZATION_PENDING':
+        return CloudApiError.empty; // still pending — poll again
+      case 'SLOW_DOWN':
+        return CloudApiError.conflict;
+      case 'EXPIRED_TOKEN':
+      case 'ACCESS_DENIED':
+        return CloudApiError.notFound;
+    }
+    if (status == 401) return CloudApiError.badCredentials;
+    if (status == 422) return CloudApiError.exists;
+    if (status == 404) return CloudApiError.notFound;
+    if (status == 403) return CloudApiError.unauthorized;
+    return status >= 500 || status == 0
+        ? CloudApiError.server
+        : CloudApiError.network;
+  }
+
+  static BetterAuthSession _sessionFrom(Map<String, dynamic> body) {
+    final user = body['user'];
+    final userMap = user is Map<String, dynamic> ? user : const <String, dynamic>{};
+    return BetterAuthSession(
+      token: body['token']?.toString() ?? '',
+      user: BetterAuthUser(
+        id: userMap['id']?.toString() ?? '',
+        email: userMap['email']?.toString() ?? '',
+        name: userMap['name']?.toString() ?? '',
+      ),
+    );
+  }
+
+  /// Creates the BetterAuth identity for [identifier] (a NORMALIZED
+  /// account identifier — phone numbers ride the synthetic-email mapping).
+  Future<BetterAuthSession> betterAuthSignUp({
+    required String identifier,
+    required String displayName,
+    required String password,
+  }) async {
+    final r = await _sendBa('POST', '/api/auth/sign-up/email', body: {
+      'name': displayName,
+      'email': betterAuthEmailFor(identifier),
+      'password': password,
+    });
+    return _sessionFrom(r.body ?? const <String, dynamic>{});
+  }
+
+  /// Signs in through BetterAuth. Unknown identity and wrong password are
+  /// the same 401 server-side (enumeration-safe) — the directory layer
+  /// distinguishes them with the legacy-migration fallback.
+  Future<BetterAuthSession> betterAuthSignIn({
+    required String identifier,
+    required String password,
+  }) async {
+    final r = await _sendBa('POST', '/api/auth/sign-in/email', body: {
+      'email': betterAuthEmailFor(identifier),
+      'password': password,
+    });
+    return _sessionFrom(r.body ?? const <String, dynamic>{});
+  }
+
+  /// Returns null when the token is dead (get-session answers 200/null).
+  Future<BetterAuthSession?> betterAuthGetSession(String token) async {
+    final r = await _sendBa('GET', '/api/auth/get-session', bearer: token);
+    final body = r.body;
+    if (body == null || body.isEmpty || body['user'] == null) return null;
+    return _sessionFrom(<String, dynamic>{
+      'token': token,
+      'user': body['user'],
+    });
+  }
+
+  Future<void> betterAuthSignOut(String token) =>
+      _sendBa('POST', '/api/auth/sign-out', bearer: token);
+
+  /// Which social providers the server has configured — the sign-in UI
+  /// hides the GitHub entry when it is not enabled yet.
+  Future<bool> githubSignInEnabled() async {
+    try {
+      final r = await _send('GET', '/v1/auth/providers');
+      return r['github'] == true;
+    } on CloudApiException {
+      return false;
+    }
+  }
+
+  /// Starts the GitHub device flow (RFC 8628): open
+  /// [BetterAuthDeviceCode.verificationUriComplete] in a browser, then poll
+  /// [betterAuthDeviceToken].
+  Future<BetterAuthDeviceCode> betterAuthDeviceCode() async {
+    final r = await _sendBa('POST', '/api/auth/device/code', body: {
+      'client_id': betterAuthClientId,
+    });
+    final body = r.body ?? const <String, dynamic>{};
+    final interval = (body['interval'] as num?)?.toInt() ?? 5;
+    return BetterAuthDeviceCode(
+      deviceCode: body['device_code']?.toString() ?? '',
+      userCode: body['user_code']?.toString() ?? '',
+      verificationUri: body['verification_uri']?.toString() ?? '',
+      verificationUriComplete:
+          body['verification_uri_complete']?.toString(),
+      expiresInSeconds: (body['expires_in'] as num?)?.toInt() ?? 900,
+      intervalSeconds: interval < 3 ? 3 : interval,
+    );
+  }
+
+  /// One device-grant poll. Throws [CloudApiException] for transport
+  /// trouble; every RFC 8628 answer comes back as a status instead.
+  Future<(BetterAuthPollOutcome, BetterAuthSession?)> betterAuthDeviceToken(
+    String deviceCode,
+  ) async {
+    final r = await _sendBa('POST', '/api/auth/device/token', body: {
+      'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+      'device_code': deviceCode,
+      'client_id': betterAuthClientId,
+    });
+    if (r.status == 200 && r.body != null && r.body!['access_token'] != null) {
+      final body = r.body!;
+      final user = body['user'];
+      final userMap = user is Map<String, dynamic> ? user : const <String, dynamic>{};
+      return (
+        BetterAuthPollOutcome.success,
+        BetterAuthSession(
+          token: body['access_token'].toString(),
+          user: BetterAuthUser(
+            id: userMap['id']?.toString() ?? '',
+            email: userMap['email']?.toString() ?? '',
+            name: userMap['name']?.toString() ?? '',
+          ),
+        ),
+      );
+    }
+    final code = (r.body?['error'] ?? '').toString();
+    switch (code) {
+      case 'authorization_pending':
+        return (BetterAuthPollOutcome.pending, null);
+      case 'slow_down':
+        return (BetterAuthPollOutcome.slowDown, null);
+      case 'expired_token':
+        return (BetterAuthPollOutcome.expired, null);
+      case 'access_denied':
+        return (BetterAuthPollOutcome.denied, null);
+    }
+    throw CloudApiException(CloudApiError.network, r.status);
+  }
+
+  /// Upgrades a proven legacy (zero-knowledge) account to BetterAuth: the
+  /// server re-checks the PBKDF2 proof, creates/links the BetterAuth user
+  /// with [password] and returns the new bearer session. The user_id —
+  /// and with it the vault, ledger, Pro plan and trial budget — carries
+  /// over untouched.
+  Future<BetterAuthSession> betterAuthMigrateLegacy({
+    required String identifierHash,
+    required String authKey,
+    required String identifier,
+    required String password,
+    String? displayName,
+  }) async {
+    final r = await _sendBa('POST', '/v1/auth/legacy-migrate', body: {
+      'identifierHash': identifierHash,
+      'authKey': authKey,
+      'identifier': identifier,
+      'password': password,
+      if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+    });
+    return _sessionFrom(r.body ?? const <String, dynamic>{});
+  }
 }
+
+/// Outcome buckets for [CloudApi.betterAuthDeviceToken] polling.
+enum BetterAuthPollOutcome { pending, slowDown, expired, denied, success }

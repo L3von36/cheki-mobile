@@ -10,6 +10,57 @@ import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import '../../widgets/pressable.dart';
 
+/// "Continue with GitHub" — the BetterAuth device-flow entry. Kept visual
+/// light: an outlined row button under the primary submit button.
+class AuthGithubButton extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const AuthGithubButton({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final strings = context.watch<LocaleController>().strings;
+    final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
+    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: isDark ? MahtemPalette.dCard : Colors.white,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.code_rounded, size: 17, color: ink),
+            const SizedBox(width: 8),
+            // FittedBox: long translations must never push the fixed-height
+            // button wider than the screen (320px walk regression).
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  strings.continueWithGithub,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: ink,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Brand header: gradient logo mark, app name, then the screen's
 /// title + subtitle.
 class AuthHeader extends StatelessWidget {

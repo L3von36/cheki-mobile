@@ -190,11 +190,49 @@ final class TigrinyaStrings extends AppStrings {
           'ኣረጋግጹ ደጊምኩም ፈትሹ።',
     AuthError.storageFailed =>
       'ሕሳብ ምዕቃብ ኣይተኻእለን። ደጊምኩም ፈትሹ።',
+    AuthError.githubRequired =>
+      'እዚ ሕሳብ ብGitHub ይኣቱ — «ብGitHub ቀጽል» ጠውቕ።',
   };
 
   @override
   String get genericAuthError =>
       'ጸገም ወጺኡ ኣሎ። በዝሕቲ ደጊምኩም ፈትሹ።';
+
+  // ── ብGitHub ምእታይ (BetterAuth device flow) ──────────────────────────
+
+  @override
+  String get continueWithGithub => 'ብGitHub ቀጽል';
+
+  @override
+  String get githubSheetTitle => 'ብGitHub እተዋ';
+
+  @override
+  String get githubSheetBody =>
+      'ሓንሳባዊ ኮድ መሳርሒ ተፈጢሩ ኣሎ። ኣብ ብራውዘርካ ኣረጋግጽ — '
+      'እዚ ስክሪን ምስ ምእታይካ ብራህሱ ይቀጥል።';
+
+  @override
+  String get githubDeviceCodeLabel => 'ኮድ መሳርሒ';
+
+  @override
+  String get githubOpenBrowser => 'ብራውዘር ደጊምካ ክፐሕ';
+
+  @override
+  String get githubWaiting => 'ምስ ምእታይ ይጽበዝ…';
+
+  @override
+  String get githubNotEnabled =>
+      'ምእታይ GitHub ገና ኣይነጸግን — ብተሌፎን ቁጽሪ/ኢመይልን መሕለፊ ቃልን '
+      'እተዋ።';
+
+  @override
+  String get githubExpired => 'እቲ ኮድ መሳርሒ ግዜኡ ኣለፈ። ደጊምካ ጀምር።';
+
+  @override
+  String get githubDenied => 'ምእታይ ኣብ ብራውዘር ተዕለለ።';
+
+  @override
+  String get retry => 'ደጊምካ ፈትን';
 
   // ---------------------------------------------------------------- settings
 

@@ -194,11 +194,52 @@ final class OromoStrings extends AppStrings {
     AuthError.storageFailed =>
       'Herregi meeshaa kana irratti olkaa\u2019amu hin dandeenye. Irra '
           'deebi\u2019anii yaalaa.',
+    AuthError.githubRequired =>
+      'Herregni kun GitHub\u2019in seena \u2014 "GitHub\u2019in itti fufi" '
+          'banaa.',
   };
 
   @override
   String get genericAuthError =>
       'Rakkoon tokko uumeera. Maaloo irra deebi\u2019anii yaalaa.';
+
+  // ── GitHub\u2019in seenuu (BetterAuth device flow) ───────────────────
+
+  @override
+  String get continueWithGithub => 'GitHub\u2019in itti fufi';
+
+  @override
+  String get githubSheetTitle => 'GitHub\u2019in seeni';
+
+  @override
+  String get githubSheetBody =>
+      'Koodiin meeshaa yeroo-tokko uumameera. Bursaawwarii kee keessatti '
+      'mirkaneessi \u2014 fuulni kun erga mirkaneessitee booda ofumaan '
+      'itti fufa.';
+
+  @override
+  String get githubDeviceCodeLabel => 'KOODI MEESHAA';
+
+  @override
+  String get githubOpenBrowser => 'Bursaawwarii irra deebi\u2019ii banaa';
+
+  @override
+  String get githubWaiting => 'Mirkaneessuu eegamaa jira\u2026';
+
+  @override
+  String get githubNotEnabled =>
+      'Seeniin GitHub yeroo ammaa hin banamne \u2014 bilbila/imiyeelii fi '
+      'jecha iccitiin seeni.';
+
+  @override
+  String get githubExpired =>
+      'Koodin meeshaa yeroo isaa xumure. Irra deebi\u2019ii jalqabi.';
+
+  @override
+  String get githubDenied => 'Seeniin bursaawwarii keessatti mormame.';
+
+  @override
+  String get retry => 'Irra deebi\u2019ii yaali';
 
   // ---------------------------------------------------------------- settings
 

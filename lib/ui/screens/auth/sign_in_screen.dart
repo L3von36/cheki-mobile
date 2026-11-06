@@ -9,6 +9,7 @@ import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import 'auth_shared.dart';
 import 'create_account_screen.dart';
+import 'github_sign_in_sheet.dart';
 
 /// Sign-in screen — the gate's default stop once at least one account
 /// exists on the device. Success swaps the gate into the shell.
@@ -82,9 +83,33 @@ class _SignInScreenState extends State<SignInScreen> {
           navigator.popUntil((route) => route.isFirst);
         }
       case AuthFailure(:final error):
+        if (error == AuthError.githubRequired && mounted) {
+          // GitHub-provisioned accounts can't re-prove a password —
+          // send the user straight into the device flow.
+          await _githubSignIn();
+          return;
+        }
         if (mounted) setState(() => _error = strings.errorAuth(error));
       case null:
         if (mounted) setState(() => _error = strings.genericAuthError);
+    }
+  }
+
+  /// GitHub device-flow sign-in. On success the same post-sign-in work
+  /// runs, minus vault arming — GitHub accounts have no password to
+  /// derive the vault key from (backup can be enabled from settings).
+  Future<void> _githubSignIn() async {
+    final license = context.read<LicenseController>();
+    final navigator = Navigator.of(context);
+    final result = await showGitHubSignIn(context);
+    if (result is AuthSuccess) {
+      await license.refreshTrialBudget();
+      if (navigator.canPop()) {
+        navigator.popUntil((route) => route.isFirst);
+      }
+    } else if (result is AuthFailure && mounted) {
+      setState(() =>
+          _error = context.read<LocaleController>().strings.errorAuth(result.error));
     }
   }
 
@@ -188,7 +213,11 @@ class _SignInScreenState extends State<SignInScreen> {
                         ? null
                         : _submit,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
+                  AuthGithubButton(
+                    onTap: auth.isBusy ? null : _githubSignIn,
+                  ),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
