@@ -54,6 +54,10 @@ Future<void> _walk(WidgetTester tester, String localeCode) async {
   await tester.tap(createButton);
   await tester.pump(const Duration(milliseconds: 400));
   await tester.pump(const Duration(milliseconds: 400));
+  // v1.19.2: after the post-sign-up sync the success step holds on the
+  // auth screen for 1.2 s before the gate swaps into the shell — pump
+  // past it (the fake clock advances with each pump).
+  await tester.pump(const Duration(milliseconds: 1300));
   expect(find.byType(SettingsSheet), findsNothing); // sanity: sheet closed
 
   // ── home screen: app bar + license chip + bottom nav ───────────────

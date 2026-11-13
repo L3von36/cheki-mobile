@@ -6,9 +6,10 @@ import 'package:mahtem/core/verify_history.dart';
 import 'package:mahtem/state/batch_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// v1.12.0 batch runner: sequential on-device checks, one attempt per
-/// row charged right before its check, stop leaves rows pending, every
-/// completed row lands in local history.
+/// v1.12.0 batch runner: sequential on-device checks, every completed row
+/// lands in local history. v1.19.2: a row is charged AFTER its verdict —
+/// a bank answer (verified or not-found) costs a check, a network failure
+/// costs nothing; stop leaves rows pending.
 
 VerifyResult _ok(String reference, {double amount = 250}) =>
     VerifyResult.receipt(
@@ -75,9 +76,8 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async {
+      chargeAttempt: () async {
         consumed++;
-        return true;
       },
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',
@@ -99,7 +99,7 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async => true,
+      chargeAttempt: () async {},
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',
     );
@@ -130,7 +130,7 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async => true,
+      chargeAttempt: () async {},
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',
     );
@@ -142,32 +142,46 @@ void main() {
     expect(controller.isComplete, isFalse);
   });
 
-  test('a refused charge stops the batch before the check — nothing '
-      'beyond the refusal is burned', () async {
-    var calls = 0;
+  test('a network failure costs nothing — only verdicts are charged',
+      () async {
+    var charges = 0;
     final controller = _controller(
-      verifyFn: (input) async {
-        calls++;
-        return _ok(input.reference);
-      },
+      verifyFn: (input) async => VerifyResult.failed(
+        const VerifyFailure(VerifyErrorKind.network, 'offline'),
+        5,
+      ),
     );
     controller.load(parseBatchLines('CHQ261Z4AB2C\nCHQ261Z4AB3D'));
 
-    var charges = 0;
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async {
-        charges++;
-        return charges <= 1; // second row: refused
-      },
+      chargeAttempt: () async => charges++,
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',
     );
 
-    expect(calls, 1);
-    expect(controller.verifiedCount, 1);
-    expect(controller.pendingCount, 1);
+    expect(charges, 0); // no verdict → no charge
+    expect(controller.failedCount, 2);
+  });
+
+  test('a not-found verdict is a bank answer — it is charged', () async {
+    var charges = 0;
+    final controller = _controller(
+      verifyFn: (input) async => _fail(input.reference),
+    );
+    controller.load(parseBatchLines('CHQ261Z4AB2C\nCHQ261Z4AB3D'));
+
+    final history = await _history();
+    await controller.run(
+      history: history,
+      chargeAttempt: () async => charges++,
+      duplicateNote: (_) => 'dup',
+      staleNote: (_) => 'stale',
+    );
+
+    expect(charges, 2); // both rows got a definitive verdict
+    expect(controller.failedCount, 2);
   });
 
   test('duplicate advisory attaches for a reference verified here '
@@ -192,7 +206,7 @@ void main() {
 
     await controller.run(
       history: history,
-      consumeAttempt: () async => true,
+      chargeAttempt: () async {},
       duplicateNote: (when) => 'DUP:$when',
       staleNote: (days) => 'STALE:$days',
     );
@@ -226,7 +240,7 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async => true,
+      chargeAttempt: () async {},
       duplicateNote: (when) => 'DUP',
       staleNote: (days) => 'STALE:$days',
     );
@@ -265,7 +279,7 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async => true,
+      chargeAttempt: () async {},
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',
     );
@@ -296,9 +310,8 @@ void main() {
     final history = await _history();
     await controller.run(
       history: history,
-      consumeAttempt: () async {
+      chargeAttempt: () async {
         consumed++;
-        return true;
       },
       duplicateNote: (_) => 'dup',
       staleNote: (_) => 'stale',

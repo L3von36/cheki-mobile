@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mahtem/core/licensing/license_store.dart';
+import 'package:mahtem/core/licensing/paywall_config.dart';
 import 'package:mahtem/core/receipt_verify/extra_banks.dart';
 import 'package:mahtem/core/receipt_verify/models.dart';
 import 'package:mahtem/core/receipt_verify/verifier.dart';
@@ -116,10 +117,12 @@ void main() {
     controller.setReference('fHCxyV4mg5pRIwEkJO'); // code from a shared link
 
     late final BuildContext context;
+    late final LicenseController license;
     await tester.pumpWidget(_harness(
       controller: controller,
       onReady: (ctx) {
         context = ctx;
+        license = ctx.read<LicenseController>();
         return const SizedBox.expand();
       },
     ));
@@ -138,6 +141,10 @@ void main() {
     Navigator.of(tester.element(find.byType(ResultScreen))).pop();
     await tester.pumpAndSettle();
     await flow;
+
+    // v1.19.2 charge-on-verdict: the not-found answer is a bank verdict,
+    // so exactly one free check is spent — after the check, never before.
+    expect(license.trialsLeft, kFreeTrialChecks - 1);
   });
 
   testWidgets(

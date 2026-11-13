@@ -228,9 +228,17 @@ void main() {
       expect(find.byType(ResultScreen), findsOneWidget);
 
       // Verified → the history row exists and the result screen offers
-      // the reason note for exactly that row.
+      // the reason note for exactly that row. v1.19.2 renders compact
+      // "not on the receipt" placeholders for fields the bank did not
+      // print — that can push the button below the fold, so scroll to
+      // it the way a user would.
       expect(history.entries, hasLength(1));
       final entryId = history.entries.first.id;
+      await tester.dragUntilVisible(
+        find.text('Add reason'),
+        find.byType(ListView),
+        const Offset(0, -120),
+      );
       expect(find.text('Add reason'), findsOneWidget);
 
       await tester.tap(find.text('Add reason'));

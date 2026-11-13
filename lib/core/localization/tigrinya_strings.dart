@@ -412,6 +412,9 @@ final class TigrinyaStrings extends AppStrings {
   String get senderLabel => 'መልኣኺ';
 
   @override
+  String get notOnReceipt => 'ኣብቲ ማስረጃ የለን';
+
+  @override
   String get senderAccountLabel => 'ሕሳብ መልኣኺ';
 
   @override

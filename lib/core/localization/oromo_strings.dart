@@ -424,6 +424,9 @@ final class OromoStrings extends AppStrings {
   String get senderLabel => 'Ergamaa';
 
   @override
+  String get notOnReceipt => 'Raasasa irratti hin jiru';
+
+  @override
   String get senderAccountLabel => 'Herrega ergamaa';
 
   @override

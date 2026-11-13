@@ -401,6 +401,9 @@ final class EnglishStrings extends AppStrings {
   String get senderLabel => 'From';
 
   @override
+  String get notOnReceipt => 'Not on the receipt';
+
+  @override
   String get senderAccountLabel => 'From account';
 
   @override

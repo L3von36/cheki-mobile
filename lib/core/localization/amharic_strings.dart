@@ -397,6 +397,9 @@ final class AmharicStrings extends AppStrings {
   String get senderLabel => 'ላኪ';
 
   @override
+  String get notOnReceipt => 'በማስረጃው ላይ አይገኝም';
+
+  @override
   String get senderAccountLabel => 'የላኪ መለያ';
 
   @override

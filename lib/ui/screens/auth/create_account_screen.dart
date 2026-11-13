@@ -34,6 +34,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   /// reads as a freeze (reported during on-device testing).
   String? _progress;
 
+  /// The final success step — a green check + "you're all set" held on
+  /// the screen for a beat before the gate swaps into the app. Replaces
+  /// the old toast, which floated over the dashboard after navigation.
+  String? _success;
+
   @override
   void initState() {
     super.initState();
@@ -65,7 +70,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
     final strings = context.read<LocaleController>().strings;
-    final messenger = ScaffoldMessenger.of(context);
     final cloud = context.read<CloudController>();
     final license = context.read<LicenseController>();
     final history = context.read<VerifyHistory>();
@@ -95,9 +99,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     switch (result) {
       case AuthSuccess(:final account):
         // The heavy work is still ahead — vault arming and the first
-        // sync ride on the network. The success toast fires only after
-        // it finishes, so "you're all set" is never a lie, and the
-        // progress line keeps the wait readable.
+        // sync ride on the network. The success step shows only after
+        // it finishes, holds for a beat so it registers, and THEN the
+        // gate swaps into the app: a state machine on the screen itself
+        // instead of a toast floating over the dashboard (v1.19.2).
         if (mounted) setState(() => _progress = strings.preparingAccount);
         await cloud.autoEnable(
           password: password,
@@ -105,33 +110,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           history: history,
         );
         await license.refreshTrialBudget();
-        messenger.showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: MahtemPalette.green,
-            duration: const Duration(seconds: 4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded,
-                    color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    strings.accountCreatedSuccess,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _success = strings.accountCreatedSuccess;
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 1200));
+        }
         if (navigator.canPop()) {
           navigator.popUntil((route) => route.isFirst);
         }
@@ -139,6 +124,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         if (mounted) {
           setState(() {
             _progress = null;
+            _success = null;
             _error = strings.errorAuth(error);
           });
         }
@@ -146,6 +132,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         if (mounted) {
           setState(() {
             _progress = null;
+            _success = null;
             _error = strings.genericAuthError;
           });
         }
@@ -181,7 +168,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final inkDim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
-    final busy = auth.isBusy || _progress != null;
+    final busy = auth.isBusy || _progress != null || _success != null;
 
     return Scaffold(
       backgroundColor: isDark ? MahtemPalette.dBg : MahtemPalette.lBg,
@@ -248,10 +235,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     const SizedBox(height: 12),
                     AuthProgressLine(message: _progress!),
                   ],
+                  if (_success != null) ...[
+                    const SizedBox(height: 12),
+                    AuthProgressLine(message: _success!, done: true),
+                  ],
                   const SizedBox(height: 12),
                   AuthGithubButton(
                     divided: true,
-                    onTap: auth.isBusy ? null : _githubSignIn,
+                    onTap: busy ? null : _githubSignIn,
                   ),
                   const SizedBox(height: 14),
                   Row(

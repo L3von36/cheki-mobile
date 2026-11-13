@@ -415,6 +415,22 @@ void main() {
       expect(p.amount, 2450.00);
       expect(p.senderName, 'MOHAMMED A RESHID');
     });
+    test('labels match case-insensitively — Telebirr varies casing '
+        'between receipt variants', () {
+      final p = parseTelebirrHtml('<html><body>telebirr receipt'
+          '<br>PAYER NAMEMOHAMMED A RESHID'
+          '<br>PAYER TELEBIRR NO0712345678'
+          '<br>CREDITED PARTY NAMESAMI CLOTHING'
+          '<br>CREDITED PARTY ACCOUNT NO0712345678'
+          '<br>Payment date18-09-2026 14:22:10'
+          '</body></html>');
+      expect(p.verified, isTrue);
+      expect(p.senderName, 'MOHAMMED A RESHID');
+      expect(p.senderAccount, '0712345678');
+      expect(p.receiverName, 'SAMI CLOTHING');
+      expect(p.receiverAccount, '0712345678');
+      expect(p.date, '18-09-2026 14:22:10');
+    });
   });
 
   group('Telebirr QR invoice extraction', () {

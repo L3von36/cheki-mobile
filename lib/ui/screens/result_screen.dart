@@ -401,32 +401,37 @@ class _DetailCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Column(
         children: [
-          if (receipt.senderName != null)
-            DetailRow(
-              icon: Icons.person_outline_rounded,
-              label: s.senderLabel,
-              value: receipt.senderName,
-            ),
-          if (receipt.senderAccount != null)
-            DetailRow(
-              icon: Icons.account_balance_wallet_outlined,
-              label: s.senderAccountLabel,
-              value: receipt.senderAccount,
-              mono: true,
-            ),
-          if (receipt.receiverName != null)
-            DetailRow(
-              icon: Icons.person_outline_rounded,
-              label: s.receiverLabel,
-              value: receipt.receiverName,
-            ),
-          if (receipt.receiverAccount != null)
-            DetailRow(
-              icon: Icons.account_balance_wallet_outlined,
-              label: s.receiverAccountLabel,
-              value: receipt.receiverAccount,
-              mono: true,
-            ),
+          // The identity rows always render: when the bank's own receipt
+          // does not carry a field, the row says so explicitly instead of
+          // vanishing — a missing payer line then reads as "the bank did
+          // not print it", not as the app failing (v1.19.2). Missing
+          // fields render compact so they never crowd out the real data.
+          DetailRow(
+            icon: Icons.person_outline_rounded,
+            label: s.senderLabel,
+            value: receipt.senderName ?? s.notOnReceipt,
+            compact: receipt.senderName == null,
+          ),
+          DetailRow(
+            icon: Icons.account_balance_wallet_outlined,
+            label: s.senderAccountLabel,
+            value: receipt.senderAccount ?? s.notOnReceipt,
+            mono: receipt.senderAccount != null,
+            compact: receipt.senderAccount == null,
+          ),
+          DetailRow(
+            icon: Icons.person_outline_rounded,
+            label: s.receiverLabel,
+            value: receipt.receiverName ?? s.notOnReceipt,
+            compact: receipt.receiverName == null,
+          ),
+          DetailRow(
+            icon: Icons.account_balance_wallet_outlined,
+            label: s.receiverAccountLabel,
+            value: receipt.receiverAccount ?? s.notOnReceipt,
+            mono: receipt.receiverAccount != null,
+            compact: receipt.receiverAccount == null,
+          ),
           if (receipt.date != null)
             DetailRow(
               icon: Icons.schedule_rounded,
@@ -465,12 +470,17 @@ class DetailRow extends StatelessWidget {
   final String? value;
   final bool mono;
 
+  /// Compact "not on the receipt" row: half the height, dimmed value —
+  /// states the field is absent without crowding out the real data.
+  final bool compact;
+
   const DetailRow({
     super.key,
     required this.icon,
     required this.label,
     required this.value,
     this.mono = false,
+    this.compact = false,
   });
 
   @override
@@ -479,21 +489,28 @@ class DetailRow extends StatelessWidget {
     if (text.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
+      padding: EdgeInsets.symmetric(vertical: compact ? 3 : 9),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: isDark ? MahtemPalette.dCardAlt : MahtemPalette.blueSoft,
-              borderRadius: BorderRadius.circular(9),
+          if (compact)
+            Icon(icon,
+                size: 13,
+                color: isDark
+                    ? MahtemPalette.dInkFaint
+                    : MahtemPalette.lInkFaint)
+          else
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isDark ? MahtemPalette.dCardAlt : MahtemPalette.blueSoft,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon,
+                  size: 14,
+                  color: isDark ? MahtemPalette.blueLight : MahtemPalette.blue),
             ),
-            child: Icon(icon,
-                size: 14,
-                color: isDark ? MahtemPalette.blueLight : MahtemPalette.blue),
-          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -502,7 +519,7 @@ class DetailRow extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: compact ? 9 : 9.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
                     color: isDark
@@ -514,9 +531,18 @@ class DetailRow extends StatelessWidget {
                 SelectableText(
                   text,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? MahtemPalette.dInk : MahtemPalette.navy,
+                    fontSize: compact ? 10.5 : 12,
+                    fontWeight:
+                        compact ? FontWeight.w500 : FontWeight.w600,
+                    fontStyle:
+                        compact ? FontStyle.italic : FontStyle.normal,
+                    color: isDark
+                        ? (compact
+                            ? MahtemPalette.dInkFaint
+                            : MahtemPalette.dInk)
+                        : (compact
+                            ? MahtemPalette.lInkFaint
+                            : MahtemPalette.navy),
                   ),
                 ),
               ],

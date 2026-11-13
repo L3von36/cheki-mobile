@@ -248,6 +248,7 @@ abstract base class AppStrings {
   String get senderAccountLabel;
   String get receiverLabel;
   String get receiverAccountLabel;
+  String get notOnReceipt;
   String get dateLabel;
   String get referenceShortLabel;
   String get reasonLabel;

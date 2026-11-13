@@ -293,11 +293,17 @@ class AuthErrorBox extends StatelessWidget {
 
 /// Busy line under the submit button while the post-auth work runs —
 /// account creation, vault arming, first cloud sync. Without it a slow
-/// connection makes the wait look like the app froze.
+/// connection makes the wait look like the app froze. [done] swaps the
+/// spinner for a green check: the final "you're all set" step.
 class AuthProgressLine extends StatelessWidget {
   final String message;
+  final bool done;
 
-  const AuthProgressLine({super.key, required this.message});
+  const AuthProgressLine({
+    super.key,
+    required this.message,
+    this.done = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -305,11 +311,18 @@ class AuthProgressLine extends StatelessWidget {
     final ink = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
     return Row(
       children: [
-        const SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        if (done)
+          const Icon(
+            Icons.check_circle_rounded,
+            color: MahtemPalette.green,
+            size: 16,
+          )
+        else
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         const SizedBox(width: 9),
         Expanded(
           child: Text(
