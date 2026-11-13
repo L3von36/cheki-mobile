@@ -216,21 +216,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     onTap: auth.isBusy || !_formComplete ? null : _submit,
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'or',
-                          style: TextStyle(color: inkDim, fontSize: 11),
-                        ),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
                   AuthGithubButton(
+                    divided: true,
                     onTap: auth.isBusy ? null : _githubSignIn,
                   ),
                   const SizedBox(height: 14),

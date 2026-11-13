@@ -21,7 +21,15 @@ import '../../widgets/pressable.dart';
 class AuthGithubButton extends StatefulWidget {
   final VoidCallback? onTap;
 
-  const AuthGithubButton({super.key, required this.onTap});
+  /// Renders the "— or —" divider above the button (create-account screen).
+  /// Hidden together with the button, so the divider never dangles.
+  final bool divided;
+
+  const AuthGithubButton({
+    super.key,
+    required this.onTap,
+    this.divided = false,
+  });
 
   @override
   State<AuthGithubButton> createState() => _AuthGithubButtonState();
@@ -42,10 +50,33 @@ class _AuthGithubButtonState extends State<AuthGithubButton> {
       future: _enabled,
       builder: (context, snap) {
         if (snap.data != true) return const SizedBox.shrink();
-        return _githubButton(context, widget.onTap);
+        if (!widget.divided) return _githubButton(context, widget.onTap);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _orDivider(context),
+            const SizedBox(height: 12),
+            _githubButton(context, widget.onTap),
+          ],
+        );
       },
     );
   }
+}
+
+Widget _orDivider(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final inkDim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+  return Row(
+    children: [
+      const Expanded(child: Divider()),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text('or', style: TextStyle(color: inkDim, fontSize: 11)),
+      ),
+      const Expanded(child: Divider()),
+    ],
+  );
 }
 
 Widget _githubButton(BuildContext context, VoidCallback? onTap) {
