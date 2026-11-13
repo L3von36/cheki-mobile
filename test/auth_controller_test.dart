@@ -83,7 +83,9 @@ void main() {
       identifier: 'abebe@bad',
       password: 'secret1',
     );
-    expect((badEmail as AuthFailure).error, AuthError.invalidEmail);
+    // v1.19: accounts are phone-only — an email is just a non-phone
+    // input and lands on the same error as any other malformed value.
+    expect((badEmail as AuthFailure).error, AuthError.invalidIdentifier);
 
     final shortPassword = await auth.signUp(
       displayName: 'Abebe',
@@ -124,20 +126,20 @@ void main() {
     },
   );
 
-  test('sign in works by email, case-insensitively', () async {
+  test('email identifiers are rejected — accounts are phone-only', () async {
     final auth = _controller();
-    await auth.signUp(
+    final bad = await auth.signUp(
       displayName: 'Abebe',
       identifier: 'Abebe@Mail.com',
       password: 'secret1',
     );
-    await auth.signOut();
+    expect((bad as AuthFailure).error, AuthError.invalidIdentifier);
 
-    final ok = await auth.signIn(
+    final badSignIn = await auth.signIn(
       identifier: 'abebe@mail.com',
       password: 'secret1',
     );
-    expect(ok, isA<AuthSuccess>());
+    expect((badSignIn as AuthFailure).error, AuthError.invalidIdentifier);
   });
 
   test('unknown identifier signs in as account-not-found', () async {

@@ -331,21 +331,36 @@ api.patch('/v1/account', h(async (req, res) => {
   res.json({ ok: true });
 }));
 
-/* ── free-trial budget (anti-abuse, v1.18.10) ────────────────────────── */
+/* ── free-trial budget (anti-abuse, v1.18.10 / scoped v1.19.3) ───────── */
 //
 // The 5 free checks used to live only on the device — "clear storage" or
 // a reinstall reset the counter and minted fresh trials. Professionals
 // make a trial a property of the IDENTITY, not the install:
 //   * per DEVICE — SHA-256 of the Android SSAID, which survives
 //     reinstalls and clear-storage (only a factory reset changes it);
-//   * per ACCOUNT — a signed-in user's monotonic usage counter is shared
-//     across devices, seeded from existing receipt-ledger rows;
+//   * per ACCOUNT — a signed-in user's usage is their OWN recorded
+//     verifications (receipt-ledger rows + a monotonic counter), shared
+//     across devices;
 //   * monotonic — the client can never lower a server-side counter, and
 //     a wiped app reporting `used: 0` simply gets clamped back up;
 //   * Pro wins — an active plan (license code or paid receipt) is
 //     unlimited, so paying users are never bothered.
-// Residual (accepted) abuse paths: factory-reset + new account, and
-// permanently-offline use — the same trade-offs commercial apps make.
+//
+// v1.19.3 scoping fix: the v1.18.10–v1.19.2 rule merged the DEVICE's
+// usage into the signed-in account's ledger (max of account, device and
+// reported), so a brand-new account created on a phone that had already
+// spent checks inherited that usage — "3 left" on a fresh account. Now:
+//   * signed out → the DEVICE budget gates (unchanged anti-wipe rule);
+//   * signed in → the ACCOUNT budget gates, and it is built ONLY from
+//     the account's own receipt rows, its stored counter and (for
+//     v1.19.3+ clients that declare `accountScope`) its own reported
+//     counter — never from the device ledger. A fresh account starts
+//     at its own five, whatever the phone did before;
+//   * the DEVICE ledger still absorbs signed-in usage, so signing out
+//     cannot resume a fresh device budget on the same phone.
+// Residual (accepted) abuse paths: creating fresh accounts for fresh
+// budgets, factory-reset + new account, and permanently-offline use —
+// the same trade-offs commercial apps make.
 
 const kFreeChecks = 5;
 
@@ -359,29 +374,25 @@ api.post('/v1/trials/sync', h(async (req, res) => {
   // Client-reported usage (offline-first installs). Clamped to sane bounds;
   // only ever raises the server counter (CASE WHEN — portable SQL).
   const reported = Math.max(0, Math.min(1_000_000, Math.floor(Number(body.used) || 0)));
+  // v1.19.3+ clients declare which scope their `used` belongs to. Legacy
+  // builds (≤ v1.19.2) report the device-global counter — that number
+  // must never write into the account ledger again (it carried the
+  // pre-sign-up device usage that poisoned fresh accounts).
+  const clientAccountScope =
+    typeof body.accountScope === 'string' ? body.accountScope.trim() : '';
+  const trustsReportForAccount = clientAccountScope.length > 0;
   const now = Date.now();
   const nowDt = dtOf(now);
   await db.ensureReady();
 
   // Optional session: no bearer is fine (pre-sign-up devices sync too).
   const session = await requireSession(req);
-  let accountUsed = 0;
   let accountUserId = null;
   let proActive = false;
   let proUntil = null;
   if (session.ok) {
     accountUserId = session.userId;
     try {
-      const rows = await db.query(
-        'SELECT COUNT(*) AS n FROM `verified_receipts` WHERE `user_id` = ?',
-        [session.userId],
-      );
-      accountUsed = Number(rows[0]?.n) || 0;
-      const trialRows = await db.query(
-        'SELECT `checks_used` FROM `account_trials` WHERE `user_id` = ?',
-        [session.userId],
-      );
-      accountUsed = Math.max(accountUsed, Number(trialRows[0]?.checks_used) || 0);
       const pro = await db.query('SELECT `expires_at` FROM `pro_status` WHERE `user_id` = ?', [
         session.userId,
       ]);
@@ -394,22 +405,58 @@ api.post('/v1/trials/sync', h(async (req, res) => {
     }
   }
 
+  // Account budget (signed in only): the account's OWN recorded
+  // verifications — receipt-ledger rows and its monotonic counter — plus
+  // the declared-scope client report. The device's history never enters
+  // here (v1.19.3).
+  let accountUsed = 0;
+  if (accountUserId) {
+    try {
+      const rows = await db.query(
+        'SELECT COUNT(*) AS n FROM `verified_receipts` WHERE `user_id` = ?',
+        [accountUserId],
+      );
+      accountUsed = Number(rows[0]?.n) || 0;
+      const trialRows = await db.query(
+        'SELECT `checks_used` FROM `account_trials` WHERE `user_id` = ?',
+        [accountUserId],
+      );
+      accountUsed = Math.max(accountUsed, Number(trialRows[0]?.checks_used) || 0);
+      if (trustsReportForAccount) accountUsed = Math.max(accountUsed, reported);
+      await db.run(
+        `${db.INSERT_IGNORE} \`account_trials\` (\`user_id\`, \`checks_used\`, \`first_used_at\`, \`first_used_dt\`, \`last_used_at\`, \`last_used_dt\`) VALUES (?, 0, ?, ?, ?, ?)`,
+        [accountUserId, now, nowDt, now, nowDt],
+      );
+      await db.run(
+        'UPDATE `account_trials` SET `checks_used` = CASE WHEN `checks_used` < ? THEN ? ELSE `checks_used` END, `last_used_at` = ?, `last_used_dt` = ? WHERE `user_id` = ?',
+        [accountUsed, accountUsed, now, nowDt, accountUserId],
+      );
+    } catch (_) {
+      // Degraded schema — device accounting below still gates.
+    }
+  }
+
+  // Device ledger: monotonic, absorbs the reported usage AND (v1.19.3)
+  // the signed-in account's usage, so signing out cannot resume a fresh
+  // device budget mid-phone. It only ever feeds the SIGNED-OUT budget —
+  // never the account's.
   try {
     const existing = await db.query(
       'SELECT `checks_used` FROM `device_trials` WHERE `device_hash` = ?',
       [deviceHash],
     );
+    const current = existing.length ? Number(existing[0].checks_used) || 0 : 0;
+    let deviceNow = Math.max(current, reported);
+    if (accountUserId) deviceNow = Math.max(deviceNow, accountUsed);
     if (!existing.length) {
       await db.run(
         'INSERT INTO `device_trials` (`device_hash`, `checks_used`, `first_used_at`, `first_used_dt`, `last_used_at`, `last_used_dt`) VALUES (?, ?, ?, ?, ?, ?)',
-        [deviceHash, reported, now, nowDt, now, nowDt],
+        [deviceHash, deviceNow, now, nowDt, now, nowDt],
       );
     } else {
-      const current = Number(existing[0].checks_used) || 0;
-      const merged = Math.max(current, reported);
       await db.run(
         'UPDATE `device_trials` SET `checks_used` = ?, `last_used_at` = ?, `last_used_dt` = ? WHERE `device_hash` = ?',
-        [merged, now, nowDt, deviceHash],
+        [deviceNow, now, nowDt, deviceHash],
       );
     }
   } catch (_) {
@@ -425,29 +472,17 @@ api.post('/v1/trials/sync', h(async (req, res) => {
   } catch (_) {
     // Keep the reported number as the fallback.
   }
-  if (accountUserId) {
-    const accountNow = Math.max(accountUsed, deviceUsed, reported);
-    try {
-      await db.run(
-        `${db.INSERT_IGNORE} \`account_trials\` (\`user_id\`, \`checks_used\`, \`first_used_at\`, \`first_used_dt\`, \`last_used_at\`, \`last_used_dt\`) VALUES (?, 0, ?, ?, ?, ?)`,
-        [accountUserId, now, nowDt, now, nowDt],
-      );
-      await db.run(
-        'UPDATE `account_trials` SET `checks_used` = CASE WHEN `checks_used` < ? THEN ? ELSE `checks_used` END, `last_used_at` = ?, `last_used_dt` = ? WHERE `user_id` = ?',
-        [accountNow, accountNow, now, nowDt, accountUserId],
-      );
-      accountUsed = Math.max(accountUsed, accountNow);
-    } catch (_) {
-      // Degraded schema — retain device and receipt-ledger accounting.
-    }
-  }
 
-  const used = Math.max(deviceUsed, accountUsed);
+  // The number the client gates on: its ACCOUNT budget when signed in
+  // (fresh per account), the DEVICE budget otherwise.
+  const used = accountUserId ? accountUsed : deviceUsed;
   res.json({
     ok: true,
     used,
     freeChecks: kFreeChecks,
     trialsRemaining: Math.max(0, kFreeChecks - used),
+    scope: accountUserId ? 'account' : 'device',
+    deviceUsed,
     pro: { active: proActive, until: proUntil },
   });
 }));

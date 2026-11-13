@@ -87,6 +87,10 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   final CloudApi _api;
+
+  /// The shared cloud API — read-only access for widgets that need a
+  /// capability probe (e.g. the auth screens' GitHub button).
+  CloudApi get api => _api;
   final PasswordHasher _hasher;
   final SharedPreferences? _prefs;
   final int Function() _revisionClock;
@@ -214,20 +218,28 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Best-effort free-trial budget sync against the server's device +
-  /// account ledger (anti clear-storage abuse). Works signed-out too —
-  /// the device hash alone keys the budget. Returns null when offline or
-  /// the server is unreachable; the local counter keeps gating then.
+  /// Best-effort free-trial budget sync against the server's ledgers
+  /// (anti clear-storage abuse). Works signed-out too — the device hash
+  /// alone keys the budget. v1.19.3: with a live session the ACCOUNT
+  /// budget gates (fresh per account); [accountScope] declares which
+  /// account the client counter belongs to, so the server only counts
+  /// it against that account. Returns null when offline or the server
+  /// is unreachable; the local counter keeps gating then.
   Future<TrialSyncInfo?> syncTrials({
     required String deviceHashHex,
     int? used,
+    String? accountScope,
   }) async {
     try {
-      if (_enabled && !await _ensureFreshSession()) return null;
+      final sessionLive = _enabled && await _ensureFreshSession();
+      final scope = sessionLive ? (_identifierHash ?? accountScope) : null;
       return await _api.syncTrials(
-        sessionToken: _sessionToken,
+        sessionToken: sessionLive ? _sessionToken : null,
         deviceHashHex: deviceHashHex,
         used: used,
+        // Signed out → device-scope report; the account's own counter is
+        // deliberately NOT sent (it must not feed the device ledger).
+        accountScope: scope,
       );
     } catch (_) {
       return null;

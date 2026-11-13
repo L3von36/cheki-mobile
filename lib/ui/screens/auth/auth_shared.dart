@@ -6,59 +6,119 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../state/cloud_controller.dart';
 import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import '../../widgets/pressable.dart';
 
 /// "Continue with GitHub" — the BetterAuth device-flow entry. Kept visual
 /// light: an outlined row button under the primary submit button.
-class AuthGithubButton extends StatelessWidget {
+///
+/// Shown ONLY when the server has GitHub OAuth enabled (`/v1/auth/providers`
+/// answers `{"github":true}`). Fail-closed: while the probe is in flight,
+/// on an error, or when OAuth is not configured, the button does not
+/// render at all — the sign-in stays identifier + password.
+class AuthGithubButton extends StatefulWidget {
   final VoidCallback? onTap;
 
-  const AuthGithubButton({super.key, required this.onTap});
+  /// Renders the "— or —" divider above the button (create-account screen).
+  /// Hidden together with the button, so the divider never dangles.
+  final bool divided;
+
+  const AuthGithubButton({
+    super.key,
+    required this.onTap,
+    this.divided = false,
+  });
+
+  @override
+  State<AuthGithubButton> createState() => _AuthGithubButtonState();
+}
+
+class _AuthGithubButtonState extends State<AuthGithubButton> {
+  late final Future<bool> _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = context.read<CloudController>().api.githubSignInEnabled();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final strings = context.watch<LocaleController>().strings;
-    final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
-    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
-    return Pressable(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          color: isDark ? MahtemPalette.dCard : Colors.white,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(13),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return FutureBuilder<bool>(
+      future: _enabled,
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        if (!widget.divided) return _githubButton(context, widget.onTap);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(Icons.code_rounded, size: 17, color: ink),
-            const SizedBox(width: 8),
-            // FittedBox: long translations must never push the fixed-height
-            // button wider than the screen (320px walk regression).
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  strings.continueWithGithub,
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
+            _orDivider(context),
+            const SizedBox(height: 12),
+            _githubButton(context, widget.onTap),
+          ],
+        );
+      },
+    );
+  }
+}
+
+Widget _orDivider(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final inkDim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+  return Row(
+    children: [
+      const Expanded(child: Divider()),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text('or', style: TextStyle(color: inkDim, fontSize: 11)),
+      ),
+      const Expanded(child: Divider()),
+    ],
+  );
+}
+
+Widget _githubButton(BuildContext context, VoidCallback? onTap) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final strings = context.watch<LocaleController>().strings;
+  final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
+  final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
+  return Pressable(
+    onTap: onTap,
+    child: Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: isDark ? MahtemPalette.dCard : Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.code_rounded, size: 17, color: ink),
+          const SizedBox(width: 8),
+          // FittedBox: long translations must never push the fixed-height
+          // button wider than the screen (320px walk regression).
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                strings.continueWithGithub,
+                maxLines: 1,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Brand header: gradient logo mark, app name, then the screen's
@@ -231,6 +291,54 @@ class AuthErrorBox extends StatelessWidget {
   }
 }
 
+/// Busy line under the submit button while the post-auth work runs —
+/// account creation, vault arming, first cloud sync. Without it a slow
+/// connection makes the wait look like the app froze. [done] swaps the
+/// spinner for a green check: the final "you're all set" step.
+class AuthProgressLine extends StatelessWidget {
+  final String message;
+  final bool done;
+
+  const AuthProgressLine({
+    super.key,
+    required this.message,
+    this.done = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    return Row(
+      children: [
+        if (done)
+          const Icon(
+            Icons.check_circle_rounded,
+            color: MahtemPalette.green,
+            size: 16,
+          )
+        else
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(
+              color: ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Bottom privacy note: a lock icon plus the "device-only" reassurance.
 class AuthPrivacyNote extends StatelessWidget {
   const AuthPrivacyNote({super.key});
@@ -272,6 +380,8 @@ class AuthField extends StatefulWidget {
   final String? errorText;
   final TextCapitalization textCapitalization;
   final ValueChanged<String>? onSubmitted;
+  final TextInputType? keyboardType;
+  final List<String>? autofillHints;
 
   const AuthField({
     super.key,
@@ -283,6 +393,8 @@ class AuthField extends StatefulWidget {
     this.errorText,
     this.textCapitalization = TextCapitalization.none,
     this.onSubmitted,
+    this.keyboardType,
+    this.autofillHints,
   });
 
   @override
@@ -320,13 +432,15 @@ class _AuthFieldState extends State<AuthField> {
           onSubmitted: widget.onSubmitted,
           textInputAction: TextInputAction.next,
           textCapitalization: widget.textCapitalization,
-          autofillHints: widget.obscure
-              ? const [AutofillHints.password, AutofillHints.newPassword]
-              : const [
-                  AutofillHints.username,
-                  AutofillHints.email,
-                  AutofillHints.telephoneNumberNational,
-                ],
+          keyboardType: widget.keyboardType,
+          autofillHints: widget.autofillHints ??
+              (widget.obscure
+                  ? const [AutofillHints.password, AutofillHints.newPassword]
+                  : const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                      AutofillHints.telephoneNumberNational,
+                    ]),
           style: TextStyle(
             color: isDark ? MahtemPalette.dInk : MahtemPalette.lInk,
             fontSize: 13,

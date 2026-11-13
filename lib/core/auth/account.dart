@@ -127,7 +127,7 @@ class AccountRecord {
 }
 
 /// Why an identifier was rejected by [validateAccountIdentifier].
-enum AccountIdIssue { empty, invalidPhone, invalidEmail }
+enum AccountIdIssue { empty, invalidPhone }
 
 /// Outcome of validating a raw identifier typed by the user.
 sealed class AccountIdValidation {
@@ -144,22 +144,18 @@ class AccountIdInvalid extends AccountIdValidation {
   final AccountIdIssue issue;
 }
 
-/// Validates and normalizes a phone number or email.
+/// Validates and normalizes an Ethiopian phone number.
 ///
-/// Accepted Ethiopian phone shapes (spaces/dashes ignored):
+/// Accepted shapes (spaces/dashes ignored):
 ///   * `09xxxxxxxx`  (local mobile)
 ///   * `+2519xxxxxxxx` / `2519xxxxxxxx` (international mobile)
 ///   * `07xxxxxxxx` / `2517xxxxxxxx` (Safaricom Ethiopia)
-/// Emails use a pragmatic `local@domain.tld` check.
+/// Anything else — including an email address — is rejected: accounts
+/// are keyed by phone number only.
 AccountIdValidation validateAccountIdentifier(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
     return const AccountIdInvalid(AccountIdIssue.empty);
-  }
-  if (trimmed.contains('@')) {
-    return _isValidEmail(trimmed)
-        ? AccountIdValid(trimmed.toLowerCase())
-        : const AccountIdInvalid(AccountIdIssue.invalidEmail);
   }
   final digits = trimmed.replaceAll(RegExp(r'[\s\-()]'), '');
   final plus = digits.startsWith('+');
@@ -181,17 +177,11 @@ AccountIdValidation validateAccountIdentifier(String raw) {
   return AccountIdValid(intl);
 }
 
-/// Pretty form for display: `+251911223344` / lowercase email.
+/// Pretty form for display: `+251911223344`.
 String displayIdentifierFor(String raw) {
   final validation = validateAccountIdentifier(raw);
   return switch (validation) {
-    AccountIdValid(:final normalized) =>
-      normalized.contains('@') ? normalized : '+$normalized',
+    AccountIdValid(:final normalized) => '+$normalized',
     AccountIdInvalid() => raw.trim(),
   };
-}
-
-bool _isValidEmail(String value) {
-  final email = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
-  return email.hasMatch(value);
 }

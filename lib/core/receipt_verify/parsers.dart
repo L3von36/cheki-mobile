@@ -473,16 +473,22 @@ Parsed parseTelebirrHtml(String html) {
       .toList();
 
   // Find the value that follows a label (same line after the label, or one of
-  // the next few lines), skipping Amharic echo lines.
+  // the next few lines), skipping Amharic echo lines. Label matching is
+  // case-insensitive: Telebirr's page templates vary in casing between
+  // receipt variants ("Payer Telebirr No" vs "Payer telebirr no") and a
+  // missed label means a verified receipt with no payer details.
   String? valAfter(String en, String? am) {
+    final enRe = RegExp(RegExp.escape(en), caseSensitive: false);
+    final amRe =
+        am == null ? null : RegExp(RegExp.escape(am), caseSensitive: false);
     for (var i = 0; i < text.length; i++) {
       final line = text[i];
-      final hasEn = line.contains(en);
-      final hasAm = am != null && line.contains(am);
+      final hasEn = enRe.hasMatch(line);
+      final hasAm = amRe != null && amRe.hasMatch(line);
       if (!hasEn && !hasAm) continue;
-      final after = hasEn
-          ? (line.split(en).length > 1 ? line.split(en)[1] : '')
-          : (line.split(am!).length > 1 ? line.split(am)[1] : '');
+      final re = hasEn ? enRe : amRe!;
+      final parts = line.split(re);
+      final after = parts.length > 1 ? parts[1] : '';
       final cleaned = after.trim().replaceFirst(RegExp(r'^[.\-:]+'), '').trim();
       if (cleaned.isNotEmpty && !RegExp(r'^[\u1200-\u137F]').hasMatch(cleaned)) {
         return cleaned;
@@ -497,9 +503,12 @@ Parsed parseTelebirrHtml(String html) {
   }
 
   double? birrAmount(String label, String? am) {
+    final re = RegExp(RegExp.escape(label), caseSensitive: false);
+    final amRe =
+        am == null ? null : RegExp(RegExp.escape(am), caseSensitive: false);
     for (var i = 0; i < text.length; i++) {
       final line = text[i];
-      if (!line.contains(label) && (am == null || !line.contains(am))) continue;
+      if (!re.hasMatch(line) && (amRe == null || !amRe.hasMatch(line))) continue;
       final here = RegExp(r'([0-9,]+\.?\d*)\s*(Birr|ETB)', caseSensitive: false)
           .firstMatch(line);
       if (here != null) return double.tryParse(here.group(1)!.replaceAll(',', ''));

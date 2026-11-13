@@ -195,12 +195,13 @@ class BatchController extends ChangeNotifier {
 
   /// Runs every pending row, in order, one at a time.
   ///
-  /// [consumeAttempt] is awaited right before each check — return false
-  /// to stop (no attempt used). [history] receives every completed row.
-  /// The note builders keep this controller localization-free.
+  /// [chargeAttempt] is awaited after each row that produced a verdict
+  /// (verified or a definitive not-found) — a network failure costs
+  /// nothing. [history] receives every completed row. The note builders
+  /// keep this controller localization-free.
   Future<void> run({
     required VerifyHistory history,
-    required Future<bool> Function() consumeAttempt,
+    required Future<void> Function() chargeAttempt,
     required String Function(String when) duplicateNote,
     required String Function(int days) staleNote,
   }) async {
@@ -216,17 +217,6 @@ class BatchController extends ChangeNotifier {
       if (row.status != BatchRowStatus.pending) continue;
 
       if (_stopRequested) break;
-
-      // Charge BEFORE the check — attempts are spent on attempts, not
-      // successes. A refused charge stops the batch with nothing burned.
-      bool charged;
-      try {
-        charged = await consumeAttempt();
-      } catch (_) {
-        charged = false;
-      }
-      if (gen != _run) return;
-      if (!charged) break;
 
       final bankId = row.bankId ?? '';
       if (bankId.isEmpty && row.scannedQr == null) {
@@ -261,6 +251,19 @@ class BatchController extends ChangeNotifier {
 
       row.result = res;
       row.status = res.ok ? BatchRowStatus.verified : BatchRowStatus.failed;
+
+      // Charge AFTER the verdict (v1.19.2): a bank answer — a verified
+      // receipt or a definite not-found — costs a check; a dead network
+      // or an unreadable body costs nothing. The screen's pre-flight gate
+      // made sure the batch fits the free budget before it started.
+      if (res.ok || res.failure?.kind == VerifyErrorKind.notFound) {
+        try {
+          await chargeAttempt();
+        } catch (_) {
+          // A failed charge must never break the batch.
+        }
+      }
+      if (gen != _run) return; // stopped while charging — discard
 
       // Anti-fraud advisories for verified rows — computed BEFORE the
       // row is recorded so it can never flag itself.

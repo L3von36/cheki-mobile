@@ -94,10 +94,10 @@ final class OromoStrings extends AppStrings {
   String get fullNameHint => 'Fkn. Abebe Kebede';
 
   @override
-  String get identifierLabel => 'Lakkoofsa bilbilaa ykn imiyeelii';
+  String get identifierLabel => 'Lakkoofsa bilbilaa';
 
   @override
-  String get identifierHint => '09xxxxxxxx ykn you@mail.com';
+  String get identifierHint => '09xxxxxxxx';
 
   @override
   String get passwordLabel => 'Jecha icciitii';
@@ -160,6 +160,9 @@ final class OromoStrings extends AppStrings {
   String get creatingAccount => 'Herrega uumaa jira\u2026';
 
   @override
+  String get preparingAccount => 'Herrega keessan qopheessaa jira\u2026';
+
+  @override
   String get accountCreatedSuccess => "Herregni keessan milkaa'inaan uumameera!";
 
   @override
@@ -174,17 +177,15 @@ final class OromoStrings extends AppStrings {
     AuthError.invalidName =>
       'Maqaa guutuu keessan galchaa (qubee 2 ykn caalaa).',
     AuthError.invalidIdentifier =>
-      'Lakkoofsa bilbilaa Itoophiyaa sirrii ta\u2019e (09xxxxxxxx) ykn '
-          'imiyeelii galchaa.',
-    AuthError.invalidEmail => 'Teessoon imiyeelii sun sirrii hin fakkaattu.',
+      'Lakkoofsa bilbilaa Itoophiyaa sirrii ta\u2019e (09xxxxxxxx) galchaa.',
     AuthError.invalidPassword =>
       'Jechi icciitii qubee 6 ykn caalaa ta\u2019uu qaba.',
     AuthError.passwordMismatch => 'Jechi icciitii lamaan wal hin simu.',
     AuthError.alreadyExists =>
-      'Herregni bilbila/imiyeelii kanaan duraanuu jira \u2014 maaloo '
+      'Herregni lakkoofsa bilbilaa kanaan duraanuu jira \u2014 maaloo '
           "galmaa'aa.",
     AuthError.accountNotFound =>
-      'Bilbila/imiyeelii kanaan herregan hin argamne — dursa herrega '
+      'Lakkoofsa bilbilaa kanaan herregan hin argamne — dursa herrega '
           'uumaa.',
     AuthError.wrongPassword =>
       'Jechi icciitii dogoggora dha. Irra deebi\u2019anii yaalaa.',
@@ -421,6 +422,9 @@ final class OromoStrings extends AppStrings {
 
   @override
   String get senderLabel => 'Ergamaa';
+
+  @override
+  String get notOnReceipt => 'Raasasa irratti hin jiru';
 
   @override
   String get senderAccountLabel => 'Herrega ergamaa';

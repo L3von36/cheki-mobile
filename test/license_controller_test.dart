@@ -103,7 +103,7 @@ void main() {
         deviceKeySource: () async => 'device-1',
         now: now,
         publicKeyHex: await publicKeyHexFuture,
-        trialSync: ({required String deviceHashHex, int? used}) async {
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async {
           sentHash = deviceHashHex;
           return TrialSyncInfo(
             used: 0,
@@ -129,7 +129,7 @@ void main() {
       // The device burned 3 checks before the wipe; the server remembers.
       var serverUsed = 3;
       Future<TrialSyncInfo?> syncFn(
-          {required String deviceHashHex, int? used}) async {
+          {required String deviceHashHex, int? used, String? accountScope}) async {
         if (used != null && used > serverUsed) serverUsed = used;
         return TrialSyncInfo(
           used: serverUsed,
@@ -168,7 +168,7 @@ void main() {
         deviceKeySource: () async => 'device-1',
         now: now,
         publicKeyHex: await publicKeyHexFuture,
-        trialSync: ({required String deviceHashHex, int? used}) async => null,
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async => null,
       );
       await c.ensureLoaded();
       await pumpEventQueue();
@@ -187,7 +187,7 @@ void main() {
         deviceKeySource: () async => 'device-1',
         now: now,
         publicKeyHex: await publicKeyHexFuture,
-        trialSync: ({required String deviceHashHex, int? used}) async =>
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async =>
             TrialSyncInfo(
           used: serverUsed,
           freeChecks: kFreeTrialChecks,
@@ -200,6 +200,179 @@ void main() {
       await c.ensureLoaded();
       expect(c.trialsLeft, kFreeTrialChecks - 4);
       expect(c.canVerifyNow, isTrue);
+    });
+  });
+
+  group('scoped trial budgets (v1.19.3)', () {
+    // The bug: a brand-new account on a phone that had already spent
+    // checks inherited the phone's usage ("3 left" on a fresh account).
+    // The fix: the budget is scoped — device ledger gates signed-out
+    // use, each account gets its own server-side budget (exact-set on
+    // sync), and the local store keeps one counter per scope.
+    test('a fresh account on a used device gets its full fresh budget',
+        () async {
+      final (store, now) = fixtures();
+      // Device ledger: the phone spent 2 checks before any account.
+      var deviceUsed = 2;
+      // Account budget on the server: brand new — 0 used.
+      var accountUsed = 0;
+      String? scope;
+      Future<TrialSyncInfo?> syncFn(
+          {required String deviceHashHex,
+          int? used,
+          String? accountScope}) async {
+        if (accountScope != null) {
+          scope = accountScope;
+          // v1.19.3 server: account budget exact-tracks its own usage.
+          if (used != null && used > accountUsed) accountUsed = used;
+          return TrialSyncInfo(
+            used: accountUsed,
+            freeChecks: kFreeTrialChecks,
+            trialsRemaining:
+                (kFreeTrialChecks - accountUsed).clamp(0, kFreeTrialChecks),
+            proActive: false,
+            scope: 'account',
+            deviceUsed: deviceUsed,
+          );
+        }
+        if (used != null && used > deviceUsed) deviceUsed = used;
+        return TrialSyncInfo(
+          used: deviceUsed,
+          freeChecks: kFreeTrialChecks,
+          trialsRemaining:
+              (kFreeTrialChecks - deviceUsed).clamp(0, kFreeTrialChecks),
+          proActive: false,
+          scope: 'device',
+        );
+      }
+
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: syncFn,
+      );
+      await c.ensureLoaded();
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 2,
+          reason: 'signed out, the device ledger gates');
+
+      // Sign in with a brand-new account — scope adoption loads the
+      // account's own (empty) budget and the server confirms it.
+      await c.setTrialScope('a' * 64);
+      await pumpEventQueue();
+      expect(scope, 'a' * 64);
+      expect(c.trialsLeft, kFreeTrialChecks,
+          reason: 'the fresh account starts at its own five');
+      expect(c.canVerifyNow, isTrue);
+
+      // The account's own consumption lands on its own counter only.
+      await c.consumeAttempt();
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 1);
+      expect(accountUsed, 1);
+
+      // Signing out returns to the device budget — still spent.
+      await c.setTrialScope(null);
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 2);
+    });
+
+    test('account budgets are independent per account (no cross-leak)',
+        () async {
+      final (store, now) = fixtures();
+      final budgets = <String, int>{'a': 4, 'b': 0};
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async {
+          if (accountScope == null) return null;
+          final u = budgets[accountScope] ?? 0;
+          return TrialSyncInfo(
+            used: u,
+            freeChecks: kFreeTrialChecks,
+            trialsRemaining: (kFreeTrialChecks - u).clamp(0, kFreeTrialChecks),
+            proActive: false,
+            scope: 'account',
+            deviceUsed: 5,
+          );
+        },
+      );
+      await c.ensureLoaded();
+
+      // Account A used 4 → 1 left.
+      await c.setTrialScope('a');
+      await pumpEventQueue();
+      expect(c.trialsLeft, 1);
+
+      // Switch straight to account B (another device account) — B's own
+      // budget must gate, not A's number and not the device's.
+      await c.setTrialScope('b');
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks);
+      expect(c.canVerifyNow, isTrue);
+    });
+
+    test('legacy server (no scope tag) is treated as device scope',
+        () async {
+      final (store, now) = fixtures();
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async =>
+            TrialSyncInfo(
+          used: 3,
+          freeChecks: kFreeTrialChecks,
+          trialsRemaining: kFreeTrialChecks - 3,
+          proActive: false,
+          // No scope field — pre-v1.19.3 server.
+        ),
+      );
+      await c.ensureLoaded();
+      // Account scope + untagged reply: ignored (no live session proved
+      // the number belongs to this account); local account counter gates.
+      await c.setTrialScope('a' * 64);
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks);
+      // Device scope + untagged reply: raise-only clamp as always.
+      await c.setTrialScope(null);
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 3);
+    });
+
+    test('signed-out sync with live backup session applies the device '
+        'number, never the account budget', () async {
+      final (store, now) = fixtures();
+      final c = LicenseController(
+        store: store,
+        deviceKeySource: () async => 'device-1',
+        now: now,
+        publicKeyHex: await publicKeyHexFuture,
+        trialSync: ({required String deviceHashHex, int? used, String? accountScope}) async {
+          if (accountScope != null) return null;
+          // The backup session is still live server-side: the reply is
+          // account-scoped (used=0, a fresh account) but carries the
+          // device ledger's 2.
+          return TrialSyncInfo(
+            used: 0,
+            freeChecks: kFreeTrialChecks,
+            trialsRemaining: kFreeTrialChecks,
+            proActive: false,
+            scope: 'account',
+            deviceUsed: 2,
+          );
+        },
+      );
+      await c.ensureLoaded();
+      await pumpEventQueue();
+      expect(c.trialsLeft, kFreeTrialChecks - 2,
+          reason: 'device ledger number gates even when the reply is '
+              'account-scoped');
     });
   });
 

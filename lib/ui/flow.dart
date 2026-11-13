@@ -40,10 +40,11 @@ final RegExp _cbePrintedReference = RegExp(r'^FT[0-9A-Za-z]{5,}$');
 /// Runs the pending verification and, on ANY completed check (verified or
 /// failed), slides in the result screen — users always get feedback.
 ///
-/// Licensing gate: every verification path funnels through here. Trials
-/// (or an active license) are consumed before the check runs, and an
+/// Licensing gate: every verification path funnels through here. An
 /// exhausted trial opens the paywall first — activation resumes the check
-/// the user was trying to run.
+/// the user was trying to run. The free budget is charged only when the
+/// bank ANSWERED (v1.19.2): a receipt (verified) or a definitive
+/// not-found — never for a dead network or a blocked/unreadable body.
 Future<void> runVerificationFlow(BuildContext context) async {
   final controller = context.read<VerifyController>();
 
@@ -83,12 +84,6 @@ Future<void> runVerificationFlow(BuildContext context) async {
     if (activated != true || !context.mounted) return;
     final resumed = context.read<LicenseController>();
     if (!resumed.canVerifyNow) return;
-    // Count the attempt BEFORE the check — attempts are charged, not
-    // successes. Skipped when the form cannot run (no bank / no reference)
-    // so dead taps never burn a free check.
-    if (controller.canVerify) await resumed.consumeAttempt();
-  } else if (controller.canVerify) {
-    await license.consumeAttempt();
   }
 
   unawaited(HapticFeedback.mediumImpact());
@@ -104,6 +99,16 @@ Future<void> runVerificationFlow(BuildContext context) async {
     return;
   }
   if (!context.mounted) return;
+
+  // ── charge the check ─────────────────────────────────────────────────
+  // Charged when the bank ANSWERED — a receipt (verified) or a definite
+  // "not found", the two verdicts the result screen shows. A dead
+  // network, an anti-bot interstitial or an unreadable body costs
+  // nothing: users pay for verdicts, not for attempts (v1.19.2 — the
+  // old charge-before-check burned free checks on flaky networks).
+  if (result.ok || result.failure?.kind == VerifyErrorKind.notFound) {
+    await license.consumeAttempt();
+  }
 
   // ── local anti-fraud advisories ─────────────────────────────────────
   // Duplicate reference + stale receipt. Both are computed BEFORE the

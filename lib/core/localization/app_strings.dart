@@ -137,6 +137,7 @@ abstract base class AppStrings {
   String get hidePassword;
   String get signingIn;
   String get creatingAccount;
+  String get preparingAccount;
   String get accountCreatedSuccess;
   String get authPrivacyNote;
   String errorAuth(AuthError error);
@@ -247,6 +248,7 @@ abstract base class AppStrings {
   String get senderAccountLabel;
   String get receiverLabel;
   String get receiverAccountLabel;
+  String get notOnReceipt;
   String get dateLabel;
   String get referenceShortLabel;
   String get reasonLabel;

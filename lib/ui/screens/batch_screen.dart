@@ -112,21 +112,21 @@ class _BatchScreenState extends State<BatchScreen> {
         return;
       }
     }
+    if (!mounted) return;
 
-    await context.read<BatchController>().run(
-          history: context.read<VerifyHistory>(),
-          consumeAttempt: () async {
-            final l = context.read<LicenseController>();
-            // Nothing left to charge — stop before burning anything.
-            if (!l.isEntitled && l.trialsLeft <= 0) return false;
-            // consumeAttempt no-ops while entitled, so this is the
-            // actual charge; the pre-flight gate already made sure the
-            // batch fits.
-            await l.consumeAttempt();
-            return true;
-          },
-          duplicateNote: (when) => strings.duplicateReceiptNote(when),
-          staleNote: (days) => strings.staleReceiptNote(days),
+    // Capture everything the run callback needs BEFORE the async run —
+    // the callback fires mid-batch, long after this await chain ends.
+    // (license is already captured up in the pre-flight block.)
+    final batch = context.read<BatchController>();
+    final history = context.read<VerifyHistory>();
+    await batch.run(
+          history: history,
+          // Runs after each verdict row (charge-on-verdict, v1.19.2).
+          // consumeAttempt no-ops while entitled; the pre-flight gate
+          // above made sure the batch fits the free budget.
+          chargeAttempt: license.consumeAttempt,
+          duplicateNote: strings.duplicateReceiptNote,
+          staleNote: strings.staleReceiptNote,
         );
   }
 

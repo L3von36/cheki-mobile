@@ -429,17 +429,72 @@ async function run() {
 
     const accountUsed4 = await call('POST', '/v1/trials/sync', {
       bearer: acctToken,
-      body: { deviceHash: H64(), used: 4 },
+      body: { deviceHash: H64(), used: 4, accountScope: 'acct-hash-1' },
     });
     const accountWiped = await call('POST', '/v1/trials/sync', {
       bearer: acctToken,
-      body: { deviceHash: H64() },
+      body: { deviceHash: H64(), accountScope: 'acct-hash-1' },
     });
     ok(accountUsed4.json?.used === 4 && accountWiped.json?.used === 4,
-      'account usage survives device changes and local counter resets');
+      'declared-scope account usage survives device changes and local counter resets');
 
     const proSync = await call('POST', '/v1/trials/sync', { body: { deviceHash: H64() } });
     ok(proSync.json?.pro?.active === false, 'no Pro → pro.active false (flag present)');
+
+    // ── v1.19.3 scoping: a brand-new account on a used device keeps a
+    // FRESH budget. v1.18.10–v1.19.2 merged the device's usage into the
+    // signed-in account's ledger, so the phone's pre-sign-up checks
+    // followed the user into the new account ("3 left" on day one).
+    {
+      const usedPhone = H64(); // spent 2 checks signed-out on this phone
+      await call('POST', '/v1/trials/sync', { body: { deviceHash: usedPhone, used: 2 } });
+
+      const freshHash = H64();
+      const freshKey = H64();
+      await call('POST', '/v1/accounts', {
+        body: { identifierHash: freshHash, authKey: freshKey, identifier: '+251911223344', displayName: 'Fresh Account' },
+      });
+      const freshLogin = await call('POST', '/v1/session', { body: { identifierHash: freshHash, authKey: freshKey } });
+      const freshToken = freshLogin.json?.accessToken || '';
+
+      // Signed in on the used phone, legacy client (no accountScope):
+      // the device's 2 checks must NOT enter the account ledger.
+      const freshSync = await call('POST', '/v1/trials/sync', {
+        bearer: freshToken,
+        body: { deviceHash: usedPhone, used: 2 },
+      });
+      ok(
+        freshSync.json?.used === 0 && freshSync.json?.trialsRemaining === 5 && freshSync.json?.scope === 'account',
+        `fresh account on a used device keeps all 5 (used=${freshSync.json?.used})`,
+      );
+
+      // The device ledger absorbed the account's own usage after signing
+      // in — signing out cannot resume a fresh device budget.
+      const afterSignOut = await call('POST', '/v1/trials/sync', { body: { deviceHash: usedPhone } });
+      ok(afterSignOut.json?.scope === 'device' && afterSignOut.json?.used >= 2,
+        `signed-out budget on the same phone is still spent (used=${afterSignOut.json?.used})`);
+
+      // A legacy client's report never lowers the fresh account budget
+      // and never inflates it either (device numbers are ignored).
+      const legacyLie = await call('POST', '/v1/trials/sync', {
+        bearer: freshToken,
+        body: { deviceHash: usedPhone, used: 4 },
+      });
+      ok(legacyLie.json?.used === 0, 'legacy client device-counter cannot poison the account budget');
+
+      // v1.19.3+ client declaring its account scope raises its own budget.
+      const scopedUse = await call('POST', '/v1/trials/sync', {
+        bearer: freshToken,
+        body: { deviceHash: usedPhone, used: 1, accountScope: 'fresh-hash-1' },
+      });
+      ok(scopedUse.json?.used === 1 && scopedUse.json?.trialsRemaining === 4,
+        'declared-scope report raises the account budget');
+      const scopedAgain = await call('POST', '/v1/trials/sync', {
+        bearer: freshToken,
+        body: { deviceHash: usedPhone, used: 0, accountScope: 'fresh-hash-1' },
+      });
+      ok(scopedAgain.json?.used === 1, 'declared-scope counter is monotonic');
+    }
   }
 
   // ── cleanup endpoints ─────────────────────────────────────────────────

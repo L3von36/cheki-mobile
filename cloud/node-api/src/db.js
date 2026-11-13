@@ -352,6 +352,33 @@ function ensureSchema() {
       await run(ddl);
     }
     await run(`${INSERT_IGNORE} \`config\` (\`k\`, \`v\`) VALUES ('schema', '2')`);
+
+    // v1.19.3 one-time repair — un-poison account trial budgets.
+    // v1.18.10–v1.19.2 wrote the DEVICE's usage into a signed-in
+    // account's ledger at every sync, so a brand-new account created on
+    // a used phone inherited the phone's pre-sign-up checks. The account
+    // budget is now built only from the account's own receipts (see
+    // app.js /v1/trials/sync); this migration clamps existing rows back
+    // down to what the account itself actually verified, capped at the
+    // free-check allowance. Gated on the schema version so it runs
+    // exactly once per database; failures never block startup.
+    try {
+      const versionRows = await query("SELECT v FROM `config` WHERE k = 'schema'");
+      const priorVersion = Number(versionRows[0]?.v) || 0;
+      if (priorVersion < 3) {
+        await run(
+          'UPDATE `account_trials` SET `checks_used` = (' +
+            'SELECT COUNT(*) FROM `verified_receipts` r WHERE r.`user_id` = `account_trials`.`user_id`' +
+            ") WHERE `checks_used` > (SELECT COUNT(*) FROM `verified_receipts` r2 WHERE r2.`user_id` = `account_trials`.`user_id`)",
+        );
+        // INSERT IGNORE alone cannot bump an existing '2' row — the
+        // explicit UPDATE is what makes the gate exactly-once.
+        await run(`${INSERT_IGNORE} \`config\` (\`k\`, \`v\`) VALUES ('schema', '3')`);
+        await run("UPDATE `config` SET `v` = '3' WHERE `k` = 'schema'");
+      }
+    } catch (_) {
+      // Repair is best-effort — a failed clamp just leaves the row as is.
+    }
   })().catch((e) => {
     readyPromise = null; // allow a retry on the next request
     throw e;

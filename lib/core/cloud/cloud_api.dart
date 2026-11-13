@@ -60,12 +60,25 @@ class TrialSyncInfo {
   final bool proActive;
   final int? proUntilMs;
 
+  /// v1.19.3 — which budget `used` belongs to: 'account' when a session
+  /// gated the reply, 'device' otherwise. Absent on pre-v1.19.3 servers
+  /// (treated as device scope by the license controller).
+  final String? scope;
+
+  /// v1.19.3 — the DEVICE ledger number, always present in an `account`
+  /// reply. The device budget keeps absorbing every usage server-side;
+  /// the signed-out counter gates on this when the backup session is
+  /// still live.
+  final int? deviceUsed;
+
   const TrialSyncInfo({
     required this.used,
     required this.freeChecks,
     required this.trialsRemaining,
     required this.proActive,
     this.proUntilMs,
+    this.scope,
+    this.deviceUsed,
   });
 }
 
@@ -400,11 +413,16 @@ class CloudApi {
   /// Server view of this device's free-trial budget
   /// (POST /v1/trials/sync). No session required — pre-sign-up devices
   /// sync keyed by [deviceHashHex] alone; a [sessionToken] adds the
-  /// account-level cap. Returns null on a malformed reply.
+  /// account-level budget (v1.19.3: gated on the ACCOUNT's own ledger,
+  /// never the device's). [accountScope] declares which account the
+  /// client's [used] belongs to — only then may the server count it
+  /// against that account (legacy clients' device-global numbers are
+  /// ignored server-side). Returns null on a malformed reply.
   Future<TrialSyncInfo?> syncTrials({
     String? sessionToken,
     required String deviceHashHex,
     int? used,
+    String? accountScope,
   }) async {
     final r = await _send('POST', '/v1/trials/sync',
         bearer:
@@ -412,6 +430,8 @@ class CloudApi {
         body: {
           'deviceHash': deviceHashHex,
           if (used != null) 'used': used,
+          if (accountScope != null && accountScope.isNotEmpty)
+            'accountScope': accountScope,
         });
     final pro = r['pro'];
     if (pro is! Map) return null;
@@ -421,6 +441,8 @@ class CloudApi {
       trialsRemaining: (r['trialsRemaining'] as num?)?.toInt() ?? 0,
       proActive: pro['active'] == true,
       proUntilMs: (pro['until'] as num?)?.toInt(),
+      scope: r['scope'] is String ? r['scope'] as String? : null,
+      deviceUsed: (r['deviceUsed'] as num?)?.toInt(),
     );
   }
 
