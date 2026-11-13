@@ -91,10 +91,10 @@ final class TigrinyaStrings extends AppStrings {
   String get fullNameHint => 'ለምሳሌ፦ ኣበበ ከበደ';
 
   @override
-  String get identifierLabel => 'ቁጽሪ ተሌፎን ወይ ኢመይል';
+  String get identifierLabel => 'ቁጽሪ ተሌፎን';
 
   @override
-  String get identifierHint => '09xxxxxxxx ወይ you@mail.com';
+  String get identifierHint => '09xxxxxxxx';
 
   @override
   String get passwordLabel => 'መሕለፊ ቃል';
@@ -170,18 +170,16 @@ final class TigrinyaStrings extends AppStrings {
     AuthError.invalidName =>
       'ምሉእ ሽምኩም ጽሓፉ (2 ፊደላት ወይ ንዕሊ)።',
     AuthError.invalidIdentifier =>
-      'ቅኑዕ ቁጽሪ ተሌፎን ኢትዮጵያ (09xxxxxxxx) ወይ ኢመይል '
-          'ኣእቱ።',
-    AuthError.invalidEmail => 'እቲ ኢመይል ቅኑዕ ኣይምስዓብን።',
+      'ቅኑዕ ቁጽሪ ተሌፎን ኢትዮጵያ (09xxxxxxxx) ኣእቱ።',
     AuthError.invalidPassword =>
       'መሕለፊ ቃል 6 ፊደላት ወይ ንዕሊ ክኾን ኣለዎ።',
     AuthError.passwordMismatch =>
       'እቲ ክልተ መሕለፊ ቃላት ኣይተዋሓቡን።',
     AuthError.alreadyExists =>
-      'ብእዚ ቁጽሪ ተሌፎን/ኢመይል ሕሳብ ቅድሚ ዘሎ — በዝሕቲ '
+      'ብእዚ ቁጽሪ ተሌፎን ሕሳብ ቅድሚ ዘሎ — በዝሕቲ '
           'ኣቱዎ።',
     AuthError.accountNotFound =>
-      'ብእዚ ቁጽሪ ተሌፎን/ኢመይል ሕሳብ ኣይተረኽበን — ቅድሚ '
+      'ብእዚ ቁጽሪ ተሌፎን ሕሳብ ኣይተረኽበን — ቅድሚ '
           'ሕሳብ ክፉቱ።',
     AuthError.wrongPassword =>
       'እቲ መሕለፊ ቃል ጌጋ እዩ። ደጊምኩም ፈትሹ።',

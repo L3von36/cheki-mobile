@@ -332,6 +332,8 @@ class AuthField extends StatefulWidget {
   final String? errorText;
   final TextCapitalization textCapitalization;
   final ValueChanged<String>? onSubmitted;
+  final TextInputType? keyboardType;
+  final List<String>? autofillHints;
 
   const AuthField({
     super.key,
@@ -343,6 +345,8 @@ class AuthField extends StatefulWidget {
     this.errorText,
     this.textCapitalization = TextCapitalization.none,
     this.onSubmitted,
+    this.keyboardType,
+    this.autofillHints,
   });
 
   @override
@@ -380,13 +384,15 @@ class _AuthFieldState extends State<AuthField> {
           onSubmitted: widget.onSubmitted,
           textInputAction: TextInputAction.next,
           textCapitalization: widget.textCapitalization,
-          autofillHints: widget.obscure
-              ? const [AutofillHints.password, AutofillHints.newPassword]
-              : const [
-                  AutofillHints.username,
-                  AutofillHints.email,
-                  AutofillHints.telephoneNumberNational,
-                ],
+          keyboardType: widget.keyboardType,
+          autofillHints: widget.autofillHints ??
+              (widget.obscure
+                  ? const [AutofillHints.password, AutofillHints.newPassword]
+                  : const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                      AutofillHints.telephoneNumberNational,
+                    ]),
           style: TextStyle(
             color: isDark ? MahtemPalette.dInk : MahtemPalette.lInk,
             fontSize: 13,

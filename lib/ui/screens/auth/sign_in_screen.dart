@@ -170,7 +170,11 @@ class _SignInScreenState extends State<SignInScreen> {
                     controller: _identifierCtrl,
                     label: strings.identifierLabel,
                     hint: strings.identifierHint,
-                    icon: Icons.alternate_email_rounded,
+                    icon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [
+                      AutofillHints.telephoneNumberNational,
+                    ],
                   ),
                   const SizedBox(height: 14),
                   AuthField(

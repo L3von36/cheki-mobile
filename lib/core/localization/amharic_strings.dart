@@ -90,10 +90,10 @@ final class AmharicStrings extends AppStrings {
   String get fullNameHint => 'ለምሳሌ፦ አበበ ከበደ';
 
   @override
-  String get identifierLabel => 'ስልክ ቁጥር ወይም ኢሜይል';
+  String get identifierLabel => 'ስልክ ቁጥር';
 
   @override
-  String get identifierHint => '09xxxxxxxx ወይም you@mail.com';
+  String get identifierHint => '09xxxxxxxx';
 
   @override
   String get passwordLabel => 'የይለፍ ቃል';
@@ -167,13 +167,12 @@ final class AmharicStrings extends AppStrings {
   String errorAuth(AuthError error) => switch (error) {
     AuthError.invalidName => 'ሙሉ ስምዎን ያስገቡ (ቢያንስ 2 ቁምፊዎች)።',
     AuthError.invalidIdentifier =>
-      'ትክክለኛ የኢትዮጵያ ስልክ ቁጥር (09xxxxxxxx) ወይም ኢሜይል ያስገቡ።',
-    AuthError.invalidEmail => 'ኢሜይሉ ትክክል አይመስልም።',
+      'ትክክለኛ የኢትዮጵያ ስልክ ቁጥር (09xxxxxxxx) ያስገቡ።',
     AuthError.invalidPassword => 'የይለፍ ቃል ቢያንስ 6 ቁምፊዎች መሆን አለበት።',
     AuthError.passwordMismatch => 'የይለፍ ቃሎቹ አይዛመዱም።',
-    AuthError.alreadyExists => 'በዚህ ስልክ/ኢሜይል የተመዘገበ መለያ አስቀድሞ አለ፤ እባክዎ ይግቡ።',
+    AuthError.alreadyExists => 'በዚህ ስልክ ቁጥር የተመዘገበ መለያ አስቀድሞ አለ፤ እባክዎ ይግቡ።',
     AuthError.accountNotFound =>
-      'በዚህ ስልክ/ኢሜይል የተመዘገበ መለያ የለም — መጀመሪያ መለያ ይፍጠሩ።',
+      'በዚህ ስልክ ቁጥር የተመዘገበ መለያ የለም — መጀመሪያ መለያ ይፍጠሩ።',
     AuthError.wrongPassword => 'የይለፍ ቃሉ ተሳስቷል። እንደገና ይሞክሩ።',
     AuthError.network =>
       'የመለያ አገልግሎቱን ማግኘት አልተቻለም። የበይነመረብ ግንኙነትዎን ያረጋግጡ።',

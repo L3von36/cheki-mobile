@@ -86,10 +86,10 @@ final class EnglishStrings extends AppStrings {
   String get fullNameHint => 'e.g. Abebe Kebede';
 
   @override
-  String get identifierLabel => 'Phone number or email';
+  String get identifierLabel => 'Phone number';
 
   @override
-  String get identifierHint => '09xxxxxxxx or you@mail.com';
+  String get identifierHint => '09xxxxxxxx';
 
   @override
   String get passwordLabel => 'Password';
@@ -164,15 +164,14 @@ final class EnglishStrings extends AppStrings {
     AuthError.invalidName =>
       'Please enter your full name (at least 2 characters).',
     AuthError.invalidIdentifier =>
-      'Enter a valid Ethiopian phone number (09xxxxxxxx) or email.',
-    AuthError.invalidEmail => "That email address doesn't look right.",
+      'Enter a valid Ethiopian phone number (09xxxxxxxx).',
     AuthError.invalidPassword => 'Password must be at least 6 characters.',
     AuthError.passwordMismatch => "Passwords don't match.",
     AuthError.alreadyExists =>
-      'An account with this phone/email already exists — sign in '
+      'An account with this phone number already exists — sign in '
           'instead.',
     AuthError.accountNotFound =>
-      'No account found for this phone/email — create one first.',
+      'No account found for this phone number — create one first.',
     AuthError.wrongPassword => 'Wrong password. Try again.',
     AuthError.network =>
       "Can't reach the account service. Check your internet and try again.",

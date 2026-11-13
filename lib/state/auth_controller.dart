@@ -16,7 +16,6 @@ import '../core/error_safety_net.dart';
 enum AuthError {
   invalidName,
   invalidIdentifier,
-  invalidEmail,
   invalidPassword,
   passwordMismatch,
   alreadyExists,
@@ -219,7 +218,6 @@ class AuthController extends ChangeNotifier {
         return AuthFailure(switch (issue) {
           AccountIdIssue.empty ||
           AccountIdIssue.invalidPhone => AuthError.invalidIdentifier,
-          AccountIdIssue.invalidEmail => AuthError.invalidEmail,
         });
       }
       if (password.length < _minPasswordLength) {
@@ -283,7 +281,6 @@ class AuthController extends ChangeNotifier {
         return AuthFailure(switch (issue) {
           AccountIdIssue.empty || AccountIdIssue.invalidPhone =>
             AuthError.invalidIdentifier,
-          AccountIdIssue.invalidEmail => AuthError.invalidEmail,
         });
       }
       final id = validation.normalized;

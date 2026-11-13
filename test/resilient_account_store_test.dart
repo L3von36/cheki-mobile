@@ -160,13 +160,13 @@ void main() {
       expect((bad as AuthFailure).error, AuthError.invalidIdentifier);
     });
 
-    test('malformed email is invalid-email at sign-in', () async {
+    test('email identifier is rejected at sign-in (phone-only)', () async {
       final auth = controller();
       final bad = await auth.signIn(
         identifier: 'abebe@bad',
         password: 'whatever1',
       );
-      expect((bad as AuthFailure).error, AuthError.invalidEmail);
+      expect((bad as AuthFailure).error, AuthError.invalidIdentifier);
     });
 
     test('valid-but-unknown identifier is still account-not-found', () async {
