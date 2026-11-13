@@ -151,6 +151,9 @@ final class EnglishStrings extends AppStrings {
   String get creatingAccount => 'Creating account…';
 
   @override
+  String get preparingAccount => 'Getting your account ready…';
+
+  @override
   String get accountCreatedSuccess => 'Account created — you\'re all set!';
 
   @override

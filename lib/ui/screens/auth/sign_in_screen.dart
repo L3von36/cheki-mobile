@@ -25,6 +25,12 @@ class _SignInScreenState extends State<SignInScreen> {
   final _passwordCtrl = TextEditingController();
   String? _error;
 
+  /// Post-sign-in work indicator: sign-in → vault arming + sync. While
+  /// set, the button stays busy and the progress line tells the user
+  /// the app is working — on a slow connection (or the second-device
+  /// cloud lookup) the wait otherwise reads as a freeze.
+  String? _progress;
+
   @override
   void initState() {
     super.initState();
@@ -50,7 +56,10 @@ class _SignInScreenState extends State<SignInScreen> {
   Future<void> _submit() async {
     final auth = context.read<AuthController>();
     final strings = context.read<LocaleController>().strings;
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _progress = strings.signingIn;
+    });
     // v1.14.1: an UNEXPECTED exception must never fail silently — the user
     // would see the button stop spinning and nothing else (reported as
     // "sign in doesn't create an account"). Known failures map to
@@ -73,6 +82,10 @@ class _SignInScreenState extends State<SignInScreen> {
 
     switch (result) {
       case AuthSuccess(:final account):
+        // Vault arming and the trial refresh ride on the network — keep
+        // the progress line up until they finish (same on-device freeze
+        // report as the create-account screen).
+        if (mounted) setState(() => _progress = strings.preparingAccount);
         await cloud.autoEnable(
           password: password,
           account: account,
@@ -86,12 +99,23 @@ class _SignInScreenState extends State<SignInScreen> {
         if (error == AuthError.githubRequired && mounted) {
           // GitHub-provisioned accounts can't re-prove a password —
           // send the user straight into the device flow.
+          setState(() => _progress = null);
           await _githubSignIn();
           return;
         }
-        if (mounted) setState(() => _error = strings.errorAuth(error));
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _error = strings.errorAuth(error);
+          });
+        }
       case null:
-        if (mounted) setState(() => _error = strings.genericAuthError);
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _error = strings.genericAuthError;
+          });
+        }
     }
   }
 
@@ -149,6 +173,7 @@ class _SignInScreenState extends State<SignInScreen> {
     final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final inkDim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    final busy = auth.isBusy || _progress != null;
 
     return Scaffold(
       backgroundColor: isDark ? MahtemPalette.dBg : MahtemPalette.lBg,
@@ -190,7 +215,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     child: Padding(
                       padding: const EdgeInsets.only(top: 10, left: 4),
                       child: GestureDetector(
-                        onTap: auth.isBusy ? null : _forgotPassword,
+                        onTap: busy ? null : _forgotPassword,
                         child: Text(
                           strings.forgotPassword,
                           style: const TextStyle(
@@ -209,14 +234,17 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 20),
                   AuthSubmitButton(
                     label: strings.signInButton,
-                    busy: auth.isBusy,
-                    onTap:
-                        auth.isBusy ||
+                    busy: busy,
+                    onTap: busy ||
                             _identifierCtrl.text.trim().isEmpty ||
                             _passwordCtrl.text.isEmpty
                         ? null
                         : _submit,
                   ),
+                  if (_progress != null) ...[
+                    const SizedBox(height: 12),
+                    AuthProgressLine(message: _progress!),
+                  ],
                   const SizedBox(height: 12),
                   AuthGithubButton(
                     onTap: auth.isBusy ? null : _githubSignIn,
@@ -236,7 +264,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(
-                        onTap: auth.isBusy
+                        onTap: busy
                             ? null
                             : () => Navigator.of(context).push<void>(
                                     MaterialPageRoute<void>(

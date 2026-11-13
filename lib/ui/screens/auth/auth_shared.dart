@@ -291,6 +291,41 @@ class AuthErrorBox extends StatelessWidget {
   }
 }
 
+/// Busy line under the submit button while the post-auth work runs —
+/// account creation, vault arming, first cloud sync. Without it a slow
+/// connection makes the wait look like the app froze.
+class AuthProgressLine extends StatelessWidget {
+  final String message;
+
+  const AuthProgressLine({super.key, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    return Row(
+      children: [
+        const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(
+              color: ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Bottom privacy note: a lock icon plus the "device-only" reassurance.
 class AuthPrivacyNote extends StatelessWidget {
   const AuthPrivacyNote({super.key});

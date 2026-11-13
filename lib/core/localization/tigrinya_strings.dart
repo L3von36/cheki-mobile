@@ -157,6 +157,9 @@ final class TigrinyaStrings extends AppStrings {
   String get creatingAccount => 'ሕሳብ ይኽፈል ኣሎ…';
 
   @override
+  String get preparingAccount => 'ሕሳብኩም ይትዳል ኣሎ…';
+
+  @override
   String get accountCreatedSuccess => 'ሕሳብኩም ብዓወት ተፈጢሩ ኣሎ!';
 
   @override

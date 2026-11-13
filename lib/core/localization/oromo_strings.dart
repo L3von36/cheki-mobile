@@ -160,6 +160,9 @@ final class OromoStrings extends AppStrings {
   String get creatingAccount => 'Herrega uumaa jira\u2026';
 
   @override
+  String get preparingAccount => 'Herrega keessan qopheessaa jira\u2026';
+
+  @override
   String get accountCreatedSuccess => "Herregni keessan milkaa'inaan uumameera!";
 
   @override

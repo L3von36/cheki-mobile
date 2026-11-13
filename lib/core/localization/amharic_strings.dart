@@ -155,6 +155,9 @@ final class AmharicStrings extends AppStrings {
   String get creatingAccount => 'መለያ በመፍጠር ላይ…';
 
   @override
+  String get preparingAccount => 'መለያዎን በማዘጋጀት ላይ…';
+
+  @override
   String get accountCreatedSuccess => 'መለያዎ በተሳካ ሁኔታ ተፈጥሯል!';
 
   @override

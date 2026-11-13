@@ -28,6 +28,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _confirmCtrl = TextEditingController();
   String? _error;
 
+  /// Post-creation work indicator: creation → vault arming + first sync.
+  /// While set, the button stays busy and the progress line tells the
+  /// user the app is working — on a slow connection the wait otherwise
+  /// reads as a freeze (reported during on-device testing).
+  String? _progress;
+
   @override
   void initState() {
     super.initState();
@@ -70,7 +76,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       setState(() => _error = strings.errorAuth(AuthError.passwordMismatch));
       return;
     }
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _progress = strings.creatingAccount;
+    });
 
     AuthResult? result;
     try {
@@ -85,6 +94,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
     switch (result) {
       case AuthSuccess(:final account):
+        // The heavy work is still ahead — vault arming and the first
+        // sync ride on the network. The success toast fires only after
+        // it finishes, so "you're all set" is never a lie, and the
+        // progress line keeps the wait readable.
+        if (mounted) setState(() => _progress = strings.preparingAccount);
+        await cloud.autoEnable(
+          password: password,
+          account: account,
+          history: history,
+        );
+        await license.refreshTrialBudget();
         messenger.showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
@@ -112,19 +132,23 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ),
           ),
         );
-        await cloud.autoEnable(
-          password: password,
-          account: account,
-          history: history,
-        );
-        await license.refreshTrialBudget();
         if (navigator.canPop()) {
           navigator.popUntil((route) => route.isFirst);
         }
       case AuthFailure(:final error):
-        if (mounted) setState(() => _error = strings.errorAuth(error));
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _error = strings.errorAuth(error);
+          });
+        }
       case null:
-        if (mounted) setState(() => _error = strings.genericAuthError);
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _error = strings.genericAuthError;
+          });
+        }
     }
   }
 
@@ -157,6 +181,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     final strings = context.watch<LocaleController>().strings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final inkDim = isDark ? MahtemPalette.dInkDim : MahtemPalette.lInkDim;
+    final busy = auth.isBusy || _progress != null;
 
     return Scaffold(
       backgroundColor: isDark ? MahtemPalette.dBg : MahtemPalette.lBg,
@@ -216,9 +241,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   const SizedBox(height: 20),
                   AuthSubmitButton(
                     label: strings.createAccountButton,
-                    busy: auth.isBusy,
-                    onTap: auth.isBusy || !_formComplete ? null : _submit,
+                    busy: busy,
+                    onTap: busy || !_formComplete ? null : _submit,
                   ),
+                  if (_progress != null) ...[
+                    const SizedBox(height: 12),
+                    AuthProgressLine(message: _progress!),
+                  ],
                   const SizedBox(height: 12),
                   AuthGithubButton(
                     divided: true,
@@ -239,7 +268,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(
-                        onTap: auth.isBusy
+                        onTap: busy
                             ? null
                             : () => Navigator.of(context).push<void>(
                                     MaterialPageRoute<void>(
