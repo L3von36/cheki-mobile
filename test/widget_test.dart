@@ -70,7 +70,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('History'));
+    // Tap the nav button by ICON: the label carries the entry count
+    // ("History (1)") once the persisted history finishes loading, which
+    // can land within these same pumps — the plain "History" text then
+    // only exists in the inactive IndexedStack tab, where finders
+    // (rightly) do not look.
+    await tester.tap(find.byIcon(Icons.history_rounded));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.textContaining('FT-SAVED-1'), findsOneWidget);
@@ -145,7 +150,8 @@ void main() {
   testWidgets('history tab shows the empty state', (tester) async {
     await bootToHome(tester, auth: await seededAuth());
 
-    await tester.tap(find.text('History'));
+    // By icon — see the note on the persisted-history test above.
+    await tester.tap(find.byIcon(Icons.history_rounded));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('No checks yet'), findsOneWidget);
