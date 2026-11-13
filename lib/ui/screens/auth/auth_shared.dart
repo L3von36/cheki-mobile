@@ -6,59 +6,88 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../state/cloud_controller.dart';
 import '../../../state/locale_controller.dart';
 import '../../../theme/mahtem_theme.dart';
 import '../../widgets/pressable.dart';
 
 /// "Continue with GitHub" — the BetterAuth device-flow entry. Kept visual
 /// light: an outlined row button under the primary submit button.
-class AuthGithubButton extends StatelessWidget {
+///
+/// Shown ONLY when the server has GitHub OAuth enabled (`/v1/auth/providers`
+/// answers `{"github":true}`). Fail-closed: while the probe is in flight,
+/// on an error, or when OAuth is not configured, the button does not
+/// render at all — the sign-in stays identifier + password.
+class AuthGithubButton extends StatefulWidget {
   final VoidCallback? onTap;
 
   const AuthGithubButton({super.key, required this.onTap});
 
   @override
+  State<AuthGithubButton> createState() => _AuthGithubButtonState();
+}
+
+class _AuthGithubButtonState extends State<AuthGithubButton> {
+  late final Future<bool> _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = context.read<CloudController>().api.githubSignInEnabled();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final strings = context.watch<LocaleController>().strings;
-    final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
-    final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
-    return Pressable(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          color: isDark ? MahtemPalette.dCard : Colors.white,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(13),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.code_rounded, size: 17, color: ink),
-            const SizedBox(width: 8),
-            // FittedBox: long translations must never push the fixed-height
-            // button wider than the screen (320px walk regression).
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  strings.continueWithGithub,
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
+    return FutureBuilder<bool>(
+      future: _enabled,
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        return _githubButton(context, widget.onTap);
+      },
+    );
+  }
+}
+
+Widget _githubButton(BuildContext context, VoidCallback? onTap) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final strings = context.watch<LocaleController>().strings;
+  final border = isDark ? MahtemPalette.dBorder : MahtemPalette.lBorder;
+  final ink = isDark ? MahtemPalette.dInk : MahtemPalette.lInk;
+  return Pressable(
+    onTap: onTap,
+    child: Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: isDark ? MahtemPalette.dCard : Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.code_rounded, size: 17, color: ink),
+          const SizedBox(width: 8),
+          // FittedBox: long translations must never push the fixed-height
+          // button wider than the screen (320px walk regression).
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                strings.continueWithGithub,
+                maxLines: 1,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Brand header: gradient logo mark, app name, then the screen's

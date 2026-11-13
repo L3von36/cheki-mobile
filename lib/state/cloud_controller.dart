@@ -87,6 +87,10 @@ class CloudController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   final CloudApi _api;
+
+  /// The shared cloud API — read-only access for widgets that need a
+  /// capability probe (e.g. the auth screens' GitHub button).
+  CloudApi get api => _api;
   final PasswordHasher _hasher;
   final SharedPreferences? _prefs;
   final int Function() _revisionClock;
