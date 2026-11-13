@@ -9,6 +9,7 @@ import 'core/auth/account_store.dart';
 import 'core/auth/password_hasher.dart';
 import 'core/cloud/cloud_account_directory.dart';
 import 'core/cloud/cloud_api.dart';
+import 'core/cloud/cloud_keys.dart';
 import 'core/error_safety_net.dart';
 import 'core/localization/am_material_localizations.dart';
 import 'core/localization/app_strings.dart';
@@ -122,7 +123,16 @@ class MahtemApp extends StatelessWidget {
                 ..ensureLoaded(),
         ),
       ],
-      child: Consumer2<ThemeController, LocaleController>(
+      // v1.19.3 — the trial budget is SCOPED to the signed-in account:
+      // while signed in, the app gates on the account's own server-side
+      // budget (fresh five per account, whatever this phone spent before);
+      // signed out, the device ledger gates as before. This wiring follows
+      // the auth session — sign-in, sign-out, GitHub and app restarts all
+      // land here — adopting the account's cloud identifier hash as the
+      // scope. The work runs post-frame: setTrialScope notifies listeners,
+      // which must never happen mid-build.
+      child: _TrialScopeWiring(
+        child: Consumer2<ThemeController, LocaleController>(
         builder: (context, theme, locale, _) {
           // Friendly error widget text stays localized: the resolver holds
           // the current LocaleController instance (no context needed), and
@@ -152,6 +162,56 @@ class MahtemApp extends StatelessWidget {
           );
         },
       ),
+      ),
     );
   }
+}
+
+/// Follows the auth session and adopts the signed-in account's cloud
+/// identity hash as the license trial scope (v1.19.3 — per-account trial
+/// budgets). Sits BELOW every provider so it can read them all; does its
+/// work post-frame because setTrialScope notifies listeners.
+class _TrialScopeWiring extends StatefulWidget {
+  const _TrialScopeWiring({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_TrialScopeWiring> createState() => _TrialScopeWiringState();
+}
+
+class _TrialScopeWiringState extends State<_TrialScopeWiring> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _adopt());
+  }
+
+  @override
+  void didUpdateWidget(_TrialScopeWiring old) {
+    super.didUpdateWidget(old);
+    // The whole subtree rebuilds on any provider notify — a cheap re-run
+    // keeps the scope glued to the session after sign-in/out too.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _adopt());
+  }
+
+  void _adopt() {
+    if (!mounted) return;
+    final auth = context.read<AuthController>();
+    final license = context.read<LicenseController>();
+    final account = auth.currentAccount;
+    if (account == null) {
+      license.setTrialScope(null);
+      return;
+    }
+    cloudIdentifierHash(account.id).then((hash) {
+      // The session may have moved on while the hash derived.
+      if (mounted && auth.currentAccount?.id == account.id) {
+        license.setTrialScope(hash);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -25,9 +25,13 @@ typedef ReceiptClaimFn = Future<CloudReceiptClaim> Function({
 /// Signature of the best-effort server trial-budget sync (v1.18.10):
 /// reports this device's usage and returns the server's authoritative
 /// counter, or null when offline. Wired to [CloudController.syncTrials].
+/// v1.19.3: [accountScope] declares WHICH account the reported counter
+/// belongs to (null → device-scope report); the reply's [scope] tells
+/// the controller which budget the server gated on.
 typedef TrialSyncFn = Future<TrialSyncInfo?> Function({
   required String deviceHashHex,
   int? used,
+  String? accountScope,
 });
 
 /// Central licensing state: free-trial counter, activation status and the
@@ -36,6 +40,10 @@ typedef TrialSyncFn = Future<TrialSyncInfo?> Function({
 ///
 /// Gating model ("Route B"):
 ///   * every install gets [kFreeTrialChecks] free verifications;
+///   * v1.19.3: the budget is SCOPED — a signed-in cloud account gates on
+///     its own server-side budget (fresh per account, built from the
+///     account's own recorded verifications), while the signed-out
+///     install gates on the device ledger (SSAID-keyed, wipe-proof);
 ///   * an active plan lifts the limit — either an Ed25519-signed license
 ///     code (owner-minted, device-bound, see `core/licensing/license.dart`)
 ///     or a self-verified Telebirr payment receipt
@@ -73,11 +81,19 @@ class LicenseController extends ChangeNotifier {
   static const String _kReceiptKey = 'receipt_license';
   static const String _kUsedReceiptsKey = 'used_receipts';
   static const String _kFallbackDeviceKey = 'fallback_device_key';
+  static const String _kTrialsDeviceKey = 'trial_checks_device';
 
   bool _loaded = false;
   bool _loading = false;
   bool _syncingTrials = false;
   int _trialsUsed = 0;
+
+  /// v1.19.3 — the account the current counter belongs to ('' = device
+  /// scope). Brand-new accounts must start at their own five, not inherit
+  /// whatever this phone spent before (or after) sign-up. The value is
+  /// the cloud account's identifier hash (stable per account, matches
+  /// the server session).
+  String _trialScope = '';
 
   /// True while a trial-budget sync with the server is in flight.
   bool get isSyncingTrials => _syncingTrials;
@@ -187,15 +203,42 @@ class LicenseController extends ChangeNotifier {
     await _syncTrialBudget();
   }
 
+  /// v1.19.3 — adopts the signed-in cloud account's trial scope. Called
+  /// by the UI right after sign-in/sign-up completes (vault arming may
+  /// still be settling). A scope switch moves the live counter to the
+  /// account's own persisted budget — a fresh account starts at its own
+  /// five even on a phone whose device budget is spent. [accountScope]
+  /// is the cloud identifier hash (stable per account); pass null /
+  /// empty to return to device scope on sign-out.
+  Future<void> setTrialScope(String? accountScope) async {
+    final scope = (accountScope ?? '').trim();
+    if (scope == _trialScope) return;
+    _trialScope = scope;
+    // Restore the persisted counter for the new scope; the server sync
+    // right after reconciles it (the scoped reply is exact for v1.19.3
+    // servers — receipts + the account's own monotonic counter).
+    await _loadTrials();
+    notifyListeners();
+    await _syncTrialBudget();
+  }
+
   Future<void> _loadTrials() async {
     try {
-      final raw = await _store.read(_kTrialsKey);
+      final raw = await _store.read(_trialsKeyFor);
       _trialsUsed = int.tryParse(raw ?? '') ?? 0;
       if (_trialsUsed < 0) _trialsUsed = 0;
     } catch (_) {
       _trialsUsed = 0;
     }
   }
+
+  /// Storage key for the counter of the CURRENT scope: the legacy key
+  /// (device scope) is shared with every pre-v1.19.3 install and is
+  /// deliberately kept for the signed-out budget; each account gets its
+  /// own key so switching accounts can never leak one budget into
+  /// another.
+  String get _trialsKeyFor =>
+      _trialScope.isEmpty ? _kTrialsKey : '$_kTrialsDeviceKey.$_trialScope';
 
   Future<void> _loadLicense() async {
     _tokenExpiry = null;
@@ -264,13 +307,13 @@ class LicenseController extends ChangeNotifier {
   // ---------------------------------------------------------------- mutation
 
   /// Counts one verification against the trial — no-op while entitled.
-  /// Reports the usage to the server's device ledger in the background so
+  /// Reports the usage to the server's ledger in the background so
   /// clearing app storage can never mint the budget back.
   Future<void> consumeAttempt() async {
     if (isEntitled) return;
     _trialsUsed += 1;
     try {
-      await _store.write(_kTrialsKey, '$_trialsUsed');
+      await _store.write(_trialsKeyFor, '$_trialsUsed');
     } catch (_) {
       // Storage failed — keep the in-memory count for this session.
     }
@@ -435,36 +478,76 @@ class LicenseController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- internals
 
-  /// Syncs the free-trial budget with the server's device ledger. The
-  /// server counter is authoritative and monotonic — a wiped app reporting
+  /// Syncs the free-trial budget with the server's ledger. The server
+  /// counter is authoritative and monotonic — a wiped app reporting
   /// `used: 0` is clamped back up to what it really consumed, which flips
   /// an abused install straight to the paywall. Silent no-op offline
   /// (the local counter keeps gating) and while a paid plan is active.
+  ///
+  /// v1.19.3 scoping: the report is tagged with the account scope, and a
+  /// reply is accepted only when its scope MATCHES the local one:
+  ///   * local account + `account` reply → exact-set (a brand-new account
+  ///     on a used device gets its fresh budget applied — the whole point
+  ///     of the fix; the number can be LOWER than local, e.g. after the
+  ///     server-side repair);
+  ///   * local device + `device` reply → raise-only (the anti-wipe clamp
+  ///     stays intact);
+  ///   * local device + `account` reply (signed out, backup session still
+  ///     live) → raise-only against the reply's DEVICE number — the
+  ///     account's budget must not leak onto this counter, but the device
+  ///     ledger absorbed everything server-side;
+  ///   * local account + `device` reply (no live session) → ignored; the
+  ///     account's local counter gates until a session reconciles it.
+  /// A pre-v1.19.3 server's untagged reply is treated as device-scope.
   Future<void> _syncTrialBudget() async {
     final sync = _trialSync;
     if (sync == null || isEntitled || isSyncingTrials) return;
     if (_deviceHash == null) return;
+    final syncScope = _trialScope;
     _syncingTrials = true;
     try {
       final info = await sync(
         deviceHashHex: _trialDeviceHashHex,
         used: _trialsUsed,
+        accountScope: syncScope.isEmpty ? null : syncScope,
       );
-      final serverUsed = info?.used ?? 0;
-      if (serverUsed > _trialsUsed) {
-        _trialsUsed = serverUsed;
-        try {
-          await _store.write(_kTrialsKey, '$_trialsUsed');
-        } catch (_) {
-          // Keep the clamped value in memory at least.
+      // A scope switch (sign-in/out) mid-flight — the reply describes a
+      // budget this device no longer gates on; drop it.
+      if (info == null || syncScope != _trialScope) return;
+      if (info.scope == 'account') {
+        if (syncScope.isEmpty) {
+          // Signed out (device scope) but the backup session answered:
+          // apply the DEVICE ledger number, never the account's.
+          final deviceUsed = info.deviceUsed ?? info.used;
+          if (deviceUsed > _trialsUsed) _applyServerUsed(deviceUsed);
+        } else if (_trialsUsed != info.used) {
+          // Account budget: exact-set. The server computed it from the
+          // account's own receipts + monotonic counter — it can be lower
+          // than the local number (fresh account, repaired rows) and that
+          // is exactly what must land here.
+          _applyServerUsed(info.used);
         }
-        notifyListeners();
+      } else if (syncScope.isEmpty) {
+        // Device budget: the clamp only ever raises.
+        if (info.used > _trialsUsed) _applyServerUsed(info.used);
       }
+      // Local account scope + device-scoped reply: no live session —
+      // the account's own local counter keeps gating.
     } catch (_) {
       // Never let an anti-abuse sync break the licensing flow.
     } finally {
       _syncingTrials = false;
     }
+  }
+
+  void _applyServerUsed(int serverUsed) {
+    _trialsUsed = serverUsed.clamp(0, 1 << 20);
+    try {
+      _store.write(_trialsKeyFor, '$_trialsUsed');
+    } catch (_) {
+      // Keep the server value in memory at least.
+    }
+    notifyListeners();
   }
 
   Future<DateTime?> _expiryOf(String? token) async {
